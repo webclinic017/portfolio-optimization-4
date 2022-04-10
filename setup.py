@@ -6,7 +6,7 @@ with open('README.md', 'r') as fh:
     long_description = fh.read()
 
 setuptools.setup(
-    name='portfolio-optimization',
+    name='portfolio_optimization',
     version='0.0.1',
     author='Hugo Delatte',
     author_email='delatte.hugo@gmail.com',
