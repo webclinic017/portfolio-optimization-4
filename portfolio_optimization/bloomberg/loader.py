@@ -33,5 +33,5 @@ def load_bloomberg_prices(date_from: dt.date, date_to: dt.date = None) -> pd.Dat
 
 
 if __name__ == '__main__':
-    # save_bloomberg_prices(date_from=dt.date(2020, 1, 1), date_to=dt.date.today())
-    print(load_bloomberg_prices(date_from=dt.date(2020, 1, 1)))
+    # save_bloomberg_prices(date_from=dt.date(2018, 1, 1), date_to=dt.date.today())
+    print(load_bloomberg_prices(date_from=dt.date(2018, 1, 1)))
