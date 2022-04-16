@@ -1,4 +1,6 @@
 import logging
+from typing import Union
+import numpy as np
 import pandas as pd
 
 logger = logging.getLogger('portfolio_optimization.preprocessing')
@@ -8,13 +10,14 @@ __all__ = ['preprocessing']
 
 def preprocessing(prices: pd.DataFrame,
                   asset_missing_threshold: float = 0.05,
-                  dates_missing_threshold: float = 0.1) -> pd.DataFrame:
+                  dates_missing_threshold: float = 0.1,
+                  to_array: bool = True) -> Union[np.ndarray, pd.DataFrame]:
     """
     1) Remove Assets (columns) with missing value (nan) above asset_missing_threshold
     2) Remove Dates (rows) with missing value (nan) above dates_missing_threshold
     3) Compute simple returns (R1 = S1/S0 - 1)
         --> simple returns leads to a better estimate of the efficient frontier than log returns
-
+    4) Convert to numpy array of shape (assets, dates)
     """
     assert asset_missing_threshold < 1
     assert dates_missing_threshold < 1
@@ -36,4 +39,7 @@ def preprocessing(prices: pd.DataFrame,
     prices.fillna(method='ffill', inplace=True)
     # Backward fill missing values to the start
     prices.fillna(method='bfill', inplace=True)
-    return prices.pct_change()[1:]
+    returns = prices.pct_change()[1:]
+    if to_array:
+        return returns.to_numpy().T
+    return returns

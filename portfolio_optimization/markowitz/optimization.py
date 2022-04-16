@@ -117,8 +117,7 @@ def run():
     daily_returns = preprocessing(prices=prices)
     cum_returns = (daily_returns + 1).cumprod()
 
-    returns = daily_returns.to_numpy().T
-    returns = returns[:100, :]
+    returns = daily_returns[:100, :]
     mu = np.asmatrix(np.mean(returns, axis=1)).T
     cov = np.asmatrix(np.cov(returns))
 
