@@ -1,10 +1,13 @@
 import numpy as np
-import datetime as dt
 import pandas as pd
 from enum import Enum
 
-from portfolio_optimization.bloomberg.loader import *
 from portfolio_optimization.utils.preprocessing import *
+from portfolio_optimization.utils.tools import *
+
+__all__ = ['FitnessType',
+           'Assets',
+           'Portfolio']
 
 
 class FitnessType(Enum):
@@ -28,10 +31,9 @@ class Assets:
         return str(self)
 
 
-
 class Portfolio:
     def __init__(self, weights: np.ndarray, fitness_type: FitnessType, assets: Assets):
-        # pointer to Assets
+        # Pointer to Assets
         self.assets = assets
         if self.assets.asset_nb != len(weights):
             raise ValueError(f'weights should be of size {self.assets.asset_nb}')
@@ -39,11 +41,13 @@ class Portfolio:
             raise TypeError(f'weights should be of type numpy.ndarray')
         self.fitness_type = fitness_type
         self.weights = weights
+        # Metrics
         self._returns = None
+        self._prices = None
         self._mu = None
         self._std = None
         self._downside_std = None
-        self._drawdown = None
+        self._max_drawdown = None
         self._fitness = None
 
     @property
@@ -51,6 +55,12 @@ class Portfolio:
         if self._returns is None:
             self._returns = self.weights @ self.assets.returns
         return self._returns
+
+    @property
+    def prices(self):
+        if self._prices is None:
+            self._prices = (self.returns + 1).cumprod()
+        return self._prices
 
     @property
     def mu(self):
@@ -71,10 +81,10 @@ class Portfolio:
         return self._downside_std
 
     @property
-    def drawdown(self):
-        if self._drawdown is None:
-            self._drawdown = 1
-        return self._drawdown
+    def max_drawdown(self):
+        if self._max_drawdown is None:
+            self._max_drawdown = max_drawdown(self.prices)
+        return self._max_drawdown
 
     @property
     def sharp_ratio(self):
@@ -95,13 +105,14 @@ class Portfolio:
             elif self.fitness_type == FitnessType.MEAN_DOWNSIDE_STD:
                 self._fitness = np.array([self.mu, -self.downside_std])
             elif self.fitness_type == FitnessType.MEAN_DOWNSIDE_STD_DRAWDOWN:
-                self._fitness = np.array([self.mu, -self.downside_std, -self.drawdown])
+                self._fitness = np.array([self.mu, -self.downside_std, -self.max_drawdown])
             else:
                 raise ValueError(f'fitness_type {self.fitness_type} should be of type {FitnessType}')
         return self._fitness
 
     def dominates(self, other, obj=slice(None)):
-        """Return true if each objective of the current portfolio's fitness is not strictly worse than
+        """
+        Return true if each objective of the current portfolio's fitness is not strictly worse than
         the corresponding objective of the other portfolio's fitness and at least one objective is
         strictly better.
         :param other: Other portfolio
@@ -109,54 +120,13 @@ class Portfolio:
                     tested. The default value is `slice(None)`, representing
                     every objectives.
         """
-        not_equal = False
-        for self_value, other_value in zip(self.fitness[obj], other.fitness[obj]):
-            if self_value > other_value:
-                not_equal = True
-            elif self_value < other_value:
-                return False
-        return not_equal
+        return dominate(self.fitness[obj], other.fitness[obj])
 
     def reset_metrics(self):
         for attr in self.__dict__.keys():
             if attr[0] == '_':
                 self.__setattr__(attr, None)
 
-
-def rand_weights(n: int) -> np.array:
-    """
-    Produces n random weights that sum to 1
-    """
-    k = np.random.rand(n)
-    return k / sum(k)
-
-
-def test_portfolio_metrics():
-    prices = load_bloomberg_prices(date_from=dt.date(2019, 1, 1))
-    assets = Assets(prices=prices)
-    weights = rand_weights(n=assets.asset_nb)
-    portfolio = Portfolio(weights=weights, assets=assets)
-
-    returns = np.zeros(assets.date_nb)
-    for i in range(assets.asset_nb):
-        returns += assets.returns[i] * weights[i]
-
-    assert np.all((returns - portfolio.returns) < 1e-10)
-    assert abs(returns.mean() - portfolio.mu) < 1e-10
-    assert abs(returns.std(ddof=1) - portfolio.std) < 1e-10
-    assert abs(returns[returns < 0].std(ddof=1) - portfolio.downside_std) < 1e-10
-    assert abs(returns[returns < 0].std(ddof=1) - portfolio.downside_std) < 1e-10
-    assert abs(portfolio.mu / portfolio.std - portfolio.sharp_ratio) < 1e-10
-    assert abs(portfolio.mu / portfolio.downside_std - portfolio.sortino_ratio) < 1e-10
-    portfolio.reset_metrics()
-    assert portfolio._mu is None
-    assert portfolio._std is None
-
-
-def test_portfolio_dominate():
-    prices = load_bloomberg_prices(date_from=dt.date(2019, 1, 1))
-    assets = Assets(prices=prices)
-    weights = rand_weights(n=assets.asset_nb)
-    portfolio = Portfolio(weights=weights, assets=assets)
-
-
+    def reset_fitness(self, fitness_type: FitnessType):
+        self._fitness = None
+        self.fitness_type = fitness_type
