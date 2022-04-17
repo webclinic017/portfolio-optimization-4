@@ -2,12 +2,12 @@ import datetime as dt
 import numpy as np
 import cvxpy as cp
 import pandas as pd
+import plotly.express as px
 
 from portfolio_optimization.bloomberg.loader import *
 from portfolio_optimization.utils.preprocessing import *
 # (*) To communicate with Plotly's server, sign in with credentials file
 import matplotlib.pyplot as plt
-import plotly.express as px
 
 pd.options.plotting.backend = "plotly"
 

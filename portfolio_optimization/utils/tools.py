@@ -25,7 +25,7 @@ def dominate(fitness_1: np.array, fitness_2: np.array) -> bool:
 
 
 def dominate_slow(fitness_1: np.array, fitness_2: np.array) -> bool:
-    return np.all(np.all(fitness_1 >= fitness_2) and np.any(fitness_1 > fitness_2))
+    return np.all(fitness_1 >= fitness_2) and np.any(fitness_1 > fitness_2)
 
 
 def max_drawdown(prices: np.array) -> float:

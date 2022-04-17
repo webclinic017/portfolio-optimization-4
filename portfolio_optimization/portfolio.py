@@ -11,9 +11,9 @@ __all__ = ['FitnessType',
 
 
 class FitnessType(Enum):
-    MEAN_STD = 'mean_std'
-    MEAN_DOWNSIDE_STD = 'mean_downside_std'
-    MEAN_DOWNSIDE_STD_DRAWDOWN = 'mean_downside_std_drawdown'
+    MEAN_STD = ('mean', 'std')
+    MEAN_DOWNSIDE_STD = ('mean', 'downside_st')
+    MEAN_DOWNSIDE_STD_MAX_DRAWDOWN = ('mean', 'downside_std', 'max_drawdown')
 
 
 class Assets:
@@ -104,7 +104,7 @@ class Portfolio:
                 self._fitness = np.array([self.mu, -self.std])
             elif self.fitness_type == FitnessType.MEAN_DOWNSIDE_STD:
                 self._fitness = np.array([self.mu, -self.downside_std])
-            elif self.fitness_type == FitnessType.MEAN_DOWNSIDE_STD_DRAWDOWN:
+            elif self.fitness_type == FitnessType.MEAN_DOWNSIDE_STD_MAX_DRAWDOWN:
                 self._fitness = np.array([self.mu, -self.downside_std, -self.max_drawdown])
             else:
                 raise ValueError(f'fitness_type {self.fitness_type} should be of type {FitnessType}')
@@ -130,3 +130,13 @@ class Portfolio:
     def reset_fitness(self, fitness_type: FitnessType):
         self._fitness = None
         self.fitness_type = fitness_type
+
+    @property
+    def length(self):
+        return np.count_nonzero(self.weights)
+
+    def __str__(self):
+        return f'Portfolio ({self.length} assets)'
+
+    def __repr__(self):
+        return str(self)
