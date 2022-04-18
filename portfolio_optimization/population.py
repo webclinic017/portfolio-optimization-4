@@ -1,13 +1,9 @@
-import numpy as np
 import pandas as pd
-from enum import Enum
-from typing import Optional
 import plotly.express as px
 
 from portfolio_optimization.portfolio import *
 from portfolio_optimization.utils.sorting import *
 
-pd.options.plotting.backend = "plotly"
 
 __all__ = ['Population']
 
@@ -62,3 +58,5 @@ class Population:
 
     def __repr__(self):
         return str(self)
+
+

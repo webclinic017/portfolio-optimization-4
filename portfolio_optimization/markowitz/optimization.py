@@ -5,7 +5,6 @@ import pandas as pd
 import plotly.express as px
 
 from portfolio_optimization.bloomberg.loader import *
-from portfolio_optimization.utils.preprocessing import *
 # (*) To communicate with Plotly's server, sign in with credentials file
 import matplotlib.pyplot as plt
 
@@ -114,7 +113,6 @@ def plot(random_portfolios: np.array, optimal_portfolios: np.array):
 
 def run():
     prices = load_bloomberg_prices(date_from=dt.date(2019, 1, 1))
-    daily_returns = preprocessing(prices=prices)
     cum_returns = (daily_returns + 1).cumprod()
 
     returns = daily_returns[:100, :]

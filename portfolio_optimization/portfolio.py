@@ -1,12 +1,10 @@
 import numpy as np
-import pandas as pd
 from enum import Enum
 
-from portfolio_optimization.utils.preprocessing import *
+from portfolio_optimization.assets import *
 from portfolio_optimization.utils.tools import *
 
 __all__ = ['FitnessType',
-           'Assets',
            'Portfolio']
 
 
@@ -16,22 +14,9 @@ class FitnessType(Enum):
     MEAN_DOWNSIDE_STD_MAX_DRAWDOWN = ('mean', 'downside_std', 'max_drawdown')
 
 
-class Assets:
-    def __init__(self, prices: pd.DataFrame):
-        self.prices = prices
-        self.returns = preprocessing(prices=self.prices, to_array=True)
-        self.mu = np.mean(self.returns, axis=1)
-        self.cov = np.cov(self.returns)
-        self.asset_nb, self.date_nb = self.returns.shape
-
-    def __str__(self):
-        return f'Assets (asset number: {self.asset_nb}, date number: {self.date_nb})'
-
-    def __repr__(self):
-        return str(self)
-
-
 class Portfolio:
+    avg_trading_days_per_year = 255
+
     def __init__(self, weights: np.ndarray, fitness_type: FitnessType, assets: Assets):
         # Pointer to Assets
         self.assets = assets
@@ -69,16 +54,28 @@ class Portfolio:
         return self._mu
 
     @property
+    def annualized_mu(self):
+        return self.mu * self.avg_trading_days_per_year
+
+    @property
     def std(self):
         if self._std is None:
             self._std = np.sqrt(self.weights @ self.assets.cov @ self.weights)
         return self._std
 
     @property
+    def annualized_std(self):
+        return self.std * np.sqrt(self.avg_trading_days_per_year)
+
+    @property
     def downside_std(self):
         if self._downside_std is None:
             self._downside_std = self.returns[self.returns < 0].std(ddof=1)
         return self._downside_std
+
+    @property
+    def annualized_downside_std(self):
+        return self.downside_std * np.sqrt(self.avg_trading_days_per_year)
 
     @property
     def max_drawdown(self):
@@ -130,6 +127,10 @@ class Portfolio:
     def reset_fitness(self, fitness_type: FitnessType):
         self._fitness = None
         self.fitness_type = fitness_type
+
+    @property
+    def assets_index(self):
+        return np.flatnonzero(self.weights != 0)
 
     @property
     def length(self):

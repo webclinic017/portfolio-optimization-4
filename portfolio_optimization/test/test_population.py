@@ -1,22 +1,22 @@
 import datetime as dt
 
-from portfolio_optimization.bloomberg.loader import *
 from portfolio_optimization.utils.tools import *
+from portfolio_optimization.assets import *
 from portfolio_optimization.portfolio import *
 from portfolio_optimization.population import *
 
 
 def test_population():
-    prices = load_bloomberg_prices(date_from=dt.date(2019, 1, 1))
-    assets = Assets(prices=prices)
+    assets = Assets(date_from=dt.date(2019, 1, 1))
 
+    # Create a population of portfolios with 3 objectives
     population = Population()
-
-    for _ in range(10):
+    for _ in range(100):
         weights = rand_weights(n=assets.asset_nb)
         portfolio = Portfolio(weights=weights, fitness_type=FitnessType.MEAN_DOWNSIDE_STD_MAX_DRAWDOWN, assets=assets)
         population.append(portfolio)
 
+    # test non-dominated sorting into fronts
     assert sorted([i for j in population.fronts for i in j]) == list(range(population.length))
     for i, front in enumerate(population.fronts):
         dominates = False
@@ -30,5 +30,18 @@ def test_population():
                         dominates = True
         assert dominates
 
-    population.plot(x='mu', y='downside_std', z='max_drawdown', fronts=True)
-    population.plot(x='mu', y='std', fronts=True)
+    # test plots
+    population.plot(x='annualized_downside_std', y='annualized_mu', z='max_drawdown', fronts=True)
+
+    # Create a population of portfolios with 2 objectives
+    population = Population()
+    for _ in range(100):
+        weights = rand_weights(n=assets.asset_nb)
+        portfolio = Portfolio(weights=weights, fitness_type=FitnessType.MEAN_STD, assets=assets)
+        population.append(portfolio)
+
+    population.plot(x='annualized_std', y='annualized_mu', fronts=True)
+
+    # prices = load_bloomberg_prices(date_from=dt.date(2019, 1, 1))
+    # prices=prices.iloc[:, :30]
+    # assets = Assets(prices=prices)

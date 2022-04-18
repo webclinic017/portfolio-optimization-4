@@ -1,14 +1,13 @@
 import numpy as np
 import datetime as dt
 
-from portfolio_optimization.bloomberg.loader import *
 from portfolio_optimization.utils.tools import *
+from portfolio_optimization.assets import *
 from portfolio_optimization.portfolio import *
 
 
 def test_portfolio_metrics():
-    prices = load_bloomberg_prices(date_from=dt.date(2019, 1, 1))
-    assets = Assets(prices=prices)
+    assets = Assets(date_from=dt.date(2019, 1, 1))
     weights = rand_weights(n=assets.asset_nb)
     portfolio = Portfolio(weights=weights, fitness_type=FitnessType.MEAN_STD, assets=assets)
 
@@ -34,8 +33,7 @@ def test_portfolio_metrics():
 
 
 def test_portfolio_dominate():
-    prices = load_bloomberg_prices(date_from=dt.date(2019, 1, 1))
-    assets = Assets(prices=prices)
+    assets = Assets(date_from=dt.date(2019, 1, 1))
 
     for _ in range(1000):
         weights_1 = rand_weights(n=assets.asset_nb)

@@ -23,12 +23,16 @@ def save_bloomberg_prices(date_from: dt.date, date_to: dt.date):
     logger.info(f'Bloomberg prices saved in {PRICE_FILE}')
 
 
-def load_bloomberg_prices(date_from: dt.date, date_to: dt.date = None) -> pd.DataFrame:
+def load_bloomberg_prices(date_from: dt.date,
+                          date_to: dt.date = None,
+                          names_to_keep: list[str] = None) -> pd.DataFrame:
     """
     Read bloomberg prices saved in prices.csv and return a DataFrame
     """
     df = pd.read_csv(PRICE_FILE, sep=',', index_col=0)
     df.index = pd.to_datetime(df.index, format='%Y-%m-%d')
+    if names_to_keep is not None:
+        df = df[names_to_keep]
     return df.loc[date_from:date_to]
 
 
