@@ -1,8 +1,11 @@
 import logging
 import datetime as dt
+import pandas as pd
 import numpy as np
 
 from portfolio_optimization.bloomberg.loader import *
+pd.options.plotting.backend = "plotly"
+
 
 __all__ = ['Assets']
 
@@ -25,6 +28,7 @@ class Assets:
         self.dates_missing_threshold = dates_missing_threshold
         self._preprocessing()
         self._returns = None
+        self._cum_returns = None
         self._mu = None
         self._cov = None
 
@@ -63,6 +67,17 @@ class Assets:
         return self._returns
 
     @property
+    def cum_returns(self):
+        """
+        Compute the cumulative returns (1+R1)*(1+R2)*(1+R3)...  = S1/S0 - 1)
+        It's like rebasing prices to 1
+        """
+        if self._cum_returns is None:
+            df_returns = self.prices.pct_change()[1:]
+            self._cum_returns = (df_returns + 1).cumprod()
+        return self._cum_returns
+
+    @property
     def mu(self):
         if self._mu is None:
             self._mu = np.mean(self.returns, axis=1)
@@ -85,6 +100,10 @@ class Assets:
     @property
     def names(self):
         return list(self.prices.columns)
+
+    def plot(self, idx=slice(None)):
+        fig = self.cum_returns.iloc[:, idx].plot(title='Prices')
+        fig.show()
 
     def __str__(self):
         return f'Assets (asset number: {self.asset_nb}, date number: {self.date_nb})'

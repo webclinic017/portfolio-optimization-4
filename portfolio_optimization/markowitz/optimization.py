@@ -1,44 +1,41 @@
 import datetime as dt
 import numpy as np
 import cvxpy as cp
-import pandas as pd
-import plotly.express as px
 
-from portfolio_optimization.bloomberg.loader import *
-# (*) To communicate with Plotly's server, sign in with credentials file
-import matplotlib.pyplot as plt
+from portfolio_optimization.utils.tools import *
+from portfolio_optimization.assets import *
+from portfolio_optimization.portfolio import *
+from portfolio_optimization.population import *
+from portfolio_optimization.utils.pre_seclection import *
 
-pd.options.plotting.backend = "plotly"
 
 np.random.seed(150)
 
 
-def rand_weights(n: int) -> np.array:
-    """
-    Produces n random weights that sum to 1
-    """
-    k = np.random.rand(n)
-    return k / sum(k)
+def portfolio_with_optimal_sharpe(mu: np.matrix,
+                                  cov: np.matrix,
+                                  portfolios_mu: np.array,
+                                  portfolios_std: np.array) -> np.array:
+    # Compute the second degree polynomial of the pareto front
+    m1 = np.polyfit(portfolios_mu, portfolios_std, 2)
+    target_ret = np.sqrt(m1[2] / m1[0])
+    # compute the portfolio with optimal sharpe ratio
+    w = cp.Variable(len(mu))
+    ret = mu.T @ w
+    risk = cp.quad_form(w, cov)
+    prob = cp.Problem(cp.Minimize(risk),
+                      [ret == target_ret,
+                       cp.sum(w) == 1,
+                       w >= 0])
+    prob.solve()
+    weights = w.value
+    return weights
 
 
-def random_portfolio(mu: np.matrix, cov: np.matrix) -> np.array:
-    """
-    Returns the mean and standard deviation of returns for a random portfolio
-    """
-    w = np.asmatrix(rand_weights(n=len(mu)))
-    ptf_mu = w @ mu
-    ptf_sigma = np.sqrt(w @ cov @ w.T)
-    return np.array([ptf_mu[0, 0], ptf_sigma[0, 0]])
-
-
-def markowitz_optimization(mu: np.matrix, cov: np.matrix, sample: int) -> (np.array, np.array):
+def markowitz_optimization(mu: np.matrix, cov: np.matrix, population_size: int) -> np.array:
     """
     Markowitz optimization:
     Constraints: No-short selling and portfolio invested at 100%
-    :param mu:
-    :param cov:
-    :param sample:
-    :return:
     """
     w = cp.Variable(len(mu))
     gamma = cp.Parameter(nonneg=True)
@@ -48,83 +45,53 @@ def markowitz_optimization(mu: np.matrix, cov: np.matrix, sample: int) -> (np.ar
                       [cp.sum(w) == 1,
                        w >= 0])
 
-    portfolios = []
+    portfolios_mu = []
+    portfolios_std = []
     weights = []
-    for value in np.logspace(-2, 3, num=sample):
+    for value in np.logspace(-2, 3, num=population_size):
         gamma.value = value
         prob.solve()
-        portfolios.append([ret.value[0], np.sqrt(risk.value)])
+        portfolios_mu.append(ret.value)
+        portfolios_std.append(np.sqrt(risk.value))
         weights.append(w.value)
 
-    return np.array(portfolios), np.array(weights)
+    optimal_sharpe_weights = portfolio_with_optimal_sharpe(mu=mu,
+                                                           cov=cov,
+                                                           portfolios_mu=np.array(portfolios_mu),
+                                                           portfolios_std=np.array(portfolios_std))
 
+    return np.array(weights), optimal_sharpe_weights
 
-def portfolio_with_optimal_sharp(mu: np.matrix, cov: np.matrix, portfolios: np.array):
-    # Compute the second degree polynomial of the pareto front
-    m1 = np.polyfit(portfolios[:, 0], portfolios[:, 1], 2)
-    target_ret = np.sqrt(m1[2] / m1[0])
-    # compute the portfolio with optimal sharp ratio
-    w = cp.Variable(len(mu))
-    ret = mu.T @ w
-    risk = cp.quad_form(w, cov)
-    prob = cp.Problem(cp.Minimize(risk),
-                      [ret == target_ret,
-                       cp.sum(w) == 1,
-                       w >= 0])
-    prob.solve()
-
-    return np.array([ret.value[0], np.sqrt(risk.value)])
-
-
-def annualize(portfolios: np.array, percent: bool = True) -> np.array:
-    n = 255
-    ptf = np.copy(portfolios)
-    ptf[:, 0] = ptf[:, 0] * n
-    ptf[:, 1] = ptf[:, 1] * np.sqrt(n)
-    if percent:
-        ptf = ptf * 100
-    return ptf
-
-
-def plot(random_portfolios: np.array, optimal_portfolios: np.array):
-    random_portfolios = annualize(portfolios=random_portfolios)
-    optimal_portfolios = annualize(portfolios=optimal_portfolios)
-
-    fig = px.scatter(x=random_portfolios[:, 1],
-                     y=random_portfolios[:, 0])
-    fig.add_scatter(x=optimal_portfolios[:, 1], y=optimal_portfolios[:, 0],
-                    mode='markers',
-                    marker=dict(
-                        size=10, color=optimal_portfolios[:, 0] / optimal_portfolios[:, 1],
-                        colorbar=dict(
-                            title='Sharp Ratio'
-                        ),
-                        colorscale='Viridis'
-                    ),
-                    name='Pareto Optimal Portfolios')
-    fig.update_layout(
-        title='Portfolios',
-        xaxis_title='Standard deviation',
-        yaxis_title="Return")
-    fig.update_yaxes(ticksuffix='%')
-    fig.update_xaxes(ticksuffix='%')
-    fig.show()
 
 
 def run():
-    prices = load_bloomberg_prices(date_from=dt.date(2019, 1, 1))
-    cum_returns = (daily_returns + 1).cumprod()
+    assets = Assets(date_from=dt.date(2019, 1, 1))
+    assets_pre_selected = pre_selection(assets=assets, k=200)
+    assets = Assets(date_from=dt.date(2019, 1, 1), names_to_keep=assets_pre_selected[:150])
 
-    returns = daily_returns[:100, :]
-    mu = np.asmatrix(np.mean(returns, axis=1)).T
-    cov = np.asmatrix(np.cov(returns))
+    population = Population()
 
-    random_portfolios = np.array([random_portfolio(mu=mu, cov=cov) for _ in range(10000)])
-    optimal_portfolios, weights = markowitz_optimization(mu=mu, cov=cov, sample=100)
-    plot(random_portfolios=random_portfolios, optimal_portfolios=optimal_portfolios)
+    # Portfolios of one asset
+    for i in range(assets.asset_nb):
+        weights = np.zeros(assets.asset_nb)
+        weights[i] = 1
+        portfolio = Portfolio(weights=weights, fitness_type=FitnessType.MEAN_STD, assets=assets, tag='single asset')
+        population.append(portfolio)
 
-    ptf_optimal_sharp = portfolio_with_optimal_sharp(mu=mu, cov=cov, portfolios=optimal_portfolios)
-    annualize(ptf_optimal_sharp)
+    # Random portfolios
+    for _ in range(10):
+        weights = rand_weights_dirichlet(n=assets.asset_nb)
+        portfolio = Portfolio(weights=weights, fitness_type=FitnessType.MEAN_STD, assets=assets, tag='random')
+        population.append(portfolio)
 
-    fig = cum_returns.iloc[:, 210:215].plot(title='Prices')
-    fig.show()
+    # Pareto optimal portfolios
+    optimal_weights, optimal_sharpe_weights = markowitz_optimization(mu=assets.mu, cov=assets.cov, population_size=100)
+    for weights in optimal_weights:
+        portfolio = Portfolio(weights=weights, fitness_type=FitnessType.MEAN_STD, assets=assets, tag='markowitz')
+        population.append(portfolio)
+    portfolio = Portfolio(weights=optimal_sharpe_weights, fitness_type=FitnessType.MEAN_STD, assets=assets,
+                          tag='optimal_sharpe')
+    population.append(portfolio)
+
+    # Plot
+    population.plot(x='annualized_std', y='annualized_mu', color_scale='sharp_ratio')

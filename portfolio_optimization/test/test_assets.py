@@ -19,6 +19,8 @@ def test_assets():
     assert (abs(np.cov(ret) - assets.cov)).sum() < 1e-10
 
     new_names = [names[i] for i in np.random.choice(len(names), 30, replace=False)]
-    assets= Assets(date_from=dt.date(2019, 1, 1), names_to_keep=new_names)
+    assets = Assets(date_from=dt.date(2019, 1, 1), names_to_keep=new_names)
     assert assets.asset_nb == len(new_names)
     assert assets.date_nb == len(assets.prices) - 1
+    assets.plot()
+    assets.plot(idx=[2, 5])

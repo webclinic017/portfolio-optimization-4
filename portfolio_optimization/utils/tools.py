@@ -6,7 +6,9 @@ __all__ = ['dominate',
            'max_drawdown_slow',
            'prices_rebased',
            'portfolio_returns',
-           'rand_weights']
+           'rand_weights',
+           'rand_weights_dirichlet',
+           'rand_weights_exp']
 
 
 def dominate(fitness_1: np.array, fitness_2: np.array) -> bool:
@@ -61,4 +63,19 @@ def rand_weights(n: int) -> np.array:
     Produces n random weights that sum to 1
     """
     k = np.random.rand(n)
+    return k / sum(k)
+
+
+def rand_weights_dirichlet(n: int) -> np.array:
+    """
+    Produces n random weights that sum to 1
+    """
+    return np.random.dirichlet(np.ones(n))
+
+
+def rand_weights_exp(n: int) -> np.array:
+    """
+    Produces n random weights that sum to 1
+    """
+    k = -np.log(np.random.rand(n))
     return k / sum(k)

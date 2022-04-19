@@ -17,15 +17,21 @@ class FitnessType(Enum):
 class Portfolio:
     avg_trading_days_per_year = 255
 
-    def __init__(self, weights: np.ndarray, fitness_type: FitnessType, assets: Assets):
-        # Pointer to Assets
-        self.assets = assets
-        if self.assets.asset_nb != len(weights):
-            raise ValueError(f'weights should be of size {self.assets.asset_nb}')
+    def __init__(self, weights: np.ndarray, fitness_type: FitnessType, assets: Assets, tag: str = 'ptf'):
+
+        # Sanity checks
+        if assets.asset_nb != len(weights):
+            raise ValueError(f'weights should be of size {assets.asset_nb}')
         if not isinstance(weights, np.ndarray):
             raise TypeError(f'weights should be of type numpy.ndarray')
+        if abs(weights.sum() - 1) > 1e-8:
+            raise TypeError(f'weights should sum to 1')
+
         self.fitness_type = fitness_type
         self.weights = weights
+        self.tag = tag
+        # Pointer to Assets
+        self.assets = assets
         # Metrics
         self._returns = None
         self._prices = None
@@ -85,11 +91,11 @@ class Portfolio:
 
     @property
     def sharp_ratio(self):
-        return self.mu / self.std
+        return self.annualized_mu / self.annualized_std
 
     @property
     def sortino_ratio(self):
-        return self.mu / self.downside_std
+        return self.annualized_mu / self.annualized_downside_std
 
     @property
     def fitness(self):

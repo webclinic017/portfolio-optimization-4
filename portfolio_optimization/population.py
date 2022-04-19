@@ -4,7 +4,6 @@ import plotly.express as px
 from portfolio_optimization.portfolio import *
 from portfolio_optimization.utils.sorting import *
 
-
 __all__ = ['Population']
 
 
@@ -31,12 +30,13 @@ class Population:
     def append(self, portfolio: Portfolio):
         self.portfolios.append(portfolio)
 
-    def plot(self, x: str, y: str, z: str = None, fronts: bool = True):
-        columns = [x, y]
+    def plot(self, x: str, y: str, z: str = None, fronts: bool = False, color_scale: str = None):
+        columns = [x, y, 'tag']
         if z is not None:
             columns.append(z)
+        if color_scale is not None:
+            columns.append(color_scale)
 
-        color = None
         res = [[portfolio.__getattribute__(attr) for attr in columns] for portfolio in self.portfolios]
         df = pd.DataFrame(res, columns=columns)
         if fronts:
@@ -45,12 +45,18 @@ class Population:
                 for idx in front:
                     df.iloc[idx, -1] = str(i)
             color = df.columns[-1]
-
-        if len(columns) == 3:
-            fig = px.scatter_3d(df, x=x, y=y, z=z, color=color, symbol=color)
+        elif color_scale is not None:
+            color = color_scale
         else:
-            fig = px.scatter(df, x=x, y=y, color=color, symbol=color)
+            color = 'tag'
+
+        if z is not None:
+            fig = px.scatter_3d(df, x=x, y=y, z=z, color=color, symbol='tag')
+        else:
+            fig = px.scatter(df, x=x, y=y, color=color, symbol='tag')
         fig.update_traces(marker_size=10)
+        fig.update_layout(coloraxis_colorbar=dict(yanchor='top', y=1, x=0,
+                                                  ticks='outside'))
         fig.show()
 
     def __str__(self):
@@ -58,5 +64,3 @@ class Population:
 
     def __repr__(self):
         return str(self)
-
-
