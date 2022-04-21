@@ -4,8 +4,8 @@ import pandas as pd
 import numpy as np
 
 from portfolio_optimization.bloomberg.loader import *
-pd.options.plotting.backend = "plotly"
 
+pd.options.plotting.backend = "plotly"
 
 __all__ = ['Assets']
 
@@ -14,16 +14,16 @@ logger = logging.getLogger('portfolio_optimization.assets')
 
 class Assets:
     def __init__(self,
-                 date_from: dt.date,
-                 date_to: dt.date = None,
-                 asset_missing_threshold: float = 0.05,
+                 start_date: dt.date,
+                 end_date: dt.date = None,
+                 asset_missing_threshold: float = 0.1,
                  dates_missing_threshold: float = 0.1,
                  names_to_keep: list[str] = None):
         assert asset_missing_threshold < 1
         assert dates_missing_threshold < 1
-        self.date_from = date_from
-        self.date_to = date_to
-        self.prices = load_bloomberg_prices(date_from=self.date_from, date_to=self.date_to, names_to_keep=names_to_keep)
+        self.start_date = start_date
+        self.end_date = end_date
+        self.prices = load_bloomberg_prices(date_from=self.start_date, date_to=self.end_date, names_to_keep=names_to_keep)
         self.asset_missing_threshold = asset_missing_threshold
         self.dates_missing_threshold = dates_missing_threshold
         self._preprocessing()
@@ -99,7 +99,7 @@ class Assets:
 
     @property
     def names(self):
-        return list(self.prices.columns)
+        return np.array(self.prices.columns)
 
     def plot(self, idx=slice(None)):
         fig = self.cum_returns.iloc[:, idx].plot(title='Prices')

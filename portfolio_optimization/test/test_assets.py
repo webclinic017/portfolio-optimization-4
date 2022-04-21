@@ -5,7 +5,7 @@ from portfolio_optimization.assets import *
 
 
 def test_assets():
-    assets = Assets(date_from=dt.date(2019, 1, 1))
+    assets = Assets(start_date=dt.date(2019, 1, 1))
     names = list(assets.prices.columns)
     assert assets.asset_nb == len(names)
     assert assets.date_nb == len(assets.prices) - 1
@@ -19,7 +19,7 @@ def test_assets():
     assert (abs(np.cov(ret) - assets.cov)).sum() < 1e-10
 
     new_names = [names[i] for i in np.random.choice(len(names), 30, replace=False)]
-    assets = Assets(date_from=dt.date(2019, 1, 1), names_to_keep=new_names)
+    assets = Assets(start_date=dt.date(2019, 1, 1), names_to_keep=new_names)
     assert assets.asset_nb == len(new_names)
     assert assets.date_nb == len(assets.prices) - 1
     assets.plot()

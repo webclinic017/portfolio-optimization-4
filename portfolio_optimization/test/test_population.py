@@ -7,7 +7,7 @@ from portfolio_optimization.population import *
 
 
 def test_population():
-    assets = Assets(date_from=dt.date(2019, 1, 1))
+    assets = Assets(start_date=dt.date(2019, 1, 1))
 
     # Create a population of portfolios with 3 objectives
     population = Population()
@@ -31,7 +31,7 @@ def test_population():
         assert dominates
 
     # test plots
-    population.plot(x='annualized_downside_std', y='annualized_mu', z='max_drawdown', fronts=True)
+    population.plot(x=Metrics.ANNUALIZED_DOWNSIDE_STD, y=Metrics.ANNUALIZED_MEAN, z=Metrics.MAX_DRAWDOWN, fronts=True)
 
     # Create a population of portfolios with 2 objectives
     population = Population()
@@ -40,8 +40,7 @@ def test_population():
         portfolio = Portfolio(weights=weights, fitness_type=FitnessType.MEAN_STD, assets=assets)
         population.append(portfolio)
 
-    population.plot(x='annualized_std', y='annualized_mu', fronts=True)
+    population.plot(x=Metrics.ANNUALIZED_STD, y=Metrics.ANNUALIZED_MEAN, fronts=True)
 
-    # prices = load_bloomberg_prices(date_from=dt.date(2019, 1, 1))
-    # prices=prices.iloc[:, :30]
-    # assets = Assets(prices=prices)
+    assert (population.min(metric=Metrics.ANNUALIZED_MEAN).annualized_mean
+            <= population.max(metric=Metrics.ANNUALIZED_MEAN).annualized_mean)

@@ -2,13 +2,13 @@ import numpy as np
 
 __all__ = ['dominate',
            'dominate_slow',
+           'downside_std',
            'max_drawdown',
            'max_drawdown_slow',
            'prices_rebased',
            'portfolio_returns',
            'rand_weights',
-           'rand_weights_dirichlet',
-           'rand_weights_exp']
+           'rand_weights_dirichlet']
 
 
 def dominate(fitness_1: np.array, fitness_2: np.array) -> bool:
@@ -28,6 +28,15 @@ def dominate(fitness_1: np.array, fitness_2: np.array) -> bool:
 
 def dominate_slow(fitness_1: np.array, fitness_2: np.array) -> bool:
     return np.all(fitness_1 >= fitness_2) and np.any(fitness_1 > fitness_2)
+
+
+def downside_std(returns: np.array) -> float:
+    """
+    Downside standard deviation with a target return of Rf=0.
+    Many implementations remove positive returns then compute the std of the remaining negative returns or replace
+    the positive returns by 0 then compute the std. Both are incorrect.
+    """
+    return np.sqrt(np.mean(np.minimum(0, returns) ** 2))
 
 
 def max_drawdown(prices: np.array) -> float:
@@ -60,7 +69,7 @@ def portfolio_returns(asset_returns: np.ndarray, weights: np.array) -> np.array:
 
 def rand_weights(n: int) -> np.array:
     """
-    Produces n random weights that sum to 1
+    Produces n random weights that sum to 1 (non-uniform distribution over the simplex)
     """
     k = np.random.rand(n)
     return k / sum(k)
@@ -68,14 +77,6 @@ def rand_weights(n: int) -> np.array:
 
 def rand_weights_dirichlet(n: int) -> np.array:
     """
-    Produces n random weights that sum to 1
+    Produces n random weights that sum to 1 with uniform distribution over the simplex
     """
     return np.random.dirichlet(np.ones(n))
-
-
-def rand_weights_exp(n: int) -> np.array:
-    """
-    Produces n random weights that sum to 1
-    """
-    k = -np.log(np.random.rand(n))
-    return k / sum(k)

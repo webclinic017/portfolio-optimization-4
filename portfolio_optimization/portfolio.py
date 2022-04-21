@@ -1,41 +1,63 @@
 import numpy as np
 from enum import Enum
 
+import pandas as pd
+
 from portfolio_optimization.assets import *
 from portfolio_optimization.utils.tools import *
 
 __all__ = ['FitnessType',
+           'Metrics',
            'Portfolio']
 
 
+class Metrics(Enum):
+    MEAN = 'mean'
+    STD = 'std'
+    DOWNSIDE_STD = 'downside_std'
+    ANNUALIZED_MEAN = 'annualized_mean'
+    ANNUALIZED_STD = 'annualized_std'
+    ANNUALIZED_DOWNSIDE_STD = 'annualized_downside_std'
+    MAX_DRAWDOWN = 'max_drawdown'
+    SHARPE_RATIO = 'sharpe_ratio'
+    SORTINO_RATIO = 'sortino_ratio'
+
+
 class FitnessType(Enum):
-    MEAN_STD = ('mean', 'std')
-    MEAN_DOWNSIDE_STD = ('mean', 'downside_st')
-    MEAN_DOWNSIDE_STD_MAX_DRAWDOWN = ('mean', 'downside_std', 'max_drawdown')
+    MEAN_STD = (Metrics.MEAN, Metrics.STD)
+    MEAN_DOWNSIDE_STD = (Metrics.MEAN, Metrics.DOWNSIDE_STD)
+    MEAN_DOWNSIDE_STD_MAX_DRAWDOWN = (Metrics.MEAN, Metrics.DOWNSIDE_STD, Metrics.MAX_DRAWDOWN)
 
 
 class Portfolio:
     avg_trading_days_per_year = 255
+    zero_threshold = 1e-4
 
-    def __init__(self, weights: np.ndarray, fitness_type: FitnessType, assets: Assets, tag: str = 'ptf'):
+    def __init__(self,
+                 weights: np.ndarray,
+                 fitness_type: FitnessType,
+                 assets: Assets,
+                 tag: str = 'ptf',
+                 name: str = ''):
 
         # Sanity checks
         if assets.asset_nb != len(weights):
             raise ValueError(f'weights should be of size {assets.asset_nb}')
         if not isinstance(weights, np.ndarray):
             raise TypeError(f'weights should be of type numpy.ndarray')
-        if abs(weights.sum() - 1) > 1e-8:
+        if abs(weights.sum() - 1) > 1e-5:
             raise TypeError(f'weights should sum to 1')
 
         self.fitness_type = fitness_type
         self.weights = weights
         self.tag = tag
+        self.name = name
         # Pointer to Assets
         self.assets = assets
         # Metrics
         self._returns = None
         self._prices = None
-        self._mu = None
+        self._mean = None
         self._std = None
         self._downside_std = None
         self._max_drawdown = None
@@ -54,14 +76,14 @@ class Portfolio:
         return self._prices
 
     @property
-    def mu(self):
-        if self._mu is None:
-            self._mu = self.weights @ self.assets.mu
-        return self._mu
+    def mean(self):
+        if self._mean is None:
+            self._mean = self.weights @ self.assets.mu
+        return self._mean
 
     @property
-    def annualized_mu(self):
-        return self.mu * self.avg_trading_days_per_year
+    def annualized_mean(self):
+        return self.mean * self.avg_trading_days_per_year
 
     @property
     def std(self):
@@ -76,7 +98,7 @@ class Portfolio:
     @property
     def downside_std(self):
         if self._downside_std is None:
-            self._downside_std = self.returns[self.returns < 0].std(ddof=1)
+            self._downside_std = downside_std(returns=self.returns)
         return self._downside_std
 
     @property
@@ -90,12 +112,12 @@ class Portfolio:
         return self._max_drawdown
 
     @property
-    def sharp_ratio(self):
-        return self.annualized_mu / self.annualized_std
+    def sharpe_ratio(self):
+        return self.annualized_mean / self.annualized_std
 
     @property
     def sortino_ratio(self):
-        return self.annualized_mu / self.annualized_downside_std
+        return self.annualized_mean / self.annualized_downside_std
 
     @property
     def fitness(self):
@@ -104,11 +126,11 @@ class Portfolio:
 =        """
         if self._fitness is None:
             if self.fitness_type == FitnessType.MEAN_STD:
-                self._fitness = np.array([self.mu, -self.std])
+                self._fitness = np.array([self.mean, -self.std])
             elif self.fitness_type == FitnessType.MEAN_DOWNSIDE_STD:
-                self._fitness = np.array([self.mu, -self.downside_std])
+                self._fitness = np.array([self.mean, -self.downside_std])
             elif self.fitness_type == FitnessType.MEAN_DOWNSIDE_STD_MAX_DRAWDOWN:
-                self._fitness = np.array([self.mu, -self.downside_std, -self.max_drawdown])
+                self._fitness = np.array([self.mean, -self.downside_std, -self.max_drawdown])
             else:
                 raise ValueError(f'fitness_type {self.fitness_type} should be of type {FitnessType}')
         return self._fitness
@@ -136,14 +158,33 @@ class Portfolio:
 
     @property
     def assets_index(self):
-        return np.flatnonzero(self.weights != 0)
+        return np.flatnonzero(abs(self.weights) > self.zero_threshold)
+
+    @property
+    def composition(self):
+        names = self.assets.names[self.assets_index]
+        weights = self.weights[self.assets_index]
+        df = pd.DataFrame({'name': names, 'weight': weights})
+        return df
+
+    @property
+    def assets_names(self):
+        return self.assets_names
 
     @property
     def length(self):
-        return np.count_nonzero(self.weights)
+        return np.count_nonzero(abs(self.weights) > self.zero_threshold)
+
+    def metrics(self):
+        idx = [e.value for e in Metrics]
+        res = [self.__getattribute__(attr) for attr in idx]
+        return pd.DataFrame(res, index=idx, columns=['metrics'])
 
     def __str__(self):
-        return f'Portfolio ({self.length} assets)'
+        return (f'Portfolio ({self.length} assets'
+                f' | annualized mean: {round(self.annualized_mean * 100, 2)}%'
+                f' | annualized std: {round(self.annualized_std * 100, 2)}%'
+                f' | sharpe: {round(self.sharpe_ratio, 2)})')
 
     def __repr__(self):
-        return str(self)
+        return f'Portfolio ({self.length} assets)'
