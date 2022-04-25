@@ -73,7 +73,7 @@ def run():
         population.append(portfolio)
 
     # Plot
-    population.plot(x=Metrics.ANNUALIZED_STD, y=Metrics.ANNUALIZED_MEAN, color_scale='sharp_ratio')
+    population.plot(x=Metrics.ANNUALIZED_STD, y=Metrics.ANNUALIZED_MEAN, color_scale='sharpe_ratio')
     max_sortino=population.max(metric=Metrics.SORTINO_RATIO)
 
     # Test the portfolios on the test period

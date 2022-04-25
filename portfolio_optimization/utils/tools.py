@@ -67,11 +67,14 @@ def portfolio_returns(asset_returns: np.ndarray, weights: np.array) -> np.array:
     return returns
 
 
-def rand_weights(n: int) -> np.array:
+def rand_weights(n: int, zeros: int = 0) -> np.array:
     """
     Produces n random weights that sum to 1 (non-uniform distribution over the simplex)
     """
     k = np.random.rand(n)
+    if zeros > 0:
+        zeros_idx = np.random.choice(n, zeros, replace=False)
+        k[zeros_idx] = 0
     return k / sum(k)
 
 

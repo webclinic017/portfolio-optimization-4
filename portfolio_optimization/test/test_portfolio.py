@@ -8,7 +8,8 @@ from portfolio_optimization.portfolio import *
 
 def test_portfolio_metrics():
     assets = Assets(start_date=dt.date(2019, 1, 1))
-    weights = rand_weights(n=assets.asset_nb)
+    N = 10
+    weights = rand_weights(n=assets.asset_nb, zeros=assets.asset_nb - N)
     portfolio = Portfolio(weights=weights, fitness_type=FitnessType.MEAN_STD, assets=assets)
 
     returns = portfolio_returns(assets.returns, weights)
@@ -17,15 +18,27 @@ def test_portfolio_metrics():
     assert abs(returns.mean() - portfolio.mean) < 1e-10
     assert abs(returns.std(ddof=1) - portfolio.std) < 1e-10
     assert abs(np.sqrt(np.mean(np.minimum(0, returns) ** 2)) - portfolio.downside_std) < 1e-10
-    assert abs(portfolio.mean / portfolio.std - portfolio.sharpe_ratio) < 1e-10
-    assert abs(portfolio.mean / portfolio.downside_std - portfolio.sortino_ratio) < 1e-10
+    assert abs(portfolio.annualized_mean / portfolio.annualized_std - portfolio.sharpe_ratio) < 1e-10
+    assert abs(portfolio.annualized_mean / portfolio.annualized_downside_std - portfolio.sortino_ratio) < 1e-10
     assert np.array_equal(prices_rebased(portfolio.returns), portfolio.prices)
     assert max_drawdown_slow(portfolio.prices) == portfolio.max_drawdown
     assert np.array_equal(portfolio.fitness, np.array([portfolio.mean, -portfolio.std]))
     portfolio.reset_fitness(fitness_type=FitnessType.MEAN_DOWNSIDE_STD)
     assert np.array_equal(portfolio.fitness, np.array([portfolio.mean, -portfolio.downside_std]))
     portfolio.reset_fitness(fitness_type=FitnessType.MEAN_DOWNSIDE_STD_MAX_DRAWDOWN)
-    assert np.array_equal(portfolio.fitness, np.array([portfolio.mean, -portfolio.downside_std, -portfolio.max_drawdown]))
+    assert np.array_equal(portfolio.fitness,
+                          np.array([portfolio.mean, -portfolio.downside_std, -portfolio.max_drawdown]))
+    assert len(portfolio.assets_index) == N
+    assert len(portfolio.assets_names) == N
+    assert len(portfolio.composition) == N
+    idx = np.nonzero(weights)[0]
+    assert np.array_equal(portfolio.assets_index, idx)
+    names_1 = np.array(assets.prices.columns[idx])
+    assert np.array_equal(portfolio.assets_names, names_1)
+    names_2 = portfolio.composition['name'].to_numpy()
+    names_2.sort()
+    names_1.sort()
+    assert np.array_equal(names_1, names_2)
     portfolio.reset_metrics()
     assert portfolio._mean is None
     assert portfolio._std is None
@@ -47,4 +60,3 @@ def test_portfolio_dominate():
         # Doesn't dominate itself (same front)
         assert portfolio_1.dominates(portfolio_1) is False
         assert dominate_slow(portfolio_1.fitness, portfolio_2.fitness) == portfolio_1.dominates(portfolio_2)
-

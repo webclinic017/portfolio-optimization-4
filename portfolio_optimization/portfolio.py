@@ -161,15 +161,16 @@ class Portfolio:
         return np.flatnonzero(abs(self.weights) > self.zero_threshold)
 
     @property
-    def composition(self):
-        names = self.assets.names[self.assets_index]
-        weights = self.weights[self.assets_index]
-        df = pd.DataFrame({'name': names, 'weight': weights})
-        return df
+    def assets_names(self):
+        return self.assets.names[self.assets_index]
 
     @property
-    def assets_names(self):
-        return self.assets_names
+    def composition(self):
+        weights = self.weights[self.assets_index]
+        df = pd.DataFrame({'name': self.assets_names, 'weight': weights})
+        df.sort_values(by='weight', ascending=False, inplace=True)
+        df.reset_index(inplace=True)
+        return df
 
     @property
     def length(self):
@@ -181,10 +182,7 @@ class Portfolio:
         return pd.DataFrame(res, index=idx, columns=['metrics'])
 
     def __str__(self):
-        return (f'Portfolio ({self.length} assets'
-                f' | annualized mean: {round(self.annualized_mean * 100, 2)}%'
-                f' | annualized std: {round(self.annualized_std * 100, 2)}%'
-                f' | sharpe: {round(self.sharpe_ratio, 2)})')
+        return f'Portfolio ({self.length} assets'
 
     def __repr__(self):
         return f'Portfolio ({self.length} assets)'
