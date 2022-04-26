@@ -48,7 +48,7 @@ def pre_selection(assets: Assets, k: int) -> list[str]:
         weights = np.zeros(assets.asset_nb)
         weights[i] = 1
         portfolio = Portfolio(weights=weights, fitness_type=FitnessType.MEAN_STD, assets=assets)
-        population.append(portfolio)
+        population.add(portfolio)
 
     # Add negatively correlated pairs with minimum variance
     for i, j in itertools.combinations(range(assets.asset_nb), 2):
@@ -61,7 +61,7 @@ def pre_selection(assets: Assets, k: int) -> list[str]:
         weights[i] = (var2 - cov) / (var1 + var2 - 2 * cov)
         weights[j] = 1 - weights[i]
         portfolio = Portfolio(weights=weights, fitness_type=FitnessType.MEAN_STD, assets=assets)
-        population.append(portfolio)
+        population.add(portfolio)
 
     new_assets_idx = set()
     i = 0

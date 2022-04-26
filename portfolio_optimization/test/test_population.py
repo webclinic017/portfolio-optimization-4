@@ -12,9 +12,9 @@ def test_population():
     # Create a population of portfolios with 3 objectives
     population = Population()
     for _ in range(100):
-        weights = rand_weights(n=assets.asset_nb)
+        weights = rand_weights(n=assets.asset_nb, zeros=assets.asset_nb - 10)
         portfolio = Portfolio(weights=weights, fitness_type=FitnessType.MEAN_DOWNSIDE_STD_MAX_DRAWDOWN, assets=assets)
-        population.append(portfolio)
+        population.add(portfolio)
 
     # test non-dominated sorting into fronts
     assert sorted([i for j in population.fronts for i in j]) == list(range(population.length))
@@ -35,12 +35,19 @@ def test_population():
 
     # Create a population of portfolios with 2 objectives
     population = Population()
-    for _ in range(100):
-        weights = rand_weights(n=assets.asset_nb)
-        portfolio = Portfolio(weights=weights, fitness_type=FitnessType.MEAN_STD, assets=assets)
-        population.append(portfolio)
+    for i in range(10):
+        weights = rand_weights(n=assets.asset_nb, zeros=assets.asset_nb - 10)
+        portfolio = Portfolio(pid=str(i), weights=weights, fitness_type=FitnessType.MEAN_STD, assets=assets)
+        population.add(portfolio)
 
     population.plot(x=Metrics.ANNUALIZED_STD, y=Metrics.ANNUALIZED_MEAN, fronts=True)
 
     assert (population.min(metric=Metrics.ANNUALIZED_MEAN).annualized_mean
             <= population.max(metric=Metrics.ANNUALIZED_MEAN).annualized_mean)
+
+    # get
+    assert population.get(pid='2') == population.iloc(2)
+
+    # composition
+    population.composition()
+    population.plot_composition()

@@ -1,8 +1,9 @@
 import numpy as np
 from enum import Enum
-
+import uuid
 import pandas as pd
 
+from portfolio_optimization.meta import *
 from portfolio_optimization.assets import *
 from portfolio_optimization.utils.tools import *
 
@@ -30,13 +31,12 @@ class FitnessType(Enum):
 
 
 class Portfolio:
-    avg_trading_days_per_year = 255
-    zero_threshold = 1e-4
 
     def __init__(self,
                  weights: np.ndarray,
                  fitness_type: FitnessType,
                  assets: Assets,
+                 pid: str = None,
                  tag: str = 'ptf',
                  name: str = ''):
 
@@ -47,6 +47,11 @@ class Portfolio:
             raise TypeError(f'weights should be of type numpy.ndarray')
         if abs(weights.sum() - 1) > 1e-5:
             raise TypeError(f'weights should sum to 1')
+
+        if pid is None:
+            self.pid = str(uuid.uuid1())
+        else:
+            self.pid = pid
 
         self.fitness_type = fitness_type
         self.weights = weights
@@ -83,7 +88,7 @@ class Portfolio:
 
     @property
     def annualized_mean(self):
-        return self.mean * self.avg_trading_days_per_year
+        return self.mean * AVG_TRADING_DAYS_PER_YEAR
 
     @property
     def std(self):
@@ -93,7 +98,7 @@ class Portfolio:
 
     @property
     def annualized_std(self):
-        return self.std * np.sqrt(self.avg_trading_days_per_year)
+        return self.std * np.sqrt(AVG_TRADING_DAYS_PER_YEAR)
 
     @property
     def downside_std(self):
@@ -103,7 +108,7 @@ class Portfolio:
 
     @property
     def annualized_downside_std(self):
-        return self.downside_std * np.sqrt(self.avg_trading_days_per_year)
+        return self.downside_std * np.sqrt(AVG_TRADING_DAYS_PER_YEAR)
 
     @property
     def max_drawdown(self):
@@ -158,7 +163,7 @@ class Portfolio:
 
     @property
     def assets_index(self):
-        return np.flatnonzero(abs(self.weights) > self.zero_threshold)
+        return np.flatnonzero(abs(self.weights) > ZERO_THRESHOLD)
 
     @property
     def assets_names(self):
@@ -169,12 +174,12 @@ class Portfolio:
         weights = self.weights[self.assets_index]
         df = pd.DataFrame({'name': self.assets_names, 'weight': weights})
         df.sort_values(by='weight', ascending=False, inplace=True)
-        df.reset_index(inplace=True)
+        df.set_index('name', inplace=True)
         return df
 
     @property
     def length(self):
-        return np.count_nonzero(abs(self.weights) > self.zero_threshold)
+        return np.count_nonzero(abs(self.weights) > ZERO_THRESHOLD)
 
     def metrics(self):
         idx = [e.value for e in Metrics]
