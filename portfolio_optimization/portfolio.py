@@ -22,10 +22,12 @@ class Metrics(Enum):
     ANNUALIZED_DOWNSIDE_STD = 'annualized_downside_std'
     MAX_DRAWDOWN = 'max_drawdown'
     CDAR_95 = 'cdar_95'
+    CVAR_95 = 'cvar_95'
     SHARPE_RATIO = 'sharpe_ratio'
     SORTINO_RATIO = 'sortino_ratio'
     CALMAR_RATIO = 'calmar_ratio'
     CDAR_95_RATIO = 'cdar_95_ratio'
+    CVAR_95_RATIO = 'cvar_95_ratio'
 
 
 class FitnessType(Enum):
@@ -72,6 +74,7 @@ class Portfolio:
         self._downside_std = None
         self._max_drawdown = None
         self._cdar_95 = None
+        self._cvar_95 = None
         self._fitness = None
 
     @property
@@ -140,6 +143,15 @@ class Portfolio:
         return self._cdar_95
 
     @property
+    def cvar_95(self):
+        """
+        Conditional historical Value at Risk (CVaR) with a confidence level at 95%
+        """
+        if self._cvar_95 is None:
+            self._cvar_95 = cvar(returns=self.returns, beta=0.95)
+        return self._cvar_95
+
+    @property
     def sharpe_ratio(self):
         return self.annualized_mean / self.annualized_std
 
@@ -154,6 +166,10 @@ class Portfolio:
     @property
     def cdar_95_ratio(self):
         return self.annualized_mean / self.cdar_95
+
+    @property
+    def cvar_95_ratio(self):
+        return self.annualized_mean / self.cvar_95
 
     @property
     def fitness(self):

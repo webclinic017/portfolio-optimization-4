@@ -5,10 +5,10 @@ import cvxpy as cp
 from portfolio_optimization.utils.tools import *
 from portfolio_optimization.meta import *
 
-__all__ = ['mean_cdar']
+__all__ = ['mean_cvar']
 
 
-def mean_cdar(expected_returns: np.ndarray,
+def mean_cvar(expected_returns: np.ndarray,
               returns: np.ndarray,
               weight_bounds: Union[tuple[np.ndarray, np.ndarray],
                                    tuple[Optional[float], Optional[float]]],
@@ -16,7 +16,7 @@ def mean_cdar(expected_returns: np.ndarray,
               population_size: int,
               beta: float = 0.95) -> np.array:
     """
-    Optimization along the mean-CDaR frontier (conditional drawdown-at-risk).
+    Optimization along the mean-CVaR frontier (conditional drawdown-at-risk).
 
     :param expected_returns: expected returns for each asset.
     :type expected_returns: np.ndarray of shape(Number of Assets)
@@ -24,7 +24,7 @@ def mean_cdar(expected_returns: np.ndarray,
     :param returns: historic returns for all your assets
     :type returns: np.ndarray of shape(Number of Assets, Number of Observations)
 
-    :param beta: drawdown confidence level (expected drawdown on the worst (1-beta)% days)
+    :param beta: var confidence level (expected var on the worst (1-beta)% days)
     :type beta: float
 
     :param weight_bounds: minimum and maximum weight of each asset OR single min/max pair if all identical.
@@ -45,26 +45,22 @@ def mean_cdar(expected_returns: np.ndarray,
     # Variables
     w = cp.Variable(assets_number)
     alpha = cp.Variable()
-    u = cp.Variable(observations_number + 1)
-    z = cp.Variable(observations_number)
+    u = cp.Variable(observations_number)
 
     # Parameters
-    target_cdar = cp.Parameter(nonneg=True)
+    target_cvar = cp.Parameter(nonneg=True)
 
     # Objectives
     portfolio_return = expected_returns.T @ w
     objective = cp.Maximize(portfolio_return)
 
     # Constraints
-    portfolio_cdar = alpha + 1.0 / (observations_number * (1 - beta)) * cp.sum(z)
+    portfolio_cvar = alpha + 1.0 / (observations_number * (1 - beta)) * cp.sum(u)
     lower_bounds, upper_bounds = get_lower_and_upper_bounds(weight_bounds=weight_bounds,
                                                             assets_number=assets_number)
-    constraints = [portfolio_cdar <= target_cdar,
-                   z >= u[1:] - alpha,
-                   z >= 0,
-                   u[1:] >= u[:-1] - returns.T @ w,
-                   u[0] == 0,
-                   u[1:] >= 0,
+    constraints = [portfolio_cvar <= target_cvar,
+                   returns.T @ w + alpha + u >= 0,
+                   u >= 0,
                    w >= lower_bounds,
                    w <= upper_bounds]
     investment_target = get_investment_target(investment_type=investment_type)
@@ -76,8 +72,8 @@ def mean_cdar(expected_returns: np.ndarray,
 
     # Solve for different volatilities
     weights = []
-    for cdar in np.logspace(-3.5, -0.5, num=population_size):
-        target_cdar.value = cdar
+    for cvar in np.logspace(-3.5, -0.5, num=population_size):
+        target_cvar.value = cvar
         problem.solve()
         weights.append(w.value)
 

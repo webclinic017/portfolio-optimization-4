@@ -4,7 +4,8 @@ import numpy as np
 __all__ = ['downside_std',
            'max_drawdown',
            'max_drawdown_slow',
-           'cdar']
+           'cdar',
+           'cvar']
 
 
 def downside_std(returns: np.ndarray,
@@ -46,8 +47,24 @@ def cdar(prices, beta: float = 0.95):
     :param beta: drawdown confidence level (expected drawdown on the worst (1-beta)% days)
     """
     observations_number = len(prices)
-    p = int(np.ceil((1 - beta) * observations_number))
+    k = int(np.ceil((1 - beta) * observations_number))
 
-    drawdowns = np.sort(prices / np.maximum.accumulate(prices) - 1)
-    cdar = -np.sum(drawdowns[:p]) / p
+    # We only need the first k elements so using partition is faster than sort (O(n) vs O(nlogn)
+    drawdowns = np.partition(prices / np.maximum.accumulate(prices) - 1, k)
+    cdar = -np.sum(drawdowns[:k]) / k
     return cdar
+
+
+def cvar(returns, beta: float = 0.95):
+    """
+    Calculate the historical Conditional Value at Risk (CVaR) of a returns series.
+    :param returns: returns series.
+    :param beta: var confidence level (expected var on the worst (1-beta)% days)
+    """
+    observations_number = len(returns)
+    k = int(np.ceil((1 - beta) * observations_number))
+
+    # We only need the first k elements so using partition is faster than sort (O(n) vs O(nlogn)
+    vars = np.partition(returns, k)
+    cvar = -np.sum(vars[:k]) / k
+    return cvar

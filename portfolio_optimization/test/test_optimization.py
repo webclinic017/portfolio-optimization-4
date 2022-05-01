@@ -9,6 +9,7 @@ from portfolio_optimization.utils.tools import *
 from portfolio_optimization.optimization.mean_variance import *
 from portfolio_optimization.optimization.mean_semivariance import *
 from portfolio_optimization.optimization.mean_cdar import *
+from portfolio_optimization.optimization.mean_cvar import *
 from portfolio_optimization.utils.pre_seclection import *
 
 np.random.seed(150)
@@ -199,7 +200,7 @@ def mean_variance_vs_mean_cdar():
                                  name=str(i),
                                  tag='mean_variance'))
 
-    # Efficient Frontier -- Mean Cdar
+    # Efficient Frontier -- Mean CDaR
     portfolios_weights = mean_cdar(expected_returns=assets.mu,
                                    returns=assets.returns,
                                    investment_type=InvestmentType.FULLY_INVESTED,
@@ -230,12 +231,123 @@ def mean_variance_vs_mean_cdar():
 
     # Metrics
     max_sharpe = population.max(metric=Metrics.SHARPE_RATIO)
-    print(max_sharpe)
     print(max_sharpe.sharpe_ratio)
 
-    max_cdar_ratio = population.max(metric=Metrics.CDAR_95_RATIO)
-    print(max_cdar_ratio)
-    print(max_cdar_ratio.sortino_ratio)
+    max_cdar_95_ratio = population.max(metric=Metrics.CDAR_95_RATIO)
+    print(max_cdar_95_ratio.cdar_95_ratio)
 
     # Composition
-    population.plot_composition(pids=[max_sharpe.pid, max_cdar_ratio.pid])
+    population.plot_composition(pids=[max_sharpe.pid, max_cdar_95_ratio.pid])
+
+
+
+def mean_variance_vs_mean_cvar():
+    """
+    Compare the Efficient Frontier of the mean-variance against the mean-cvar optimization
+    """
+    _, assets = load_subset_assets()
+
+    population = Population()
+
+    # Efficient Frontier -- Mean Variance
+    portfolios_weights = mean_variance(expected_returns=assets.mu,
+                                       cov=assets.cov,
+                                       investment_type=InvestmentType.FULLY_INVESTED,
+                                       weight_bounds=(0, None),
+                                       population_size=30)
+    for i, weights in enumerate(portfolios_weights):
+        population.add(Portfolio(weights=weights,
+                                 fitness_type=FitnessType.MEAN_STD,
+                                 assets=assets,
+                                 pid=f'mean_variance_{i}',
+                                 name=str(i),
+                                 tag='mean_variance'))
+
+    # Efficient Frontier -- Mean CVaR
+    portfolios_weights = mean_cvar(expected_returns=assets.mu,
+                                   returns=assets.returns,
+                                   investment_type=InvestmentType.FULLY_INVESTED,
+                                   weight_bounds=(0, None),
+                                   beta=0.95,
+                                   population_size=30)
+    for i, weights in enumerate(portfolios_weights):
+        population.add(Portfolio(weights=weights,
+                                 fitness_type=FitnessType.MEAN_STD,
+                                 assets=assets,
+                                 pid=f'mean_cvar_{i}',
+                                 name=str(i),
+                                 tag='mean_cvar'))
+
+    # Plot
+    population.plot(x=Metrics.ANNUALIZED_STD,
+                    y=Metrics.ANNUALIZED_MEAN,
+                    color_scale=Metrics.SHARPE_RATIO)
+    population.plot(x=Metrics.CDAR_95,
+                    y=Metrics.ANNUALIZED_MEAN,
+                    color_scale=Metrics.CVAR_95_RATIO)
+
+    # Metrics
+    max_sharpe = population.max(metric=Metrics.SHARPE_RATIO)
+    print(max_sharpe.sharpe_ratio)
+
+    max_cvar_95_ratio = population.max(metric=Metrics.CVAR_95_RATIO)
+    print(max_cvar_95_ratio.cvar_95_ratio)
+
+    # Composition
+    population.plot_composition(pids=[max_sharpe.pid, max_cvar_95_ratio.pid])
+
+def mean_cdar_vs_mean_cvar():
+    """
+    Compare the Efficient Frontier of the mean-cdar against the mean-cvar optimization
+    """
+    _, assets = load_subset_assets()
+
+    population = Population()
+
+    # Efficient Frontier -- Mean CDaR
+    portfolios_weights = mean_cdar(expected_returns=assets.mu,
+                                   returns=assets.returns,
+                                   investment_type=InvestmentType.FULLY_INVESTED,
+                                   weight_bounds=(0, None),
+                                   beta=0.95,
+                                   population_size=30)
+    for i, weights in enumerate(portfolios_weights):
+        population.add(Portfolio(weights=weights,
+                                 fitness_type=FitnessType.MEAN_STD,
+                                 assets=assets,
+                                 pid=f'mean_cdar_{i}',
+                                 name=str(i),
+                                 tag='mean_cdar'))
+
+    # Efficient Frontier -- Mean CVaR
+    portfolios_weights = mean_cvar(expected_returns=assets.mu,
+                                   returns=assets.returns,
+                                   investment_type=InvestmentType.FULLY_INVESTED,
+                                   weight_bounds=(0, None),
+                                   beta=0.95,
+                                   population_size=30)
+    for i, weights in enumerate(portfolios_weights):
+        population.add(Portfolio(weights=weights,
+                                 fitness_type=FitnessType.MEAN_STD,
+                                 assets=assets,
+                                 pid=f'mean_cvar_{i}',
+                                 name=str(i),
+                                 tag='mean_cvar'))
+
+    # Plot
+    population.plot(x=Metrics.CDAR_95,
+                    y=Metrics.ANNUALIZED_MEAN,
+                    color_scale=Metrics.CDAR_95_RATIO)
+    population.plot(x=Metrics.CVAR_95,
+                    y=Metrics.ANNUALIZED_MEAN,
+                    color_scale=Metrics.CVAR_95_RATIO)
+
+    # Metrics
+    max_cdar_95_ratio = population.max(metric=Metrics.CDAR_95_RATIO)
+    print(max_cdar_95_ratio.cdar_95_ratio)
+
+    max_cvar_95_ratio = population.max(metric=Metrics.CVAR_95_RATIO)
+    print(max_cvar_95_ratio.cvar_95_ratio)
+
+    # Composition
+    population.plot_composition(pids=[max_cdar_95_ratio.pid, max_cvar_95_ratio.pid])
