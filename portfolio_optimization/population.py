@@ -1,3 +1,4 @@
+from typing import Union, Optional
 import pandas as pd
 import plotly.express as px
 
@@ -40,54 +41,93 @@ class Population:
     def iloc(self, i: int) -> Portfolio:
         return self.portfolios[i]
 
-    def get_portfolios_by_tag(self, tag: str) -> list[Portfolio]:
-        return [portfolio for portfolio in self.portfolios if portfolio.tag == tag]
+    def get_portfolios(self,
+                       pids: Optional[Union[str, list[str]]],
+                       tags: Optional[Union[str, list[str]]]) -> list[Portfolio]:
+        if tags is None and pids is None:
+            return self.portfolios
+        if pids is not None:
+            if isinstance(pids, str):
+                pids = [pids]
+            return [self.get(pid) for pid in pids]
+        if tags is not None:
+            if isinstance(tags, str):
+                tags = [tags]
+            return [portfolio for portfolio in self.portfolios if portfolio.tag in tags]
 
-    def sort(self, metric: Metrics, reverse: bool = False, tag: str = None) -> list[Portfolio]:
-        if tag is None:
-            portfolios = self.portfolios
-        else:
-            portfolios = self.get_portfolios_by_tag(tag=tag)
-
+    def sort(self,
+             metric: Metrics,
+             reverse: bool = False,
+             pids: Union[str, list[str]] = None,
+             tags: Union[str, list[str]] = None) -> list[Portfolio]:
+        portfolios = self.get_portfolios(pids=pids, tags=tags)
         return sorted(portfolios, key=lambda x: x.__getattribute__(metric.value), reverse=reverse)
 
-    def k_min(self, metric: Metrics, k: int, tag: str = None) -> list[Portfolio]:
-        return self.sort(metric=metric, reverse=False, tag=tag)[:k]
+    def k_min(self, metric: Metrics,
+              k: int,
+              pids: Union[str, list[str]] = None,
+              tags: Union[str, list[str]] = None) -> list[Portfolio]:
+        return self.sort(metric=metric, reverse=False, pids=pids, tags=tags)[:k]
 
-    def k_max(self, metric: Metrics, k: int, tag: str = None) -> list[Portfolio]:
-        return self.sort(metric=metric, reverse=True, tag=tag)[:k]
+    def k_max(self,
+              metric: Metrics,
+              k: int,
+              pids: Union[str, list[str]] = None,
+              tags: Union[str, list[str]] = None) -> list[Portfolio]:
+        return self.sort(metric=metric, reverse=True,pids=pids, tags=tags)[:k]
 
-    def min(self, metric: Metrics, tag: str = None) -> Portfolio:
-        return self.sort(metric=metric, reverse=False, tag=tag)[0]
+    def min(self,
+            metric: Metrics,
+            pids: Union[str, list[str]] = None,
+            tags: Union[str, list[str]] = None) -> Portfolio:
+        return self.sort(metric=metric, reverse=False,pids=pids, tags=tags)[0]
 
-    def max(self, metric: Metrics, tag: str = None) -> Portfolio:
-        return self.sort(metric=metric, reverse=True, tag=tag)[0]
+    def max(self,
+            metric: Metrics,
+            pids: Union[str, list[str]] = None,
+            tags: Union[str, list[str]] = None) -> Portfolio:
+        return self.sort(metric=metric, reverse=True, pids=pids, tags=tags)[0]
 
-    def composition(self) -> pd.DataFrame:
+    def composition(self,
+                    pids: Union[str, list[str]] = None,
+                    tags: Union[str, list[str]] = None) -> pd.DataFrame:
+        portfolios = self.get_portfolios(pids=pids, tags=tags)
         res = []
         idx = []
-        for pid, p in self.hashmap.items():
+        for p in portfolios:
             res.append(p.composition.to_dict()['weight'])
-            idx.append(pid)
+            idx.append(p.pid)
         df = pd.DataFrame(res, index=idx)
-        df.index.name = 'portfolio'
+        df.fillna(0, inplace=True)
         return df
 
-    def plot_composition(self):
-        df = self.composition()
+    def plot_composition(self,
+                         pids: Union[str, list[str]] = None,
+                         tags: Union[str, list[str]] = None):
+        df = self.composition(pids=pids, tags=tags)
         fig = px.bar(df, x=df.index, y=df.columns, title='Portfolios Composition')
         fig.show()
 
-    def plot(self, x: Metrics, y: Metrics, z: Metrics = None, fronts: bool = False, color_scale: str = None):
+    def plot(self,
+             x: Metrics,
+             y: Metrics,
+             z: Metrics = None,
+             fronts: bool = False,
+             color_scale: str = None,
+             pids: Union[str, list[str]] = None,
+             tags: Union[str, list[str]] = None):
+        portfolios = self.get_portfolios(pids=pids, tags=tags)
         columns = [x.value, y.value, 'tag']
         if z is not None:
             columns.append(z.value)
         if color_scale is not None:
             columns.append(color_scale)
 
-        res = [[portfolio.__getattribute__(attr) for attr in columns] for portfolio in self.portfolios]
+        res = [[portfolio.__getattribute__(attr) for attr in columns] for portfolio in portfolios]
         df = pd.DataFrame(res, columns=columns)
         if fronts:
+            if tags is not None:
+                ValueError(f'Cannot plot front with tags selected')
             df['front'] = -1
             for i, front in enumerate(self.fronts):
                 for idx in front:
@@ -112,7 +152,7 @@ class Population:
         fig.show()
 
     def __str__(self):
-        return f'Population ({len(self.portfolios)} portfolios)'
+        return f'Population <{len(self.portfolios)} portfolios>'
 
     def __repr__(self):
         return str(self)

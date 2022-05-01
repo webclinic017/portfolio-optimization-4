@@ -5,21 +5,21 @@ import cvxpy as cp
 from portfolio_optimization.utils.tools import *
 from portfolio_optimization.meta import *
 
-__all__ = ['mean_semivariance_optimization']
+__all__ = ['mean_semivariance']
 
 
-def mean_semivariance_optimization(mu: np.ndarray,
-                                   returns: np.ndarray,
-                                   returns_target: Union[float, np.ndarray],
-                                   weight_bounds: Union[tuple[np.ndarray, np.ndarray],
+def mean_semivariance(expected_returns: np.ndarray,
+                      returns: np.ndarray,
+                      returns_target: Union[float, np.ndarray],
+                      weight_bounds: Union[tuple[np.ndarray, np.ndarray],
                                                         tuple[Optional[float], Optional[float]]],
-                                   investment_type: InvestmentType,
+                      investment_type: InvestmentType,
 
-                                   population_size: int) -> np.array:
+                      population_size: int) -> np.array:
     """
     Optimization along the mean-semivariance frontier.
-    :param mu: expected returns for each asset.
-    :type mu: np.ndarray of shape(Number of Assets)
+    :param expected_returns: expected returns for each asset.
+    :type expected_returns: np.ndarray of shape(Number of Assets)
 
     :param returns: historic returns for all your assets
     :type returns: np.ndarray of shape(Number of Assets, Number of Observations)
@@ -40,8 +40,7 @@ def mean_semivariance_optimization(mu: np.ndarray,
     :return the portfolio weights that are in the efficient frontier
 
     """
-    assets_number = len(mu)
-    observations_number = returns.shape[1]
+    assets_number, observations_number = returns.shape
 
     # Additional matrix
     if not np.isscalar(returns_target):
@@ -57,7 +56,7 @@ def mean_semivariance_optimization(mu: np.ndarray,
     target_semivariance = cp.Parameter(nonneg=True)
 
     # Objectives
-    portfolio_return = mu.T @ w
+    portfolio_return = expected_returns.T @ w
     objective = cp.Maximize(portfolio_return)
 
     # Constraints
@@ -83,3 +82,5 @@ def mean_semivariance_optimization(mu: np.ndarray,
         weights.append(w.value)
 
     return np.array(weights)
+
+

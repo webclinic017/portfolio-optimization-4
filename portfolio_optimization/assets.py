@@ -18,12 +18,15 @@ class Assets:
                  end_date: dt.date = None,
                  asset_missing_threshold: float = 0.1,
                  dates_missing_threshold: float = 0.1,
-                 names_to_keep: list[str] = None):
+                 names_to_keep: list[str] = None,
+                 name: str = 'assets'):
         assert asset_missing_threshold < 1
         assert dates_missing_threshold < 1
+        self.name = name
         self.start_date = start_date
         self.end_date = end_date
-        self.prices = load_bloomberg_prices(date_from=self.start_date, date_to=self.end_date, names_to_keep=names_to_keep)
+        self.prices = load_bloomberg_prices(date_from=self.start_date, date_to=self.end_date,
+                                            names_to_keep=names_to_keep)
         self.asset_missing_threshold = asset_missing_threshold
         self.dates_missing_threshold = dates_missing_threshold
         self._preprocessing()
@@ -106,7 +109,7 @@ class Assets:
         fig.show()
 
     def __str__(self):
-        return f'Assets (asset number: {self.asset_nb}, date number: {self.date_nb})'
+        return f'Assets <{self.name}  - {self.asset_nb} assets - {self.date_nb} dates>'
 
     def __repr__(self):
         return str(self)

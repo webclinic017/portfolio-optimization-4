@@ -49,7 +49,7 @@ class Portfolio:
             raise TypeError(f'weights should sum to 1')
 
         if pid is None:
-            self.pid = str(uuid.uuid1())
+            self.pid = str(uuid.uuid4())
         else:
             self.pid = pid
 
@@ -187,7 +187,7 @@ class Portfolio:
         return pd.DataFrame(res, index=idx, columns=['metrics'])
 
     def __str__(self):
-        return f'Portfolio ({self.length} assets'
+        return f'Portfolio <{self.name} - {self.tag} - {self.pid} - {len(self.assets_names)} assets>'
 
     def __repr__(self):
-        return f'Portfolio ({self.length} assets)'
+        return str(self)

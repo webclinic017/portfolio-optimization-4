@@ -1,24 +1,28 @@
+import logging
 from typing import Union, Optional
 import numpy as np
 import cvxpy as cp
+from cvxpy.error import SolverError
 
 from portfolio_optimization.utils.tools import *
 from portfolio_optimization.meta import *
 
-__all__ = ['mean_variance_optimization']
+__all__ = ['mean_variance']
+
+logger = logging.getLogger('portfolio_optimization.mean_variance_optimization')
 
 
-def mean_variance_optimization(mu: np.ndarray,
-                               cov: np.matrix,
-                               weight_bounds: Union[tuple[np.ndarray, np.ndarray],
+def mean_variance(expected_returns: np.ndarray,
+                  cov: np.matrix,
+                  weight_bounds: Union[tuple[np.ndarray, np.ndarray],
                                                     tuple[Optional[float], Optional[float]]],
-                               investment_type: InvestmentType,
-                               population_size: int) -> np.array:
+                  investment_type: InvestmentType,
+                  population_size: int) -> np.array:
     """
     Optimization along the mean-variance frontier (Markowitz optimization).
 
-    :param mu: expected returns for each asset.
-    :type mu: np.ndarray of shape(Number of Assets)
+    :param expected_returns: expected returns for each asset.
+    :type expected_returns: np.ndarray of shape(Number of Assets)
 
     :param cov: covariance of returns for each asset.
     :type cov: np.matrix of shape(Number of Assets, Number of Assets)
@@ -36,7 +40,7 @@ def mean_variance_optimization(mu: np.ndarray,
     :return the portfolio weights that are in the efficient frontier
 
     """
-    assets_number = len(mu)
+    assets_number = len(expected_returns)
 
     # Variables
     w = cp.Variable(assets_number)
@@ -45,7 +49,7 @@ def mean_variance_optimization(mu: np.ndarray,
     target_variance = cp.Parameter(nonneg=True)
 
     # Objectives
-    portfolio_return = mu.T @ w
+    portfolio_return = expected_returns.T @ w
     objective = cp.Maximize(portfolio_return)
 
     # Constraints
@@ -66,7 +70,13 @@ def mean_variance_optimization(mu: np.ndarray,
     weights = []
     for annualized_volatility in np.logspace(-2.5, -0.5, num=population_size):
         target_variance.value = annualized_volatility ** 2 / 255
-        problem.solve()
-        weights.append(w.value)
+        try:
+            problem.solve()
+            if w.value is None:
+                logger.warning(f'None return for annualized_volatility {annualized_volatility}')
+            else:
+                weights.append(w.value)
+        except SolverError as e:
+            logger.warning(f'SolverError for annualized_volatility {annualized_volatility}: {e}')
 
     return np.array(weights)
