@@ -1,14 +1,10 @@
 from typing import Union, Optional
 import numpy as np
-import cvxpy as cp
 
 from portfolio_optimization.meta import *
 
 __all__ = ['dominate',
            'dominate_slow',
-           'downside_std',
-           'max_drawdown',
-           'max_drawdown_slow',
            'prices_rebased',
            'portfolio_returns',
            'rand_weights',
@@ -34,28 +30,6 @@ def dominate(fitness_1: np.array, fitness_2: np.array) -> bool:
 
 def dominate_slow(fitness_1: np.array, fitness_2: np.array) -> bool:
     return np.all(fitness_1 >= fitness_2) and np.any(fitness_1 > fitness_2)
-
-
-def downside_std(returns: np.array) -> float:
-    """
-    Downside standard deviation with a target return of Rf=0.
-    Many implementations remove positive returns then compute the std of the remaining negative returns or replace
-    the positive returns by 0 then compute the std. Both are incorrect.
-    """
-    return np.sqrt(np.mean(np.minimum(0, returns) ** 2))
-
-
-def max_drawdown(prices: np.array) -> float:
-    return np.max(1 - prices / np.maximum.accumulate(prices))
-
-
-def max_drawdown_slow(prices: np.array) -> float:
-    max_dd = 0
-    max_seen = prices[0]
-    for price in prices:
-        max_seen = max(max_seen, price)
-        max_dd = max(max_dd, 1 - price / max_seen)
-    return max_dd
 
 
 def prices_rebased(returns: np.array) -> np.array:

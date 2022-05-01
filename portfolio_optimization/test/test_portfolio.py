@@ -20,8 +20,8 @@ def test_portfolio_metrics():
     assert abs(np.sqrt(np.mean(np.minimum(0, returns) ** 2)) - portfolio.downside_std) < 1e-10
     assert abs(portfolio.annualized_mean / portfolio.annualized_std - portfolio.sharpe_ratio) < 1e-10
     assert abs(portfolio.annualized_mean / portfolio.annualized_downside_std - portfolio.sortino_ratio) < 1e-10
-    assert np.array_equal(prices_rebased(portfolio.returns), portfolio.prices)
-    assert max_drawdown_slow(portfolio.prices) == portfolio.max_drawdown
+    assert np.array_equal(prices_rebased(portfolio.returns), portfolio.prices_compounded)
+    assert max_drawdown_slow(portfolio.prices_compounded) == portfolio.max_drawdown
     assert np.array_equal(portfolio.fitness, np.array([portfolio.mean, -portfolio.std]))
     portfolio.reset_fitness(fitness_type=FitnessType.MEAN_DOWNSIDE_STD)
     assert np.array_equal(portfolio.fitness, np.array([portfolio.mean, -portfolio.downside_std]))

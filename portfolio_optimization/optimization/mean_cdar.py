@@ -41,53 +41,31 @@ def mean_cdar(expected_returns: np.ndarray,
     :return the portfolio weights that are in the efficient frontier
 
     """
-
-    self._alpha = cp.Variable()
-    self._u = cp.Variable(len(self.returns) + 1)
-    self._z = cp.Variable(len(self.returns))
-
-    assets_number = len(expected_returns)
-    observations_number = returns.shape[1]
-
-    # Additional matrix
-    if not np.isscalar(returns_target):
-        returns_target = returns_target[:, np.newaxis]
-    B = (returns - returns_target) / np.sqrt(observations_number)
-    cdar = self._alpha + 1.0 / (len(self.returns) * (1 - self._beta)) * cp.sum(
-        self._z
-    )
-    target_cdar_par = cp.Parameter(
-        value=target_cdar, name="target_cdar", nonneg=True
-    )
-    self.add_constraint(lambda _: cdar <= target_cdar_par)
-    self.add_constraint(lambda _: self._z >= self._u[1:] - self._alpha)
-    self.add_constraint(
-        lambda w: self._u[1:] >= self._u[:-1] - self.returns.values @ w
-    )
-    self.add_constraint(lambda _: self._u[0] == 0)
-    self.add_constraint(lambda _: self._z >= 0)
-    self.add_constraint(lambda _: self._u[1:] >= 0)
-
+    assets_number, observations_number = returns.shape
 
     # Variables
     w = cp.Variable(assets_number)
     alpha = cp.Variable()
-    u = cp.Variable(len(self.returns) + 1)
-    z = cp.Variable(len(self.returns))
+    u = cp.Variable(observations_number + 1)
+    z = cp.Variable(observations_number)
 
     # Parameters
-    target_semivariance = cp.Parameter(nonneg=True)
+    target_cdar = cp.Parameter(nonneg=True)
 
     # Objectives
     portfolio_return = expected_returns.T @ w
     objective = cp.Maximize(portfolio_return)
 
     # Constraints
-    portfolio_semivariance = cp.sum(cp.square(n))
+    portfolio_cdar = alpha + 1.0 / (observations_number * (1 - beta)) * cp.sum(z)
     lower_bounds, upper_bounds = get_lower_and_upper_bounds(weight_bounds=weight_bounds,
                                                             assets_number=assets_number)
-    constraints = [portfolio_semivariance <= target_semivariance,
-                   B.T @ w - p + n == 0,
+    constraints = [portfolio_cdar <= target_cdar,
+                   z >= u[1:] - alpha,
+                   z >= 0,
+                   u[1:] >= u[:-1] - returns.T @ w,
+                   u[0] == 0,
+                   u[1:] >= 0,
                    w >= lower_bounds,
                    w <= upper_bounds]
     investment_target = get_investment_target(investment_type=investment_type)
@@ -99,8 +77,8 @@ def mean_cdar(expected_returns: np.ndarray,
 
     # Solve for different volatilities
     weights = []
-    for annualized_volatility in np.logspace(-2.5, -0.5, num=population_size):
-        target_semivariance.value = annualized_volatility ** 2 / 255
+    for cdar in np.logspace(-3, -0.5, num=population_size):
+        target_cdar.value = cdar
         problem.solve()
         weights.append(w.value)
 

@@ -6,6 +6,7 @@ import pandas as pd
 from portfolio_optimization.meta import *
 from portfolio_optimization.assets import *
 from portfolio_optimization.utils.tools import *
+from portfolio_optimization.utils.metrics import *
 
 __all__ = ['FitnessType',
            'Metrics',
@@ -20,8 +21,11 @@ class Metrics(Enum):
     ANNUALIZED_STD = 'annualized_std'
     ANNUALIZED_DOWNSIDE_STD = 'annualized_downside_std'
     MAX_DRAWDOWN = 'max_drawdown'
+    CDAR_95 = 'cdar_95'
     SHARPE_RATIO = 'sharpe_ratio'
     SORTINO_RATIO = 'sortino_ratio'
+    CALMAR_RATIO = 'calmar_ratio'
+    CDAR_95_RATIO = 'cdar_95_ratio'
 
 
 class FitnessType(Enum):
@@ -61,11 +65,13 @@ class Portfolio:
         self.assets = assets
         # Metrics
         self._returns = None
-        self._prices = None
+        self._prices_compounded = None
+        self._prices_uncompounded = None
         self._mean = None
         self._std = None
         self._downside_std = None
         self._max_drawdown = None
+        self._cdar_95 = None
         self._fitness = None
 
     @property
@@ -75,10 +81,18 @@ class Portfolio:
         return self._returns
 
     @property
-    def prices(self):
-        if self._prices is None:
-            self._prices = (self.returns + 1).cumprod()
-        return self._prices
+    def prices_compounded(self):
+        if self._prices_compounded is None:
+            prices_compounded = (self.returns + 1).cumprod()
+            self._prices_compounded = np.insert(prices_compounded, 0, 1)
+        return self._prices_compounded
+
+    @property
+    def prices_uncompounded(self):
+        if self._prices_uncompounded is None:
+            returns = np.insert(self.returns, 0, 1)
+            self._prices_uncompounded = np.cumsum(returns)
+        return self._prices_uncompounded
 
     @property
     def mean(self):
@@ -113,8 +127,17 @@ class Portfolio:
     @property
     def max_drawdown(self):
         if self._max_drawdown is None:
-            self._max_drawdown = max_drawdown(self.prices)
+            self._max_drawdown = max_drawdown(prices=self.prices_compounded)
         return self._max_drawdown
+
+    @property
+    def cdar_95(self):
+        """
+        Conditional Drawdown at Risk (CDaR) with a confidence level at 95%
+        """
+        if self._cdar_95 is None:
+            self._cdar_95 = cdar(prices=self.prices_uncompounded, beta=0.95)
+        return self._cdar_95
 
     @property
     def sharpe_ratio(self):
@@ -123,6 +146,14 @@ class Portfolio:
     @property
     def sortino_ratio(self):
         return self.annualized_mean / self.annualized_downside_std
+
+    @property
+    def calmar_ratio(self):
+        return self.annualized_mean / self.max_drawdown
+
+    @property
+    def cdar_95_ratio(self):
+        return self.annualized_mean / self.cdar_95
 
     @property
     def fitness(self):

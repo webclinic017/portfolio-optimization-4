@@ -74,13 +74,13 @@ class Population:
               k: int,
               pids: Union[str, list[str]] = None,
               tags: Union[str, list[str]] = None) -> list[Portfolio]:
-        return self.sort(metric=metric, reverse=True,pids=pids, tags=tags)[:k]
+        return self.sort(metric=metric, reverse=True, pids=pids, tags=tags)[:k]
 
     def min(self,
             metric: Metrics,
             pids: Union[str, list[str]] = None,
             tags: Union[str, list[str]] = None) -> Portfolio:
-        return self.sort(metric=metric, reverse=False,pids=pids, tags=tags)[0]
+        return self.sort(metric=metric, reverse=False, pids=pids, tags=tags)[0]
 
     def max(self,
             metric: Metrics,
@@ -113,14 +113,18 @@ class Population:
              y: Metrics,
              z: Metrics = None,
              fronts: bool = False,
-             color_scale: str = None,
+             color_scale: Union[Metrics, str] = None,
              pids: Union[str, list[str]] = None,
              tags: Union[str, list[str]] = None):
         portfolios = self.get_portfolios(pids=pids, tags=tags)
         columns = [x.value, y.value, 'tag']
         if z is not None:
             columns.append(z.value)
-        if color_scale is not None:
+
+        if isinstance(color_scale, Metrics):
+            color_scale = color_scale.value
+
+        if color_scale is not None and color_scale not in columns:
             columns.append(color_scale)
 
         res = [[portfolio.__getattribute__(attr) for attr in columns] for portfolio in portfolios]
