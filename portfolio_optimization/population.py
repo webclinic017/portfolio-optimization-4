@@ -42,8 +42,8 @@ class Population:
         return self.portfolios[i]
 
     def get_portfolios(self,
-                       pids: Optional[Union[str, list[str]]],
-                       tags: Optional[Union[str, list[str]]]) -> list[Portfolio]:
+                       pids: Optional[Union[str, list[str]]] = None,
+                       tags: Optional[Union[str, list[str]]] = None) -> list[Portfolio]:
         if tags is None and pids is None:
             return self.portfolios
         if pids is not None:

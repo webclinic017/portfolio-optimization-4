@@ -2,9 +2,10 @@ import datetime as dt
 import numpy as np
 
 from portfolio_optimization.assets import *
+from portfolio_optimization.utils.assets import *
 
 
-def test_assets():
+def test_assets_class():
     assets = Assets(start_date=dt.date(2019, 1, 1))
     names = list(assets.prices.columns)
     assert assets.asset_nb == len(names)
@@ -24,3 +25,25 @@ def test_assets():
     assert assets.date_nb == len(assets.prices) - 1
     assets.plot()
     assets.plot(idx=[2, 5])
+
+
+def test_load_train_test_assets():
+    train_period = (dt.date(2018, 1, 1), dt.date(2019, 1, 1))
+    test_period = (dt.date(2019, 1, 1), dt.date(2020, 1, 1))
+
+    train_assets, test_assets = load_train_test_assets(train_period=train_period,
+                                                       test_period=test_period,
+                                                       random_selection=200,
+                                                       pre_selection_number=100)
+
+    assert set(train_assets.names) == set(test_assets.names)
+    assert (train_assets.start_date, train_assets.end_date) == train_period
+    assert (test_assets.start_date, test_assets.end_date) == test_period
+
+
+def test_load_assets_with_preselection():
+    assets = load_assets_with_preselection(start_date=dt.date(2018, 1, 1),
+                                           end_date=dt.date(2019, 1, 1),
+                                           random_selection=200,
+                                           pre_selection_number=100)
+    assert 100 <= len(assets.names) <= 200
