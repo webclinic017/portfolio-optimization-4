@@ -1,6 +1,5 @@
 import logging
 from typing import Union, Optional
-from scipy.sparse.linalg._eigen.arpack.arpack import ArpackNoConvergence
 import numpy as np
 import cvxpy as cp
 from cvxpy.error import SolverError

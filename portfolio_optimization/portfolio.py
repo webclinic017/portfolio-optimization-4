@@ -156,6 +156,15 @@ class Portfolio:
         return self.annualized_mean / self.annualized_std
 
     @property
+    def sric(self):
+        """
+        Sharpe Ratio Information Criterion (SRIC) is an unbiased estimator of the sharpe ratio adjusting for both
+        sources of bias which are noise fit and estimation error.
+        Ref: Noise Fit, Estimation Error and a Sharpe Information Criterion. Dirk Paulsen (2019)
+        """
+        return self.sharpe_ratio - self.assets.asset_nb / (self.assets.date_nb * self.sharpe_ratio)
+
+    @property
     def sortino_ratio(self):
         return self.annualized_mean / self.annualized_downside_std
 
