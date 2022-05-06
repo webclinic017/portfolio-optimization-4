@@ -27,6 +27,20 @@ def test_assets_class():
     assets.plot(idx=[2, 5])
 
 
+def test_load_assets():
+    correlation_threshold = 0.99
+    assets = load_assets(start_date=dt.date(2018, 1, 1),
+                         end_date=dt.date(2019, 1, 1),
+                         random_selection=200,
+                         correlation_threshold=correlation_threshold,
+                         pre_selection_number=100)
+    for i in range(assets.asset_nb):
+        for j in range(assets.asset_nb):
+            if i != j:
+                assert assets.corr[i, j] < correlation_threshold
+    assert 100 <= len(assets.names) <= 200
+
+
 def test_load_train_test_assets():
     train_period = (dt.date(2018, 1, 1), dt.date(2019, 1, 1))
     test_period = (dt.date(2019, 1, 1), dt.date(2020, 1, 1))
@@ -39,11 +53,3 @@ def test_load_train_test_assets():
     assert set(train_assets.names) == set(test_assets.names)
     assert (train_assets.start_date, train_assets.end_date) == train_period
     assert (test_assets.start_date, test_assets.end_date) == test_period
-
-
-def test_load_assets_with_preselection():
-    assets = load_assets_with_preselection(start_date=dt.date(2018, 1, 1),
-                                           end_date=dt.date(2019, 1, 1),
-                                           random_selection=200,
-                                           pre_selection_number=100)
-    assert 100 <= len(assets.names) <= 200

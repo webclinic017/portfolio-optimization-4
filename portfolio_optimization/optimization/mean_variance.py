@@ -1,5 +1,6 @@
 import logging
 from typing import Union, Optional
+from scipy.sparse.linalg._eigen.arpack.arpack import ArpackNoConvergence
 import numpy as np
 import cvxpy as cp
 from cvxpy.error import SolverError
@@ -15,7 +16,7 @@ logger = logging.getLogger('portfolio_optimization.mean_variance_optimization')
 def mean_variance(expected_returns: np.ndarray,
                   cov: np.matrix,
                   weight_bounds: Union[tuple[np.ndarray, np.ndarray],
-                                                    tuple[Optional[float], Optional[float]]],
+                                       tuple[Optional[float], Optional[float]]],
                   investment_type: InvestmentType,
                   population_size: int) -> np.array:
     """
@@ -71,7 +72,7 @@ def mean_variance(expected_returns: np.ndarray,
     for annualized_volatility in np.logspace(-2.5, -0.5, num=population_size):
         target_variance.value = annualized_volatility ** 2 / 255
         try:
-            problem.solve()
+            problem.solve(solver='ECOS')
             if w.value is None:
                 logger.warning(f'None return for annualized_volatility {annualized_volatility}')
             else:

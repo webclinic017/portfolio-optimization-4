@@ -8,11 +8,40 @@ from portfolio_optimization.assets import *
 from portfolio_optimization.population import *
 from portfolio_optimization.portfolio import *
 
-__all__ = ['pre_selection',
+__all__ = ['remove_highly_correlated_assets',
+           'pre_selection',
            'load_train_test_assets',
-           'load_assets_with_preselection']
+           'load_assets']
 
 logger = logging.getLogger('portfolio_optimization.utils.assets')
+
+
+def remove_highly_correlated_assets(assets: Assets, correlation_threshold: float = 0.99) -> list[str]:
+    """
+    When two assets have a correlation above correlation_threshold, we keep the asset with higher returns.
+    Highly correlated assets increase calculus overhead and can cause matrix calculus errors without adding
+    significant information.
+
+    :param assets: Assets class
+    :param correlation_threshold: correlation threshold
+    :return: asset names
+    """
+    if not 0 < correlation_threshold < 1:
+        raise ValueError(f'correlation_threshold has to be strictly between 0 and 1')
+
+    n = len(assets.corr)
+    to_remove = set()
+    for i in range(n - 1):
+        for j in range(i + 1, n):
+            if assets.corr[i, j] > correlation_threshold:
+                if i not in to_remove and j not in to_remove:
+                    if assets.mu[i] < assets.mu[j]:
+                        to_remove.add(i)
+                    else:
+                        to_remove.add(j)
+    logger.info(f'{len(to_remove)} assets removed with a correlation above {correlation_threshold}')
+    new_assets_names = list(np.delete(assets.names, list(to_remove)))
+    return new_assets_names
 
 
 def pre_selection(assets: Assets, k: int) -> list[str]:
@@ -82,14 +111,15 @@ def pre_selection(assets: Assets, k: int) -> list[str]:
     return new_assets_names
 
 
-def load_assets_with_preselection(start_date: dt.date,
-                                  end_date: Optional[dt.date] = None,
-                                  asset_missing_threshold: Optional[float] = 0.1,
-                                  dates_missing_threshold: Optional[float] = 0.1,
-                                  names_to_keep: Optional[list[str]] = None,
-                                  random_selection: Optional[int] = None,
-                                  pre_selection_number: Optional[int] = None,
-                                  name: Optional[str] = 'assets') -> Assets:
+def load_assets(start_date: dt.date,
+                end_date: Optional[dt.date] = None,
+                asset_missing_threshold: Optional[float] = 0.1,
+                dates_missing_threshold: Optional[float] = 0.1,
+                names_to_keep: Optional[list[str]] = None,
+                random_selection: Optional[int] = None,
+                correlation_threshold: Optional[float] = 0.99,
+                pre_selection_number: Optional[int] = None,
+                name: Optional[str] = 'assets') -> Assets:
     """
     Load Assets form multiple periods
     :param start_date: starting date
@@ -98,6 +128,8 @@ def load_assets_with_preselection(start_date: dt.date,
     :param dates_missing_threshold: remove Assets with more than dates_missing_threshold percent dates missing
     :param names_to_keep: asset names to keep in the final DataFrame
     :param random_selection: number of assets to randomly keep in the final DataFrame
+    :param correlation_threshold: when two assets have a correlation above correlation_threshold,
+            we keep the asset with higher returns.
     :param pre_selection_number: number of assets to pre-select using the Assets Preselection Process
     :param name: name of the Assets class
 
@@ -110,13 +142,23 @@ def load_assets_with_preselection(start_date: dt.date,
                     random_selection=random_selection,
                     name=name)
 
-    if pre_selection_number is not None:
-        assets_pre_selected = pre_selection(assets=assets, k=pre_selection_number)
+    if correlation_threshold is not None:
+        new_assets_names = remove_highly_correlated_assets(assets=assets,
+                                                           correlation_threshold=correlation_threshold)
         assets = Assets(start_date=start_date,
                         end_date=end_date,
                         asset_missing_threshold=asset_missing_threshold,
                         dates_missing_threshold=dates_missing_threshold,
-                        names_to_keep=assets_pre_selected,
+                        names_to_keep=new_assets_names,
+                        name=name)
+
+    if pre_selection_number is not None:
+        new_assets_names = pre_selection(assets=assets, k=pre_selection_number)
+        assets = Assets(start_date=start_date,
+                        end_date=end_date,
+                        asset_missing_threshold=asset_missing_threshold,
+                        dates_missing_threshold=dates_missing_threshold,
+                        names_to_keep=new_assets_names,
                         name=name)
 
     return assets
@@ -128,6 +170,7 @@ def load_train_test_assets(train_period: (dt.date, dt.date),
                            dates_missing_threshold: Optional[float] = 0.1,
                            names_to_keep: Optional[list[str]] = None,
                            random_selection: Optional[int] = None,
+                           correlation_threshold: Optional[float] = 0.99,
                            pre_selection_number: Optional[int] = None) -> (Assets, Assets):
     """
     Load Assets form multiple periods
@@ -137,6 +180,8 @@ def load_train_test_assets(train_period: (dt.date, dt.date),
     :param dates_missing_threshold: remove Assets with more than dates_missing_threshold percent dates missing
     :param names_to_keep: asset names to keep in the final DataFrame
     :param random_selection: number of assets to randomly keep in the final DataFrame
+    :param correlation_threshold: when two assets have a correlation above correlation_threshold,
+            we keep the asset with higher returns.
     :param pre_selection_number: number of assets to pre-select using the Assets Preselection Process
     :return a tuple of train Assets and test Assets
     """
@@ -159,13 +204,23 @@ def load_train_test_assets(train_period: (dt.date, dt.date),
                           random_selection=random_selection,
                           name=train_name)
 
-    if pre_selection_number is not None:
-        assets_pre_selected = pre_selection(assets=train_assets, k=pre_selection_number)
+    if correlation_threshold is not None:
+        new_assets_names = remove_highly_correlated_assets(assets=train_assets,
+                                                           correlation_threshold=correlation_threshold)
         train_assets = Assets(start_date=train_start,
                               end_date=train_end,
                               asset_missing_threshold=asset_missing_threshold,
                               dates_missing_threshold=dates_missing_threshold,
-                              names_to_keep=assets_pre_selected,
+                              names_to_keep=new_assets_names,
+                              name=train_name)
+
+    if pre_selection_number is not None:
+        new_assets_names = pre_selection(assets=train_assets, k=pre_selection_number)
+        train_assets = Assets(start_date=train_start,
+                              end_date=train_end,
+                              asset_missing_threshold=asset_missing_threshold,
+                              dates_missing_threshold=dates_missing_threshold,
+                              names_to_keep=new_assets_names,
                               name=train_name)
 
     test_assets = Assets(start_date=test_start,

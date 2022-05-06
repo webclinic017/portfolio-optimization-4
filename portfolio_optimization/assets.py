@@ -52,6 +52,7 @@ class Assets:
         self._cum_returns = None
         self._mu = None
         self._cov = None
+        self._corr = None
 
     def _preprocessing(self):
         """
@@ -113,6 +114,12 @@ class Assets:
         if self._cov is None:
             self._cov = np.cov(self.returns)
         return self._cov
+
+    @property
+    def corr(self):
+        if self._corr is None:
+            self._corr = np.corrcoef(self.returns)
+        return self._corr
 
     @property
     def asset_nb(self):

@@ -12,10 +12,10 @@ def mean_variance_vs_mean_semivariance():
     """
     Compare the Efficient Frontier of the mean-variance against the mean-semivariance optimization
     """
-    assets = load_assets_with_preselection(start_date=dt.date(2018, 1, 1),
-                                           end_date=dt.date(2019, 1, 1),
-                                           random_selection=200,
-                                           pre_selection_number=100)
+    assets = load_assets(start_date=dt.date(2018, 1, 1),
+                         end_date=dt.date(2019, 1, 1),
+                         random_selection=200,
+                         pre_selection_number=100)
 
     population = Population()
 

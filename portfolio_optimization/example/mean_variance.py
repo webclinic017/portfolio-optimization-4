@@ -14,10 +14,10 @@ def random_vs_mean_variance():
     Compare the efficient frontier of the mean-variance optimization against portfolios of single asset and
     random portfolios
     """
-    assets = load_assets_with_preselection(start_date=dt.date(2018, 1, 1),
-                                           end_date=dt.date(2019, 1, 1),
-                                           random_selection=200,
-                                           pre_selection_number=100)
+    assets = load_assets(start_date=dt.date(2018, 1, 1),
+                         end_date=dt.date(2019, 1, 1),
+                         random_selection=200,
+                         pre_selection_number=100)
 
     population = Population()
     # Portfolios of one asset
