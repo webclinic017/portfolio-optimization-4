@@ -247,3 +247,8 @@ class Portfolio:
 
     def __repr__(self):
         return str(self)
+
+
+class MultiPeriodPortfolio:
+    def __init__(self, portfolios: list[Portfolio]):
+        self.portfolios = portfolios

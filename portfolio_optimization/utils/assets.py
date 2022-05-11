@@ -26,10 +26,10 @@ def remove_highly_correlated_assets(assets: Assets, correlation_threshold: float
     :param correlation_threshold: correlation threshold
     :return: asset names
     """
-    if not 0 < correlation_threshold < 1:
-        raise ValueError(f'correlation_threshold has to be strictly between 0 and 1')
+    if not -1 <= correlation_threshold <= 1:
+        raise ValueError(f'correlation_threshold has to be between -1 and 1')
 
-    n = len(assets.corr)
+    n = assets.asset_nb
     to_remove = set()
     for i in range(n - 1):
         for j in range(i + 1, n):
@@ -44,7 +44,9 @@ def remove_highly_correlated_assets(assets: Assets, correlation_threshold: float
     return new_assets_names
 
 
-def pre_selection(assets: Assets, k: int) -> list[str]:
+def pre_selection(assets: Assets,
+                  k: int,
+                  correlation_threshold: float = 0) -> list[str]:
     """
     Assets Preselection Process 2 from "Large-Scale Portfolio Optimization Using Multiobjective
     Evolutionary Algorithms and Preselection Methods" by B.Y. Qu and Q.Zhou - 2017.
@@ -70,7 +72,9 @@ def pre_selection(assets: Assets, k: int) -> list[str]:
 
     :param assets: Assets class from which we will perform the pre-selection process
     :param k: minimum number of assets to pre-select. If k is reached before the end of the current front, we will
-    the remaining assets of the current front. We do that because all assets in the same front have same rank.
+           the remaining assets of the current front. We do that because all assets in the same front have same rank.
+    :param correlation_threshold: asset pair with a correlation below correlation_threshold are included in the
+           nondomination sorting, default is 0
     """
 
     if k >= assets.asset_nb:
@@ -87,17 +91,18 @@ def pre_selection(assets: Assets, k: int) -> list[str]:
         population.add(portfolio)
 
     # Add negatively correlated pairs with minimum variance
-    for i, j in itertools.combinations(range(assets.asset_nb), 2):
-        cov = assets.cov[i, j]
-        if cov > 0:
-            continue
-        var1 = assets.cov[i, i]
-        var2 = assets.cov[j, j]
-        weights = np.zeros(assets.asset_nb)
-        weights[i] = (var2 - cov) / (var1 + var2 - 2 * cov)
-        weights[j] = 1 - weights[i]
-        portfolio = Portfolio(weights=weights, fitness_type=FitnessType.MEAN_STD, assets=assets)
-        population.add(portfolio)
+    n = assets.asset_nb
+    for i in range(n - 1):
+        for j in range(i + 1, n):
+            if assets.corr[i, j] < correlation_threshold:
+                cov = assets.cov[i, j]
+                var1 = assets.cov[i, i]
+                var2 = assets.cov[j, j]
+                weights = np.zeros(assets.asset_nb)
+                weights[i] = (var2 - cov) / (var1 + var2 - 2 * cov)
+                weights[j] = 1 - weights[i]
+                portfolio = Portfolio(weights=weights, fitness_type=FitnessType.MEAN_STD, assets=assets)
+                population.add(portfolio)
 
     new_assets_idx = set()
     i = 0
@@ -113,12 +118,13 @@ def pre_selection(assets: Assets, k: int) -> list[str]:
 
 def load_assets(start_date: dt.date,
                 end_date: Optional[dt.date] = None,
-                asset_missing_threshold: Optional[float] = 0.1,
-                dates_missing_threshold: Optional[float] = 0.1,
+                asset_missing_threshold: float = 0.1,
+                dates_missing_threshold: float = 0.1,
                 names_to_keep: Optional[list[str]] = None,
                 random_selection: Optional[int] = None,
-                correlation_threshold: Optional[float] = 0.99,
+                correlation_threshold_removal: float = 0.99,
                 pre_selection_number: Optional[int] = None,
+                correlation_threshold_pre_selection: float = 0,
                 name: Optional[str] = 'assets') -> Assets:
     """
     Load Assets form multiple periods
@@ -128,11 +134,12 @@ def load_assets(start_date: dt.date,
     :param dates_missing_threshold: remove Assets with more than dates_missing_threshold percent dates missing
     :param names_to_keep: asset names to keep in the final DataFrame
     :param random_selection: number of assets to randomly keep in the final DataFrame
-    :param correlation_threshold: when two assets have a correlation above correlation_threshold,
+    :param correlation_threshold_removal: when two assets have a correlation above this threshold,
             we keep the asset with higher returns.
     :param pre_selection_number: number of assets to pre-select using the Assets Preselection Process
+    :param correlation_threshold_pre_selection: asset pair with a correlation below this threshold are included in the
+           nondomination sorting of the pre selection method.
     :param name: name of the Assets class
-
     """
     assets = Assets(start_date=start_date,
                     end_date=end_date,
@@ -142,9 +149,9 @@ def load_assets(start_date: dt.date,
                     random_selection=random_selection,
                     name=name)
 
-    if correlation_threshold is not None:
+    if correlation_threshold_removal is not None:
         new_assets_names = remove_highly_correlated_assets(assets=assets,
-                                                           correlation_threshold=correlation_threshold)
+                                                           correlation_threshold=correlation_threshold_removal)
         assets = Assets(start_date=start_date,
                         end_date=end_date,
                         asset_missing_threshold=asset_missing_threshold,
@@ -153,7 +160,9 @@ def load_assets(start_date: dt.date,
                         name=name)
 
     if pre_selection_number is not None:
-        new_assets_names = pre_selection(assets=assets, k=pre_selection_number)
+        new_assets_names = pre_selection(assets=assets,
+                                         k=pre_selection_number,
+                                         correlation_threshold=correlation_threshold_pre_selection)
         assets = Assets(start_date=start_date,
                         end_date=end_date,
                         asset_missing_threshold=asset_missing_threshold,
@@ -166,12 +175,13 @@ def load_assets(start_date: dt.date,
 
 def load_train_test_assets(train_period: (dt.date, dt.date),
                            test_period: (dt.date, dt.date),
-                           asset_missing_threshold: Optional[float] = 0.1,
-                           dates_missing_threshold: Optional[float] = 0.1,
+                           asset_missing_threshold: float = 0.1,
+                           dates_missing_threshold: float = 0.1,
                            names_to_keep: Optional[list[str]] = None,
                            random_selection: Optional[int] = None,
-                           correlation_threshold: Optional[float] = 0.99,
-                           pre_selection_number: Optional[int] = None) -> (Assets, Assets):
+                           correlation_threshold_removal: float = 0.99,
+                           pre_selection_number: Optional[int] = None,
+                           correlation_threshold_pre_selection: float = 0) -> (Assets, Assets):
     """
     Load Assets form multiple periods
     :param train_period
@@ -180,9 +190,11 @@ def load_train_test_assets(train_period: (dt.date, dt.date),
     :param dates_missing_threshold: remove Assets with more than dates_missing_threshold percent dates missing
     :param names_to_keep: asset names to keep in the final DataFrame
     :param random_selection: number of assets to randomly keep in the final DataFrame
-    :param correlation_threshold: when two assets have a correlation above correlation_threshold,
+    :param correlation_threshold_removal: when two assets have a correlation above this threshold,
             we keep the asset with higher returns.
     :param pre_selection_number: number of assets to pre-select using the Assets Preselection Process
+    :param correlation_threshold_pre_selection: asset pair with a correlation below this threshold are included in the
+           nondomination sorting of the pre selection method.
     :return a tuple of train Assets and test Assets
     """
     train_start, train_end = train_period
@@ -204,9 +216,9 @@ def load_train_test_assets(train_period: (dt.date, dt.date),
                           random_selection=random_selection,
                           name=train_name)
 
-    if correlation_threshold is not None:
+    if correlation_threshold_removal is not None:
         new_assets_names = remove_highly_correlated_assets(assets=train_assets,
-                                                           correlation_threshold=correlation_threshold)
+                                                           correlation_threshold=correlation_threshold_removal)
         train_assets = Assets(start_date=train_start,
                               end_date=train_end,
                               asset_missing_threshold=asset_missing_threshold,
@@ -215,7 +227,9 @@ def load_train_test_assets(train_period: (dt.date, dt.date),
                               name=train_name)
 
     if pre_selection_number is not None:
-        new_assets_names = pre_selection(assets=train_assets, k=pre_selection_number)
+        new_assets_names = pre_selection(assets=train_assets,
+                                         k=pre_selection_number,
+                                         correlation_threshold=correlation_threshold_pre_selection)
         train_assets = Assets(start_date=train_start,
                               end_date=train_end,
                               asset_missing_threshold=asset_missing_threshold,

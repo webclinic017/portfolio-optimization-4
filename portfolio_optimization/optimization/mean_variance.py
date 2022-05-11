@@ -3,9 +3,11 @@ from typing import Union, Optional
 import numpy as np
 import cvxpy as cp
 from cvxpy.error import SolverError
+from scipy.sparse.linalg._eigen.arpack.arpack import ArpackNoConvergence
 
 from portfolio_optimization.utils.tools import *
 from portfolio_optimization.meta import *
+from portfolio_optimization.exception import *
 
 __all__ = ['mean_variance']
 
@@ -17,7 +19,8 @@ def mean_variance(expected_returns: np.ndarray,
                   weight_bounds: Union[tuple[np.ndarray, np.ndarray],
                                        tuple[Optional[float], Optional[float]]],
                   investment_type: InvestmentType,
-                  population_size: int) -> np.array:
+                  population_size: Optional[int] = None,
+                  target_variance: Optional[float] = None) -> np.array:
     """
     Optimization along the mean-variance frontier (Markowitz optimization).
 
@@ -35,18 +38,24 @@ def mean_variance(expected_returns: np.ndarray,
     :type investment_type: InvestmentType
 
     :param population_size: number of pareto optimal portfolio weights to compute along the efficient frontier
-    :type population_size: int
+    :type population_size: int, optional
+
+    :param target_variance: minimize return for the targeted variance.
+    :type target_variance: float, optional
 
     :return the portfolio weights that are in the efficient frontier
 
     """
+    if population_size is None and target_variance is None:
+        raise ValueError(f'You have to provide either population_size or target_variance')
+
     assets_number = len(expected_returns)
 
     # Variables
     w = cp.Variable(assets_number)
 
     # Parameters
-    target_variance = cp.Parameter(nonneg=True)
+    target_variance_param = cp.Parameter(nonneg=True)
 
     # Objectives
     portfolio_return = expected_returns.T @ w
@@ -56,7 +65,7 @@ def mean_variance(expected_returns: np.ndarray,
     portfolio_variance = cp.quad_form(w, cov)
     lower_bounds, upper_bounds = get_lower_and_upper_bounds(weight_bounds=weight_bounds,
                                                             assets_number=assets_number)
-    constraints = [portfolio_variance <= target_variance,
+    constraints = [portfolio_variance <= target_variance_param,
                    w >= lower_bounds,
                    w <= upper_bounds]
     investment_target = get_investment_target(investment_type=investment_type)
@@ -66,17 +75,25 @@ def mean_variance(expected_returns: np.ndarray,
     # Problem
     problem = cp.Problem(objective, constraints)
 
-    # Solve for different volatilities
-    weights = []
-    for annualized_volatility in np.logspace(-2.5, -0.5, num=population_size):
-        target_variance.value = annualized_volatility ** 2 / 255
-        try:
-            problem.solve(solver='ECOS')
-            if w.value is None:
-                logger.warning(f'None return for annualized_volatility {annualized_volatility}')
-            else:
-                weights.append(w.value)
-        except SolverError as e:
-            logger.warning(f'SolverError for annualized_volatility {annualized_volatility}: {e}')
+    # Solve for a variance target
+    if target_variance is not None:
+        variances = [target_variance]
+    else:
+        annualized_volatilities = np.logspace(-2.5, -0.5, num=population_size)
+        variances = annualized_volatilities ** 2 / 255
 
+    weights = []
+    try:
+        for variance in variances:
+            target_variance_param.value = variance
+            try:
+                problem.solve(solver='ECOS')
+                if w.value is None:
+                    logger.warning(f'None return for variance {variance}')
+                else:
+                    weights.append(w.value)
+            except SolverError as e:
+                logger.warning(f'SolverError for variance {variance}: {e}')
+    except ArpackNoConvergence:
+        raise OptimizationError
     return np.array(weights)
