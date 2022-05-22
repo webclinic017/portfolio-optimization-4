@@ -11,39 +11,31 @@ from portfolio_optimization.utils.metrics import *
 __all__ = ['Portfolio']
 
 
-class Portfolio:
+class BasePortfolio:
 
     def __init__(self,
-                 weights: np.ndarray,
-                 assets: Assets,
-                 fitness_type: FitnessType = FitnessType.MEAN_STD,
+                 returns: np.array,
                  pid: str = None,
                  tag: str = 'ptf',
-                 name: str = ''):
+                 name: str = '',
+                 fitness_type: FitnessType = FitnessType.MEAN_STD):
 
-        # Sanity checks
-        if assets.asset_nb != len(weights):
-            raise ValueError(f'weights should be of size {assets.asset_nb}')
-        if not isinstance(weights, np.ndarray):
-            raise TypeError(f'weights should be of type numpy.ndarray')
-        if abs(weights.sum() - 1) > 1e-5:
-            raise TypeError(f'weights should sum to 1')
+        self.returns = returns
+        self.fitness_type = fitness_type
 
+        # Ids
         if pid is None:
             self.pid = str(uuid.uuid4())
         else:
             self.pid = pid
-
-        self.fitness_type = fitness_type
-        self.weights = weights
         self.tag = tag
         self.name = name
-        # Pointer to Assets
-        self.assets = assets
-        # Metrics
-        self._returns = None
+
+        # Prices
         self._prices_compounded = None
         self._prices_uncompounded = None
+
+        # Metrics
         self._mean = None
         self._std = None
         self._downside_std = None
@@ -51,12 +43,6 @@ class Portfolio:
         self._cdar_95 = None
         self._cvar_95 = None
         self._fitness = None
-
-    @property
-    def returns(self):
-        if self._returns is None:
-            self._returns = self.weights @ self.assets.returns
-        return self._returns
 
     @property
     def prices_compounded(self):
@@ -75,7 +61,7 @@ class Portfolio:
     @property
     def mean(self):
         if self._mean is None:
-            self._mean = self.weights @ self.assets.mu
+            self._mean = self.returns.mean()
         return self._mean
 
     @property
@@ -85,7 +71,7 @@ class Portfolio:
     @property
     def std(self):
         if self._std is None:
-            self._std = np.sqrt(self.weights @ self.assets.cov @ self.weights)
+            self._std = self.returns.std(ddof=1)
         return self._std
 
     @property
@@ -129,15 +115,6 @@ class Portfolio:
     @property
     def sharpe_ratio(self):
         return self.annualized_mean / self.annualized_std
-
-    @property
-    def sric(self):
-        """
-        Sharpe Ratio Information Criterion (SRIC) is an unbiased estimator of the sharpe ratio adjusting for both
-        sources of bias which are noise fit and estimation error.
-        Ref: Noise Fit, Estimation Error and a Sharpe Information Criterion. Dirk Paulsen (2019)
-        """
-        return self.sharpe_ratio - self.assets.asset_nb / (self.assets.date_nb * self.sharpe_ratio)
 
     @property
     def sortino_ratio(self):
@@ -192,6 +169,61 @@ class Portfolio:
         self._fitness = None
         self.fitness_type = fitness_type
 
+    def metrics(self):
+        idx = [e.value for e in Metrics]
+        res = [self.__getattribute__(attr) for attr in idx]
+        return pd.DataFrame(res, index=idx, columns=['metrics'])
+
+
+class Portfolio(BasePortfolio):
+
+    def __init__(self,
+                 weights: np.ndarray,
+                 assets: Assets,
+                 pid: str = None,
+                 tag: str = 'ptf',
+                 name: str = '',
+                 fitness_type: FitnessType = FitnessType.MEAN_STD):
+
+        # Sanity checks
+        if assets.asset_nb != len(weights):
+            raise ValueError(f'weights should be of size {assets.asset_nb}')
+        if not isinstance(weights, np.ndarray):
+            raise TypeError(f'weights should be of type numpy.ndarray')
+        if abs(weights.sum() - 1) > 1e-5:
+            raise TypeError(f'weights should sum to 1')
+
+        self.assets = assets
+        self.weights = weights
+        returns = self.weights @ self.assets.returns
+
+        super().__init__(returns=returns,
+                         pid=pid,
+                         tag=tag,
+                         name=name,
+                         fitness_type=fitness_type)
+
+    @property
+    def mean(self):
+        if self._mean is None:
+            self._mean = self.weights @ self.assets.mu
+        return self._mean
+
+    @property
+    def std(self):
+        if self._std is None:
+            self._std = np.sqrt(self.weights @ self.assets.cov @ self.weights)
+        return self._std
+
+    @property
+    def sric(self):
+        """
+        Sharpe Ratio Information Criterion (SRIC) is an unbiased estimator of the sharpe ratio adjusting for both
+        sources of bias which are noise fit and estimation error.
+        Ref: Noise Fit, Estimation Error and a Sharpe Information Criterion. Dirk Paulsen (2019)
+        """
+        return self.sharpe_ratio - self.assets.asset_nb / (self.assets.date_nb * self.sharpe_ratio)
+
     @property
     def assets_index(self):
         return np.flatnonzero(abs(self.weights) > ZERO_THRESHOLD)
@@ -212,26 +244,21 @@ class Portfolio:
     def length(self):
         return np.count_nonzero(abs(self.weights) > ZERO_THRESHOLD)
 
-    def metrics(self):
-        idx = [e.value for e in Metrics]
-        res = [self.__getattribute__(attr) for attr in idx]
-        return pd.DataFrame(res, index=idx, columns=['metrics'])
-
     def __str__(self):
-        return f'Portfolio <{self.name} - {self.tag} - {self.pid} - {len(self.assets_names)} assets>'
+        return f'Portfolio < {self.pid} - {self.name} - {self.tag} - {len(self.assets_names)} assets>'
 
     def __repr__(self):
         return str(self)
 
 
-class MultiPeriodPortfolio:
-    pass
+class MultiPeriodPortfolio(BasePortfolio):
 
     def __init__(self,
                  portfolios: list[Portfolio],
                  pid: str = None,
                  tag: str = 'ptf',
-                 name: str = ''):
+                 name: str = '',
+                 fitness_type: FitnessType = FitnessType.MEAN_STD):
         # Ensure that Portfolios dates do not overlap
         self.portfolios = [portfolios[0]]
         for portfolio in portfolios[1:]:
@@ -241,3 +268,36 @@ class MultiPeriodPortfolio:
                 raise ValueError(f'Portfolios dates should not overlap: {prev_last_date} -> {start_date} ')
             self.portfolios.append(portfolio)
 
+        returns = np.concatenate([portfolio.returns for portfolio in self.portfolios], axis=0)
+
+        super().__init__(returns=returns,
+                         pid=pid,
+                         tag=tag,
+                         name=name,
+                         fitness_type=fitness_type)
+
+    @property
+    def assets_index(self):
+        return
+        # TO DO
+
+    @property
+    def assets_names(self):
+        return
+        # TO DO
+
+    @property
+    def composition(self):
+        return
+        # TO DO
+
+    @property
+    def length(self):
+        return
+        # TO DO
+
+    def __str__(self):
+        return f'MultiPeriodPortfolio <{self.pid} - {self.name} - {self.tag}>'
+
+    def __repr__(self):
+        return str(self)
