@@ -32,7 +32,7 @@ def test_load_assets():
     assets = load_assets(start_date=dt.date(2018, 1, 1),
                          end_date=dt.date(2019, 1, 1),
                          random_selection=200,
-                         correlation_threshold=correlation_threshold,
+                         correlation_threshold_removal=correlation_threshold,
                          pre_selection_number=100)
     for i in range(assets.asset_nb):
         for j in range(assets.asset_nb):

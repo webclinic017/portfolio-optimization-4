@@ -1,6 +1,7 @@
 import datetime as dt
 
 from portfolio_optimization.meta import *
+from portfolio_optimization.meta import Metrics, FitnessType
 from portfolio_optimization.portfolio import *
 from portfolio_optimization.population import *
 from portfolio_optimization.optimization.mean_variance import *

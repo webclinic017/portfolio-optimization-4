@@ -2,6 +2,7 @@ import datetime as dt
 import numpy as np
 
 from portfolio_optimization.assets import *
+from portfolio_optimization.utils.assets import *
 
 
 def test_assets():

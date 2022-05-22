@@ -8,8 +8,22 @@ from portfolio_optimization.assets import *
 from portfolio_optimization.portfolio import *
 
 
-def test_portfolio_metrics():
-    assets = Assets(start_date=dt.date(2019, 1, 1))
+def test_multi_period_portfolio():
+    N = 10
+    periods = [(dt.date(2019, 1, 1), dt.date(2019, 3, 1)),
+               (dt.date(2019, 3, 15), dt.date(2019, 5, 1)),
+               (dt.date(2019, 5, 1), dt.date(2019, 8, 1))]
+
+    portfolios=[]
+    for i, period in enumerate(periods):
+        assets = Assets(start_date=period[0], end_date=period[1])
+        weights = rand_weights(n=assets.asset_nb, zeros=assets.asset_nb - N)
+        portfolio = Portfolio(weights=weights, assets=assets, pid=str(i))
+        portfolios.append(portfolio)
+
+    portfolios
+
+
     N = 10
     weights = rand_weights(n=assets.asset_nb, zeros=assets.asset_nb - N)
     portfolio = Portfolio(weights=weights, fitness_type=FitnessType.MEAN_STD, assets=assets)

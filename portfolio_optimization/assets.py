@@ -122,6 +122,10 @@ class Assets:
         return self._corr
 
     @property
+    def dates(self):
+        return [date.date() for date in self.prices.index]
+
+    @property
     def asset_nb(self):
         return self.returns.shape[0]
 

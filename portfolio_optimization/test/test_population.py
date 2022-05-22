@@ -1,5 +1,6 @@
 import datetime as dt
 
+from portfolio_optimization.meta import *
 from portfolio_optimization.utils.tools import *
 from portfolio_optimization.assets import *
 from portfolio_optimization.portfolio import *

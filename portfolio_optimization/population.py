@@ -2,6 +2,7 @@ from typing import Union, Optional
 import pandas as pd
 import plotly.express as px
 
+from portfolio_optimization.meta import Metrics
 from portfolio_optimization.portfolio import *
 from portfolio_optimization.utils.sorting import *
 

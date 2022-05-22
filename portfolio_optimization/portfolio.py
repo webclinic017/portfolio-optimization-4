@@ -1,47 +1,22 @@
 import numpy as np
-from enum import Enum
 import uuid
 import pandas as pd
 
 from portfolio_optimization.meta import *
 from portfolio_optimization.assets import *
+from portfolio_optimization.meta import Metrics, FitnessType
 from portfolio_optimization.utils.tools import *
 from portfolio_optimization.utils.metrics import *
 
-__all__ = ['FitnessType',
-           'Metrics',
-           'Portfolio']
-
-
-class Metrics(Enum):
-    MEAN = 'mean'
-    STD = 'std'
-    DOWNSIDE_STD = 'downside_std'
-    ANNUALIZED_MEAN = 'annualized_mean'
-    ANNUALIZED_STD = 'annualized_std'
-    ANNUALIZED_DOWNSIDE_STD = 'annualized_downside_std'
-    MAX_DRAWDOWN = 'max_drawdown'
-    CDAR_95 = 'cdar_95'
-    CVAR_95 = 'cvar_95'
-    SHARPE_RATIO = 'sharpe_ratio'
-    SORTINO_RATIO = 'sortino_ratio'
-    CALMAR_RATIO = 'calmar_ratio'
-    CDAR_95_RATIO = 'cdar_95_ratio'
-    CVAR_95_RATIO = 'cvar_95_ratio'
-
-
-class FitnessType(Enum):
-    MEAN_STD = (Metrics.MEAN, Metrics.STD)
-    MEAN_DOWNSIDE_STD = (Metrics.MEAN, Metrics.DOWNSIDE_STD)
-    MEAN_DOWNSIDE_STD_MAX_DRAWDOWN = (Metrics.MEAN, Metrics.DOWNSIDE_STD, Metrics.MAX_DRAWDOWN)
+__all__ = ['Portfolio']
 
 
 class Portfolio:
 
     def __init__(self,
                  weights: np.ndarray,
-                 fitness_type: FitnessType,
                  assets: Assets,
+                 fitness_type: FitnessType = FitnessType.MEAN_STD,
                  pid: str = None,
                  tag: str = 'ptf',
                  name: str = ''):
@@ -250,5 +225,19 @@ class Portfolio:
 
 
 class MultiPeriodPortfolio:
-    def __init__(self, portfolios: list[Portfolio]):
-        self.portfolios = portfolios
+    pass
+
+    def __init__(self,
+                 portfolios: list[Portfolio],
+                 pid: str = None,
+                 tag: str = 'ptf',
+                 name: str = ''):
+        # Ensure that Portfolios dates do not overlap
+        self.portfolios = [portfolios[0]]
+        for portfolio in portfolios[1:]:
+            start_date = portfolio.assets.dates[0]
+            prev_last_date = self.portfolios[-1].assets.dates[-1]
+            if start_date < prev_last_date:
+                raise ValueError(f'Portfolios dates should not overlap: {prev_last_date} -> {start_date} ')
+            self.portfolios.append(portfolio)
+

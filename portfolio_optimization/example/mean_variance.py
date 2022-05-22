@@ -4,6 +4,7 @@ import plotly.express as px
 import pandas as pd
 
 from portfolio_optimization.meta import *
+from portfolio_optimization.meta import Metrics, FitnessType
 from portfolio_optimization.portfolio import *
 from portfolio_optimization.population import *
 from portfolio_optimization.utils.tools import *

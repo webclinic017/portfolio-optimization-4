@@ -1,10 +1,10 @@
-import itertools
 import logging
 from typing import Optional
 import datetime as dt
 import numpy as np
 
 from portfolio_optimization.assets import *
+from portfolio_optimization.meta import FitnessType
 from portfolio_optimization.population import *
 from portfolio_optimization.portfolio import *
 
