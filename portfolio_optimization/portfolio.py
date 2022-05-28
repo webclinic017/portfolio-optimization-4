@@ -8,7 +8,8 @@ from portfolio_optimization.meta import Metrics, FitnessType
 from portfolio_optimization.utils.tools import *
 from portfolio_optimization.utils.metrics import *
 
-__all__ = ['Portfolio']
+__all__ = ['Portfolio',
+           'MultiPeriodPortfolio']
 
 
 class BasePortfolio:

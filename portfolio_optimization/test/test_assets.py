@@ -7,10 +7,10 @@ from portfolio_optimization.utils.assets import *
 
 def test_assets_class():
     assets = Assets(start_date=dt.date(2019, 1, 1))
-    names = list(assets.prices.columns)
+    names = np.array(assets.prices.columns)
     assert assets.asset_nb == len(names)
     assert assets.date_nb == len(assets.prices) - 1
-    assert assets.names == names
+    assert  np.array_equal(assets.names, names)
     ret = []
     for i in range(1, len(assets.prices)):
         ret.append((assets.prices.iloc[i] / assets.prices.iloc[i - 1] - 1).to_numpy())
