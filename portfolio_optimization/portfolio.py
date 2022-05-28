@@ -17,7 +17,7 @@ class BasePortfolio:
     def __init__(self,
                  returns: np.array,
                  pid: str = None,
-                 tag: str = 'ptf',
+                 tag: str = 'portfolio',
                  name: str = '',
                  fitness_type: FitnessType = FitnessType.MEAN_STD):
 
@@ -257,7 +257,7 @@ class MultiPeriodPortfolio(BasePortfolio):
     def __init__(self,
                  portfolios: list[Portfolio],
                  pid: str = None,
-                 tag: str = 'ptf',
+                 tag: str = 'multi-period-portfolio',
                  name: str = '',
                  fitness_type: FitnessType = FitnessType.MEAN_STD):
         # Ensure that Portfolios dates do not overlap
@@ -279,23 +279,23 @@ class MultiPeriodPortfolio(BasePortfolio):
 
     @property
     def assets_index(self):
-        return
-        # TO DO
+        return np.array([portfolio.assets_index for portfolio in self.portfolios])
 
     @property
     def assets_names(self):
-        return
-        # TO DO
+        return np.array([portfolio.assets_names for portfolio in self.portfolios])
 
     @property
     def composition(self):
-        return
-        # TO DO
+        df = pd.concat([portfolio.composition for portfolio in self.portfolios], axis=1)
+        df.fillna(0, inplace=True)
+        df.columns = [f'weight_{portfolio.assets.start_date}_{portfolio.assets.end_date}'
+                      for portfolio in self.portfolios]
+        return df
 
     @property
     def length(self):
-        return
-        # TO DO
+        return [portfolio.length for portfolio in self.portfolios]
 
     def __str__(self):
         return f'MultiPeriodPortfolio <{self.pid} - {self.name} - {self.tag}>'

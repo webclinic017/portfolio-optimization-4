@@ -19,10 +19,10 @@ def test_portfolio_metrics():
     assert np.all((returns - portfolio.returns) < 1e-10)
     assert abs(returns.mean() - portfolio.mean) < 1e-10
     assert abs(returns.std(ddof=1) - portfolio.std) < 1e-10
-    assert abs(np.sqrt(np.mean(np.minimum(0, returns) ** 2)) - portfolio.downside_std) < 1e-10
+    assert abs(np.sqrt(np.sum(np.minimum(0, returns - returns.mean()) ** 2) / (len(returns) - 1))
+               - portfolio.downside_std) < 1e-10
     assert abs(portfolio.annualized_mean / portfolio.annualized_std - portfolio.sharpe_ratio) < 1e-10
     assert abs(portfolio.annualized_mean / portfolio.annualized_downside_std - portfolio.sortino_ratio) < 1e-10
-    assert np.array_equal(prices_rebased(portfolio.returns), portfolio.prices_compounded)
     assert max_drawdown_slow(portfolio.prices_compounded) == portfolio.max_drawdown
     assert np.array_equal(portfolio.fitness, np.array([portfolio.mean, -portfolio.std]))
     portfolio.reset_fitness(fitness_type=FitnessType.MEAN_DOWNSIDE_STD)
@@ -37,7 +37,7 @@ def test_portfolio_metrics():
     assert np.array_equal(portfolio.assets_index, idx)
     names_1 = np.array(assets.prices.columns[idx])
     assert np.array_equal(portfolio.assets_names, names_1)
-    names_2 = portfolio.composition['name'].to_numpy()
+    names_2 = portfolio.composition.index.to_numpy()
     names_2.sort()
     names_1.sort()
     assert np.array_equal(names_1, names_2)

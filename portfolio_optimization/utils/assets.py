@@ -141,6 +141,7 @@ def load_assets(start_date: dt.date,
            nondomination sorting of the pre selection method.
     :param name: name of the Assets class
     """
+    logger.info(f'Loading Assets from {start_date} to {end_date}')
     assets = Assets(start_date=start_date,
                     end_date=end_date,
                     asset_missing_threshold=asset_missing_threshold,
@@ -152,6 +153,7 @@ def load_assets(start_date: dt.date,
     if correlation_threshold_removal is not None:
         new_assets_names = remove_highly_correlated_assets(assets=assets,
                                                            correlation_threshold=correlation_threshold_removal)
+        logger.info(f'Reloading Assets after removing highly correlated assets')
         assets = Assets(start_date=start_date,
                         end_date=end_date,
                         asset_missing_threshold=asset_missing_threshold,
@@ -163,6 +165,7 @@ def load_assets(start_date: dt.date,
         new_assets_names = pre_selection(assets=assets,
                                          k=pre_selection_number,
                                          correlation_threshold=correlation_threshold_pre_selection)
+        logger.info(f'Reloading Assets after removing assets discarded form the pre-selection process')
         assets = Assets(start_date=start_date,
                         end_date=end_date,
                         asset_missing_threshold=asset_missing_threshold,
@@ -207,7 +210,7 @@ def load_train_test_assets(train_period: (dt.date, dt.date),
 
     if train_start < test_start < train_end or train_start < test_end < train_end:
         logger.warning(f'Train and Test periods are overlapping')
-
+    logger.info(f'Loading Train Assets from {train_start} to {train_end}')
     train_assets = Assets(start_date=train_start,
                           end_date=train_end,
                           asset_missing_threshold=asset_missing_threshold,
@@ -219,6 +222,7 @@ def load_train_test_assets(train_period: (dt.date, dt.date),
     if correlation_threshold_removal is not None:
         new_assets_names = remove_highly_correlated_assets(assets=train_assets,
                                                            correlation_threshold=correlation_threshold_removal)
+        logger.info(f'Reloading Train Assets after removing highly correlated assets')
         train_assets = Assets(start_date=train_start,
                               end_date=train_end,
                               asset_missing_threshold=asset_missing_threshold,
@@ -230,13 +234,14 @@ def load_train_test_assets(train_period: (dt.date, dt.date),
         new_assets_names = pre_selection(assets=train_assets,
                                          k=pre_selection_number,
                                          correlation_threshold=correlation_threshold_pre_selection)
+        logger.info(f'Reloading Train Assets after removing assets discarded form the pre-selection process')
         train_assets = Assets(start_date=train_start,
                               end_date=train_end,
                               asset_missing_threshold=asset_missing_threshold,
                               dates_missing_threshold=dates_missing_threshold,
                               names_to_keep=new_assets_names,
                               name=train_name)
-
+    logger.info(f'Loading Test Assets')
     test_assets = Assets(start_date=test_start,
                          end_date=test_end,
                          asset_missing_threshold=asset_missing_threshold,
@@ -248,6 +253,7 @@ def load_train_test_assets(train_period: (dt.date, dt.date),
     if set(train_assets.names) != set(test_assets.names):
         names = [name for name in train_assets.names if name in test_assets.names]
         if set(train_assets.names) != set(names):
+            logger.info(f'Reloading Train Assets to match Test Assets universe')
             train_assets = Assets(start_date=train_start,
                                   end_date=train_end,
                                   asset_missing_threshold=asset_missing_threshold,
@@ -256,6 +262,7 @@ def load_train_test_assets(train_period: (dt.date, dt.date),
                                   name=train_name)
 
         if set(test_assets.names) != set(names):
+            logger.info(f'Reloading Test Assets to match Train Assets universe')
             test_assets = Assets(start_date=test_start,
                                  end_date=test_end,
                                  asset_missing_threshold=asset_missing_threshold,

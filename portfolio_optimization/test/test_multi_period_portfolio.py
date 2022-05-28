@@ -14,65 +14,40 @@ def test_multi_period_portfolio():
                (dt.date(2019, 3, 15), dt.date(2019, 5, 1)),
                (dt.date(2019, 5, 1), dt.date(2019, 8, 1))]
 
-    portfolios=[]
+    portfolios = []
+    returns = np.array([])
     for i, period in enumerate(periods):
         assets = Assets(start_date=period[0], end_date=period[1])
         weights = rand_weights(n=assets.asset_nb, zeros=assets.asset_nb - N)
         portfolio = Portfolio(weights=weights, assets=assets, pid=str(i))
         portfolios.append(portfolio)
+        returns = np.concatenate([returns, portfolio_returns(assets.returns, weights)])
 
-    portfolios
+    multi_period_portfolio = MultiPeriodPortfolio(portfolios=portfolios)
 
-
-    N = 10
-    weights = rand_weights(n=assets.asset_nb, zeros=assets.asset_nb - N)
-    portfolio = Portfolio(weights=weights, fitness_type=FitnessType.MEAN_STD, assets=assets)
-
-    returns = portfolio_returns(assets.returns, weights)
-
-    assert np.all((returns - portfolio.returns) < 1e-10)
-    assert abs(returns.mean() - portfolio.mean) < 1e-10
-    assert abs(returns.std(ddof=1) - portfolio.std) < 1e-10
-    assert abs(np.sqrt(np.mean(np.minimum(0, returns) ** 2)) - portfolio.downside_std) < 1e-10
-    assert abs(portfolio.annualized_mean / portfolio.annualized_std - portfolio.sharpe_ratio) < 1e-10
-    assert abs(portfolio.annualized_mean / portfolio.annualized_downside_std - portfolio.sortino_ratio) < 1e-10
-    assert np.array_equal(prices_rebased(portfolio.returns), portfolio.prices_compounded)
-    assert max_drawdown_slow(portfolio.prices_compounded) == portfolio.max_drawdown
-    assert np.array_equal(portfolio.fitness, np.array([portfolio.mean, -portfolio.std]))
-    portfolio.reset_fitness(fitness_type=FitnessType.MEAN_DOWNSIDE_STD)
-    assert np.array_equal(portfolio.fitness, np.array([portfolio.mean, -portfolio.downside_std]))
-    portfolio.reset_fitness(fitness_type=FitnessType.MEAN_DOWNSIDE_STD_MAX_DRAWDOWN)
-    assert np.array_equal(portfolio.fitness,
-                          np.array([portfolio.mean, -portfolio.downside_std, -portfolio.max_drawdown]))
-    assert len(portfolio.assets_index) == N
-    assert len(portfolio.assets_names) == N
-    assert len(portfolio.composition) == N
-    idx = np.nonzero(weights)[0]
-    assert np.array_equal(portfolio.assets_index, idx)
-    names_1 = np.array(assets.prices.columns[idx])
-    assert np.array_equal(portfolio.assets_names, names_1)
-    names_2 = portfolio.composition['name'].to_numpy()
-    names_2.sort()
-    names_1.sort()
-    assert np.array_equal(names_1, names_2)
-    portfolio.reset_metrics()
-    assert portfolio._mean is None
-    assert portfolio._std is None
-
-
-def test_portfolio_dominate():
-    assets = Assets(start_date=dt.date(2019, 1, 1))
-
-    for _ in range(1000):
-        weights_1 = rand_weights(n=assets.asset_nb)
-        weights_2 = rand_weights(n=assets.asset_nb)
-        portfolio_1 = Portfolio(weights=weights_1,
-                                fitness_type=FitnessType.MEAN_DOWNSIDE_STD_MAX_DRAWDOWN,
-                                assets=assets)
-        portfolio_2 = Portfolio(weights=weights_2,
-                                fitness_type=FitnessType.MEAN_DOWNSIDE_STD_MAX_DRAWDOWN,
-                                assets=assets)
-
-        # Doesn't dominate itself (same front)
-        assert portfolio_1.dominates(portfolio_1) is False
-        assert dominate_slow(portfolio_1.fitness, portfolio_2.fitness) == portfolio_1.dominates(portfolio_2)
+    assert np.all((returns - multi_period_portfolio.returns) < 1e-10)
+    assert abs(returns.mean() - multi_period_portfolio.mean) < 1e-10
+    assert abs(returns.std(ddof=1) - multi_period_portfolio.std) < 1e-10
+    assert abs(np.sqrt(np.sum(np.minimum(0, returns - returns.mean()) ** 2) / (len(returns) - 1))
+               - multi_period_portfolio.downside_std) < 1e-10
+    assert abs(multi_period_portfolio.annualized_mean / multi_period_portfolio.annualized_std
+               - multi_period_portfolio.sharpe_ratio) < 1e-10
+    assert abs(multi_period_portfolio.annualized_mean / multi_period_portfolio.annualized_downside_std
+               - multi_period_portfolio.sortino_ratio) < 1e-10
+    assert max_drawdown_slow(multi_period_portfolio.prices_compounded) == multi_period_portfolio.max_drawdown
+    assert np.array_equal(multi_period_portfolio.fitness,
+                          np.array([multi_period_portfolio.mean, -multi_period_portfolio.std]))
+    multi_period_portfolio.reset_fitness(fitness_type=FitnessType.MEAN_DOWNSIDE_STD)
+    assert np.array_equal(multi_period_portfolio.fitness,
+                          np.array([multi_period_portfolio.mean, -multi_period_portfolio.downside_std]))
+    multi_period_portfolio.reset_fitness(fitness_type=FitnessType.MEAN_DOWNSIDE_STD_MAX_DRAWDOWN)
+    assert np.array_equal(multi_period_portfolio.fitness,
+                          np.array([multi_period_portfolio.mean,
+                                    -multi_period_portfolio.downside_std,
+                                    -multi_period_portfolio.max_drawdown]))
+    assert len(multi_period_portfolio.assets_index) == len(periods)
+    assert len(multi_period_portfolio.assets_names) == len(periods)
+    assert len(multi_period_portfolio.composition) == len(periods)
+    multi_period_portfolio.reset_metrics()
+    assert multi_period_portfolio._mean is None
+    assert multi_period_portfolio._std is None
