@@ -1,5 +1,6 @@
 import logging
-from typing import Optional
+from pathlib import Path
+from typing import Optional, Union
 import datetime as dt
 import pandas as pd
 import numpy as np
@@ -15,7 +16,8 @@ logger = logging.getLogger('portfolio_optimization.assets')
 
 class Assets:
     def __init__(self,
-                 start_date: dt.date,
+                 prices_file: Union[Path, str],
+                 start_date: Optional[dt.date] = None,
                  end_date: Optional[dt.date] = None,
                  asset_missing_threshold: Optional[float] = 0.1,
                  dates_missing_threshold: Optional[float] = 0.1,
@@ -24,6 +26,7 @@ class Assets:
                  name: Optional[str] = 'assets'):
 
         """
+        :param prices_file: the path of the prices csv file
         :param start_date: starting date
         :param end_date: ending date
         :param asset_missing_threshold: remove Dates with more than asset_missing_threshold percent assets missing
@@ -32,6 +35,7 @@ class Assets:
         :param random_selection: number of assets to randomly keep in the final DataFrame
         :param name: name of the Assets class
         """
+        logger.info(f'Using prices from {prices_file}')
 
         if not 0 < asset_missing_threshold < 1:
             raise ValueError(f'asset_missing_threshold has to be between 0 and 1')
@@ -41,10 +45,11 @@ class Assets:
         self.name = name
         self.start_date = start_date
         self.end_date = end_date
-        self.prices = load_bloomberg_prices(date_from=self.start_date,
-                                            date_to=self.end_date,
-                                            names_to_keep=names_to_keep,
-                                            random_selection=random_selection)
+        self.prices = load_prices(file=prices_file,
+                                  date_from=self.start_date,
+                                  date_to=self.end_date,
+                                  names_to_keep=names_to_keep,
+                                  random_selection=random_selection)
         self.asset_missing_threshold = asset_missing_threshold
         self.dates_missing_threshold = dates_missing_threshold
         self._preprocessing()

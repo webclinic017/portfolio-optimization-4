@@ -3,14 +3,16 @@ import numpy as np
 
 from portfolio_optimization.assets import *
 from portfolio_optimization.utils.assets import *
+from portfolio_optimization.paths import *
 
 
 def test_assets_class():
-    assets = Assets(start_date=dt.date(2019, 1, 1))
+    start_date = dt.date(2017, 1, 1)
+    assets = Assets(prices_file=TEST_PRICES_PATH, start_date=start_date)
     names = np.array(assets.prices.columns)
     assert assets.asset_nb == len(names)
     assert assets.date_nb == len(assets.prices) - 1
-    assert  np.array_equal(assets.names, names)
+    assert np.array_equal(assets.names, names)
     ret = []
     for i in range(1, len(assets.prices)):
         ret.append((assets.prices.iloc[i] / assets.prices.iloc[i - 1] - 1).to_numpy())
@@ -19,8 +21,8 @@ def test_assets_class():
     assert (abs(ret.mean(axis=1) - assets.mu)).sum() < 1e-10
     assert (abs(np.cov(ret) - assets.cov)).sum() < 1e-10
 
-    new_names = [names[i] for i in np.random.choice(len(names), 30, replace=False)]
-    assets = Assets(start_date=dt.date(2019, 1, 1), names_to_keep=new_names)
+    new_names = [names[i] for i in np.random.choice(len(names), 15, replace=False)]
+    assets = Assets(prices_file=TEST_PRICES_PATH, start_date=start_date, names_to_keep=new_names)
     assert assets.asset_nb == len(new_names)
     assert assets.date_nb == len(assets.prices) - 1
     assets.plot()
@@ -29,26 +31,30 @@ def test_assets_class():
 
 def test_load_assets():
     correlation_threshold = 0.99
-    assets = load_assets(start_date=dt.date(2018, 1, 1),
-                         end_date=dt.date(2019, 1, 1),
-                         random_selection=200,
+    random_selection = 15
+    pre_selection_number = 10
+    assets = load_assets(prices_file=TEST_PRICES_PATH,
+                         start_date=dt.date(2016, 1, 1),
+                         end_date=dt.date(2017, 1, 1),
+                         random_selection=random_selection,
                          correlation_threshold_removal=correlation_threshold,
-                         pre_selection_number=100)
+                         pre_selection_number=pre_selection_number)
     for i in range(assets.asset_nb):
         for j in range(assets.asset_nb):
             if i != j:
                 assert assets.corr[i, j] < correlation_threshold
-    assert 100 <= len(assets.names) <= 200
+    assert pre_selection_number <= len(assets.names) <= random_selection
 
 
 def test_load_train_test_assets():
-    train_period = (dt.date(2018, 1, 1), dt.date(2019, 1, 1))
-    test_period = (dt.date(2019, 1, 1), dt.date(2020, 1, 1))
+    train_period = (dt.date(2016, 1, 1), dt.date(2017, 1, 1))
+    test_period = (dt.date(2017, 1, 1), dt.date(2018, 1, 1))
 
-    train_assets, test_assets = load_train_test_assets(train_period=train_period,
+    train_assets, test_assets = load_train_test_assets(prices_file=TEST_PRICES_PATH,
+                                                       train_period=train_period,
                                                        test_period=test_period,
-                                                       random_selection=200,
-                                                       pre_selection_number=100)
+                                                       random_selection=15,
+                                                       pre_selection_number=10)
 
     assert set(train_assets.names) == set(test_assets.names)
     assert (train_assets.start_date, train_assets.end_date) == train_period
