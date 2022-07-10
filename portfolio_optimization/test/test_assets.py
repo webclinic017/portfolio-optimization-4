@@ -4,11 +4,15 @@ import numpy as np
 from portfolio_optimization.assets import *
 from portfolio_optimization.utils.assets import *
 from portfolio_optimization.paths import *
+from portfolio_optimization.bloomberg.loader import *
 
 
 def test_assets_class():
+    prices = load_prices(file=TEST_PRICES_PATH)
+
     start_date = dt.date(2017, 1, 1)
-    assets = Assets(prices_file=TEST_PRICES_PATH, start_date=start_date)
+    assets = Assets(prices=prices, start_date=start_date)
+
     names = np.array(assets.prices.columns)
     assert assets.asset_nb == len(names)
     assert assets.date_nb == len(assets.prices) - 1
@@ -22,7 +26,7 @@ def test_assets_class():
     assert (abs(np.cov(ret) - assets.cov)).sum() < 1e-10
 
     new_names = [names[i] for i in np.random.choice(len(names), 15, replace=False)]
-    assets = Assets(prices_file=TEST_PRICES_PATH, start_date=start_date, names_to_keep=new_names)
+    assets = Assets(prices=prices, start_date=start_date, names_to_keep=new_names)
     assert assets.asset_nb == len(new_names)
     assert assets.date_nb == len(assets.prices) - 1
     assets.plot()
@@ -30,10 +34,13 @@ def test_assets_class():
 
 
 def test_load_assets():
+    prices = load_prices(file=TEST_PRICES_PATH)
+
     correlation_threshold = 0.99
     random_selection = 15
     pre_selection_number = 10
-    assets = load_assets(prices_file=TEST_PRICES_PATH,
+
+    assets = load_assets(prices=prices,
                          start_date=dt.date(2016, 1, 1),
                          end_date=dt.date(2017, 1, 1),
                          random_selection=random_selection,
@@ -47,10 +54,12 @@ def test_load_assets():
 
 
 def test_load_train_test_assets():
+    prices = load_prices(file=TEST_PRICES_PATH)
+
     train_period = (dt.date(2016, 1, 1), dt.date(2017, 1, 1))
     test_period = (dt.date(2017, 1, 1), dt.date(2018, 1, 1))
 
-    train_assets, test_assets = load_train_test_assets(prices_file=TEST_PRICES_PATH,
+    train_assets, test_assets = load_train_test_assets(prices=prices,
                                                        train_period=train_period,
                                                        test_period=test_period,
                                                        random_selection=15,

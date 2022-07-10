@@ -6,24 +6,26 @@ from portfolio_optimization.utils.metrics import *
 from portfolio_optimization.utils.tools import *
 from portfolio_optimization.assets import *
 from portfolio_optimization.portfolio import *
+from portfolio_optimization.paths import *
+from portfolio_optimization.bloomberg.loader import *
 
 
 def test_multi_period_portfolio():
-    N = 10
-    periods = [(dt.date(2019, 1, 1), dt.date(2019, 3, 1)),
-               (dt.date(2019, 3, 15), dt.date(2019, 5, 1)),
-               (dt.date(2019, 5, 1), dt.date(2019, 8, 1))]
+    prices = load_prices(file=TEST_PRICES_PATH)
 
-    portfolios = []
+    N = 10
+    periods = [(dt.date(2017, 1, 1), dt.date(2017, 3, 1)),
+               (dt.date(2017, 3, 15), dt.date(2017, 5, 1)),
+               (dt.date(2017, 5, 1), dt.date(2017, 8, 1))]
+
+    multi_period_portfolio = MultiPeriodPortfolio()
     returns = np.array([])
     for i, period in enumerate(periods):
-        assets = Assets(start_date=period[0], end_date=period[1])
+        assets = Assets(prices=prices, start_date=period[0], end_date=period[1])
         weights = rand_weights(n=assets.asset_nb, zeros=assets.asset_nb - N)
         portfolio = Portfolio(weights=weights, assets=assets, pid=str(i))
-        portfolios.append(portfolio)
+        multi_period_portfolio.add(portfolio)
         returns = np.concatenate([returns, portfolio_returns(assets.returns, weights)])
-
-    multi_period_portfolio = MultiPeriodPortfolio(portfolios=portfolios)
 
     assert np.all((returns - multi_period_portfolio.returns) < 1e-10)
     assert abs(returns.mean() - multi_period_portfolio.mean) < 1e-10
@@ -47,7 +49,8 @@ def test_multi_period_portfolio():
                                     -multi_period_portfolio.max_drawdown]))
     assert len(multi_period_portfolio.assets_index) == len(periods)
     assert len(multi_period_portfolio.assets_names) == len(periods)
-    assert len(multi_period_portfolio.composition) == len(periods)
+    assert multi_period_portfolio.composition.shape[1] == len(periods)
     multi_period_portfolio.reset_metrics()
     assert multi_period_portfolio._mean is None
     assert multi_period_portfolio._std is None
+    multi_period_portfolio.plot_rolling_sharpe(days=20)

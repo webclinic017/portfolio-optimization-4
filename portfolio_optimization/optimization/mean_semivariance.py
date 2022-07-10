@@ -2,8 +2,9 @@ from typing import Union, Optional
 import numpy as np
 import cvxpy as cp
 
-from portfolio_optimization.utils.tools import *
 from portfolio_optimization.meta import *
+from portfolio_optimization.utils.tools import *
+from portfolio_optimization.utils.solver import *
 
 __all__ = ['mean_semivariance']
 
@@ -12,7 +13,7 @@ def mean_semivariance(expected_returns: np.ndarray,
                       returns: np.ndarray,
                       returns_target: Union[float, np.ndarray],
                       weight_bounds: Union[tuple[np.ndarray, np.ndarray],
-                                                        tuple[Optional[float], Optional[float]]],
+                                           tuple[Optional[float], Optional[float]]],
                       investment_type: InvestmentType,
 
                       population_size: int) -> np.array:
@@ -75,12 +76,12 @@ def mean_semivariance(expected_returns: np.ndarray,
     problem = cp.Problem(objective, constraints)
 
     # Solve for different volatilities
-    weights = []
-    for annualized_volatility in np.logspace(-2.5, -0.5, num=population_size):
-        target_semivariance.value = annualized_volatility ** 2 / 255
-        problem.solve()
-        weights.append(w.value)
+    annualized_volatilities = np.logspace(-2.5, -0.5, num=population_size)
+    annualized_variances = annualized_volatilities ** 2 / 255
 
-    return np.array(weights)
+    weights = get_optimization_weights(problem=problem,
+                                       variable=w,
+                                       parameter=annualized_variances,
+                                       parameter_array=target_semivariance)
 
-
+    return weights

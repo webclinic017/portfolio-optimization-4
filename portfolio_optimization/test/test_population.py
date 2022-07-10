@@ -5,11 +5,15 @@ from portfolio_optimization.utils.tools import *
 from portfolio_optimization.assets import *
 from portfolio_optimization.portfolio import *
 from portfolio_optimization.population import *
+from portfolio_optimization.paths import *
+from portfolio_optimization.bloomberg.loader import *
 
 
 def test_population():
-    assets = Assets(start_date=dt.date(2019, 1, 1))
+    prices = load_prices(file=TEST_PRICES_PATH)
 
+    start_date = dt.date(2017, 1, 1)
+    assets = Assets(prices=prices, start_date=start_date)
     # Create a population of portfolios with 3 objectives
     population = Population()
     for _ in range(100):

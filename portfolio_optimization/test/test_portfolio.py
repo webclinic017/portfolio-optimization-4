@@ -6,10 +6,15 @@ from portfolio_optimization.utils.metrics import *
 from portfolio_optimization.utils.tools import *
 from portfolio_optimization.assets import *
 from portfolio_optimization.portfolio import *
+from portfolio_optimization.paths import *
+from portfolio_optimization.bloomberg.loader import *
 
 
 def test_portfolio_metrics():
-    assets = Assets(start_date=dt.date(2019, 1, 1))
+    prices = load_prices(file=TEST_PRICES_PATH)
+
+    start_date = dt.date(2017, 1, 1)
+    assets = Assets(prices=prices, start_date=start_date)
     N = 10
     weights = rand_weights(n=assets.asset_nb, zeros=assets.asset_nb - N)
     portfolio = Portfolio(weights=weights, fitness_type=FitnessType.MEAN_STD, assets=assets)
@@ -44,10 +49,14 @@ def test_portfolio_metrics():
     portfolio.reset_metrics()
     assert portfolio._mean is None
     assert portfolio._std is None
+    portfolio.plot_rolling_sharpe(days=20)
 
 
 def test_portfolio_dominate():
-    assets = Assets(start_date=dt.date(2019, 1, 1))
+    prices = load_prices(file=TEST_PRICES_PATH)
+
+    start_date = dt.date(2017, 1, 1)
+    assets = Assets(prices=prices,  start_date=start_date)
 
     for _ in range(1000):
         weights_1 = rand_weights(n=assets.asset_nb)

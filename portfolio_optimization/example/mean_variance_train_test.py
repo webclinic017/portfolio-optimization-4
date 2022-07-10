@@ -1,18 +1,22 @@
 import datetime as dt
 
 from portfolio_optimization.meta import *
-from portfolio_optimization.meta import Metrics, FitnessType
+from portfolio_optimization.paths import *
 from portfolio_optimization.portfolio import *
 from portfolio_optimization.population import *
 from portfolio_optimization.optimization.mean_variance import *
 from portfolio_optimization.utils.assets import *
+from portfolio_optimization.bloomberg.loader import *
 
 if __name__ == '__main__':
     """
     Compare the efficient frontier of the mean-variance optimization fitted on the train period (2018-2019) against the
     frontier tested on the test period (2019-2020)
     """
-    assets_train, assets_test = load_train_test_assets(train_period=(dt.date(2018, 1, 1), dt.date(2019, 1, 1)),
+    prices = load_prices(file=EXAMPLE_PRICES_PATH)
+
+    assets_train, assets_test = load_train_test_assets(prices=prices,
+                                                       train_period=(dt.date(2018, 1, 1), dt.date(2019, 1, 1)),
                                                        test_period=(dt.date(2019, 1, 1), dt.date(2020, 1, 1)),
                                                        random_selection=400,
                                                        pre_selection_number=100)

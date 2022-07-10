@@ -2,12 +2,10 @@ import logging
 from typing import Union, Optional
 import numpy as np
 import cvxpy as cp
-from cvxpy.error import SolverError
-from scipy.sparse.linalg._eigen.arpack.arpack import ArpackNoConvergence
 
-from portfolio_optimization.utils.tools import *
 from portfolio_optimization.meta import *
-from portfolio_optimization.exception import *
+from portfolio_optimization.utils.tools import *
+from portfolio_optimization.utils.solver import *
 
 __all__ = ['mean_variance']
 
@@ -82,18 +80,9 @@ def mean_variance(expected_returns: np.ndarray,
         annualized_volatilities = np.logspace(-2.5, -0.5, num=population_size)
         variances = annualized_volatilities ** 2 / 255
 
-    weights = []
-    try:
-        for variance in variances:
-            target_variance_param.value = variance
-            try:
-                problem.solve(solver='ECOS')
-                if w.value is None:
-                    logger.warning(f'None return for variance {variance}')
-                else:
-                    weights.append(w.value)
-            except SolverError as e:
-                logger.warning(f'SolverError for variance {variance}: {e}')
-    except ArpackNoConvergence:
-        raise OptimizationError
-    return np.array(weights)
+    weights = get_optimization_weights(problem=problem,
+                                       variable=w,
+                                       parameter=target_variance_param,
+                                       parameter_array=variances)
+
+    return weights

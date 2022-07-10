@@ -1,21 +1,23 @@
 import datetime as dt
-import numpy as np
 import plotly.express as px
 import pandas as pd
 
 from portfolio_optimization.meta import *
-from portfolio_optimization.meta import Metrics, FitnessType
+from portfolio_optimization.paths import *
 from portfolio_optimization.portfolio import *
 from portfolio_optimization.population import *
 from portfolio_optimization.optimization.mean_variance import *
 from portfolio_optimization.utils.assets import *
 from portfolio_optimization.exception import *
+from portfolio_optimization.bloomberg.loader import *
 
 if __name__ == '__main__':
 
     """
 
     """
+    prices = load_prices(file=EXAMPLE_PRICES_PATH)
+
     population = Population()
     metrics = []
     target_variance = 0.025 ** 2 / 255
@@ -26,6 +28,9 @@ if __name__ == '__main__':
     rolling_period = 30
     period = -1
 
+    multi_period_portfolio_train = MultiPeriodPortfolio(name='train')
+    multi_period_portfolio_test = MultiPeriodPortfolio(name='test')
+
     while True:
         period += 1
         train_start = start + dt.timedelta(days=period * rolling_period)
@@ -33,7 +38,8 @@ if __name__ == '__main__':
         test_start = train_end
         test_end = test_start + dt.timedelta(days=test_duration)
 
-        train, test = load_train_test_assets(train_period=(train_start, train_end),
+        train, test = load_train_test_assets(prices=prices,
+                                train_period=(train_start, train_end),
                                              test_period=(test_start, test_end),
                                              correlation_threshold_pre_selection=-0.5,
                                              pre_selection_number=100)
@@ -49,26 +55,26 @@ if __name__ == '__main__':
         except OptimizationError:
             continue
 
-        train_portfolio = Portfolio(weights=portfolios_weights[0],
+        multi_period_portfolio_train.add(Portfolio(weights=portfolios_weights[0],
                                     fitness_type=FitnessType.MEAN_STD,
                                     assets=train,
                                     pid=f'train_{train.name}',
                                     name=f'train_{train.name}',
-                                    tag=f'train')
+                                    tag=f'train'))
 
-        test_portfolio = Portfolio(weights=portfolios_weights[0],
+        multi_period_portfolio_test.add(Portfolio(weights=portfolios_weights[0],
                                    fitness_type=FitnessType.MEAN_STD,
                                    assets=test,
                                    pid=f'test_{test.name}',
                                    name=f'test_{test.name}',
-                                   tag=f'test')
+                                   tag=f'test'))
 
-        population.add(train_portfolio)
-        population.add(test_portfolio)
 
-        metrics.append({'train_sharpe': train_portfolio.sharpe_ratio,
-                        'train_sric': train_portfolio.sric,
-                        'test_sharpe': test_portfolio.sharpe_ratio})
+
+
+    metrics.append({'train_sharpe': train_portfolio.sharpe_ratio,
+                    'train_sric': train_portfolio.sric,
+                    'test_sharpe': test_portfolio.sharpe_ratio})
 
     df = pd.DataFrame(metrics)
     fig = px.scatter(df)

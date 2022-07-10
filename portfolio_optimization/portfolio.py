@@ -1,6 +1,7 @@
 import numpy as np
 import uuid
 import pandas as pd
+from typing import Optional
 
 from portfolio_optimization.meta import *
 from portfolio_optimization.assets import *
@@ -16,7 +17,7 @@ class BasePortfolio:
 
     def __init__(self,
                  returns: np.array,
-                 pid: str = None,
+                 pid: Optional[str] = None,
                  tag: str = 'portfolio',
                  name: str = '',
                  fitness_type: FitnessType = FitnessType.MEAN_STD):
@@ -133,6 +134,23 @@ class BasePortfolio:
     def cvar_95_ratio(self):
         return self.annualized_mean / self.cvar_95
 
+    def plot_rolling_sharpe(self, days: int = 30):
+        s = pd.Series(self.returns)
+        rolling = s.rolling(window=days)
+        rolling_sharpe = np.sqrt(AVG_TRADING_DAYS_PER_YEAR) * rolling.mean() / rolling.std(ddof=1)
+        rolling_sharpe.name = f'Sharpe {days} days'
+        fig = rolling_sharpe.plot()
+        fig.add_hline(y=self.sharpe_ratio, line_width=1, line_dash='dash', line_color='blue')
+        fig.add_hrect(y0=0, y1=rolling_sharpe.max() * 1.3, line_width=0, fillcolor='green', opacity=0.1)
+        fig.add_hrect(y0=rolling_sharpe.min() * 1.3, y1=0, line_width=0, fillcolor='red', opacity=0.1)
+
+        fig.update_layout(
+            title=f'Rolling Sharpe - {days} days',
+            xaxis_title='Days',
+            yaxis_title='Sharpe Ratio'
+        )
+        fig.show()
+
     @property
     def fitness(self):
         """
@@ -181,7 +199,7 @@ class Portfolio(BasePortfolio):
     def __init__(self,
                  weights: np.ndarray,
                  assets: Assets,
-                 pid: str = None,
+                 pid: Optional[str] = None,
                  tag: str = 'ptf',
                  name: str = '',
                  fitness_type: FitnessType = FitnessType.MEAN_STD):
@@ -255,27 +273,34 @@ class Portfolio(BasePortfolio):
 class MultiPeriodPortfolio(BasePortfolio):
 
     def __init__(self,
-                 portfolios: list[Portfolio],
-                 pid: str = None,
+                 portfolios: Optional[list[Portfolio]] = None,
+                 pid: Optional[str] = None,
                  tag: str = 'multi-period-portfolio',
                  name: str = '',
                  fitness_type: FitnessType = FitnessType.MEAN_STD):
-        # Ensure that Portfolios dates do not overlap
-        self.portfolios = [portfolios[0]]
-        for portfolio in portfolios[1:]:
-            start_date = portfolio.assets.dates[0]
-            prev_last_date = self.portfolios[-1].assets.dates[-1]
-            if start_date < prev_last_date:
-                raise ValueError(f'Portfolios dates should not overlap: {prev_last_date} -> {start_date} ')
-            self.portfolios.append(portfolio)
-
-        returns = np.concatenate([portfolio.returns for portfolio in self.portfolios], axis=0)
-
-        super().__init__(returns=returns,
+        super().__init__(returns=np.array([]),
                          pid=pid,
                          tag=tag,
                          name=name,
                          fitness_type=fitness_type)
+
+        # Ensure that Portfolios dates do not overlap
+        self.portfolios = []
+        if portfolios is not None:
+            for portfolio in portfolios:
+                self.add(portfolio)
+
+    def add(self, portfolio: Portfolio):
+        if self.portfolios is None:
+            return
+        if len(self.portfolios) != 0:
+            start_date = portfolio.assets.dates[0]
+            prev_last_date = self.portfolios[-1].assets.dates[-1]
+            if start_date < prev_last_date:
+                raise ValueError(f'Portfolios dates should not overlap: {prev_last_date} -> {start_date} ')
+        self.portfolios.append(portfolio)
+        self.returns = np.concatenate([self.returns, portfolio.returns], axis=0)
+        self.reset_metrics()
 
     @property
     def assets_index(self):

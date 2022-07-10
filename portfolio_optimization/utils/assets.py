@@ -1,8 +1,8 @@
 import logging
-from pathlib import Path
-from typing import Optional, Union
+from typing import Optional
 import datetime as dt
 import numpy as np
+import pandas as pd
 
 from portfolio_optimization.assets import *
 from portfolio_optimization.meta import FitnessType
@@ -117,7 +117,7 @@ def pre_selection(assets: Assets,
     return new_assets_names
 
 
-def load_assets(prices_file: Union[Path, str],
+def load_assets(prices: pd.DataFrame,
                 start_date: Optional[dt.date] = None,
                 end_date: Optional[dt.date] = None,
                 asset_missing_threshold: float = 0.1,
@@ -130,7 +130,7 @@ def load_assets(prices_file: Union[Path, str],
                 name: Optional[str] = 'assets') -> Assets:
     """
     Load Assets form multiple periods
-    :param prices_file: the path of the prices csv file
+    :param prices: DataFrame of asset prices. Index has to be DateTime and columns names are the assets names
     :param start_date: starting date
     :param end_date: ending date
     :param asset_missing_threshold: remove Dates with more than asset_missing_threshold percent assets missing
@@ -145,7 +145,8 @@ def load_assets(prices_file: Union[Path, str],
     :param name: name of the Assets class
     """
     logger.info(f'Loading Assets from {start_date} to {end_date}')
-    assets = Assets(prices_file=prices_file,
+
+    assets = Assets(prices=prices,
                     start_date=start_date,
                     end_date=end_date,
                     asset_missing_threshold=asset_missing_threshold,
@@ -158,7 +159,7 @@ def load_assets(prices_file: Union[Path, str],
         new_assets_names = remove_highly_correlated_assets(assets=assets,
                                                            correlation_threshold=correlation_threshold_removal)
         logger.info(f'Reloading Assets after removing highly correlated assets')
-        assets = Assets(prices_file=prices_file,
+        assets = Assets(prices=prices,
                         start_date=start_date,
                         end_date=end_date,
                         asset_missing_threshold=asset_missing_threshold,
@@ -171,7 +172,7 @@ def load_assets(prices_file: Union[Path, str],
                                          k=pre_selection_number,
                                          correlation_threshold=correlation_threshold_pre_selection)
         logger.info(f'Reloading Assets after removing assets discarded form the pre-selection process')
-        assets = Assets(prices_file=prices_file,
+        assets = Assets(prices=prices,
                         start_date=start_date,
                         end_date=end_date,
                         asset_missing_threshold=asset_missing_threshold,
@@ -182,7 +183,7 @@ def load_assets(prices_file: Union[Path, str],
     return assets
 
 
-def load_train_test_assets(prices_file: Union[Path, str],
+def load_train_test_assets(prices: pd.DataFrame,
                            train_period: (dt.date, dt.date),
                            test_period: (dt.date, dt.date),
                            asset_missing_threshold: float = 0.1,
@@ -194,7 +195,7 @@ def load_train_test_assets(prices_file: Union[Path, str],
                            correlation_threshold_pre_selection: float = 0) -> (Assets, Assets):
     """
     Load Assets form multiple periods
-    :param prices_file: the path of the prices csv file
+    :param prices: DataFrame of asset prices. Index has to be DateTime and columns names are the assets names
     :param train_period
     :param test_period
     :param asset_missing_threshold: remove Dates with more than asset_missing_threshold percent assets missing
@@ -219,7 +220,7 @@ def load_train_test_assets(prices_file: Union[Path, str],
     if train_start < test_start < train_end or train_start < test_end < train_end:
         logger.warning(f'Train and Test periods are overlapping')
     logger.info(f'Loading Train Assets from {train_start} to {train_end}')
-    train_assets = Assets(prices_file=prices_file,
+    train_assets = Assets(prices=prices,
                           start_date=train_start,
                           end_date=train_end,
                           asset_missing_threshold=asset_missing_threshold,
@@ -232,7 +233,7 @@ def load_train_test_assets(prices_file: Union[Path, str],
         new_assets_names = remove_highly_correlated_assets(assets=train_assets,
                                                            correlation_threshold=correlation_threshold_removal)
         logger.info(f'Reloading Train Assets after removing highly correlated assets')
-        train_assets = Assets(prices_file=prices_file,
+        train_assets = Assets(prices=prices,
                               start_date=train_start,
                               end_date=train_end,
                               asset_missing_threshold=asset_missing_threshold,
@@ -245,7 +246,7 @@ def load_train_test_assets(prices_file: Union[Path, str],
                                          k=pre_selection_number,
                                          correlation_threshold=correlation_threshold_pre_selection)
         logger.info(f'Reloading Train Assets after removing assets discarded form the pre-selection process')
-        train_assets = Assets(prices_file=prices_file,
+        train_assets = Assets(prices=prices,
                               start_date=train_start,
                               end_date=train_end,
                               asset_missing_threshold=asset_missing_threshold,
@@ -253,7 +254,7 @@ def load_train_test_assets(prices_file: Union[Path, str],
                               names_to_keep=new_assets_names,
                               name=train_name)
     logger.info(f'Loading Test Assets')
-    test_assets = Assets(prices_file=prices_file,
+    test_assets = Assets(prices=prices,
                          start_date=test_start,
                          end_date=test_end,
                          asset_missing_threshold=asset_missing_threshold,
@@ -266,7 +267,7 @@ def load_train_test_assets(prices_file: Union[Path, str],
         names = [name for name in train_assets.names if name in test_assets.names]
         if set(train_assets.names) != set(names):
             logger.info(f'Reloading Train Assets to match Test Assets universe')
-            train_assets = Assets(prices_file=prices_file,
+            train_assets = Assets(prices=prices,
                                   start_date=train_start,
                                   end_date=train_end,
                                   asset_missing_threshold=asset_missing_threshold,
@@ -276,7 +277,7 @@ def load_train_test_assets(prices_file: Union[Path, str],
 
         if set(test_assets.names) != set(names):
             logger.info(f'Reloading Test Assets to match Train Assets universe')
-            test_assets = Assets(prices_file=prices_file,
+            test_assets = Assets(prices=prices,
                                  start_date=test_start,
                                  end_date=test_end,
                                  asset_missing_threshold=asset_missing_threshold,

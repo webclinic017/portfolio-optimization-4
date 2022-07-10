@@ -2,8 +2,9 @@ from typing import Union, Optional
 import numpy as np
 import cvxpy as cp
 
-from portfolio_optimization.utils.tools import *
 from portfolio_optimization.meta import *
+from portfolio_optimization.utils.tools import *
+from portfolio_optimization.utils.solver import *
 
 __all__ = ['mean_cdar']
 
@@ -75,10 +76,9 @@ def mean_cdar(expected_returns: np.ndarray,
     problem = cp.Problem(objective, constraints)
 
     # Solve for different volatilities
-    weights = []
-    for cdar in np.logspace(-3.5, -0.5, num=population_size):
-        target_cdar.value = cdar
-        problem.solve()
-        weights.append(w.value)
+    weights = get_optimization_weights(problem=problem,
+                                       variable=w,
+                                       parameter=target_cdar,
+                                       parameter_array=np.logspace(-3.5, -0.5, num=population_size))
 
-    return np.array(weights)
+    return weights

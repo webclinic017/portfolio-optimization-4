@@ -2,8 +2,9 @@ from typing import Union, Optional
 import numpy as np
 import cvxpy as cp
 
-from portfolio_optimization.utils.tools import *
 from portfolio_optimization.meta import *
+from portfolio_optimization.utils.tools import *
+from portfolio_optimization.utils.solver import *
 
 __all__ = ['mean_cvar']
 
@@ -71,10 +72,9 @@ def mean_cvar(expected_returns: np.ndarray,
     problem = cp.Problem(objective, constraints)
 
     # Solve for different volatilities
-    weights = []
-    for cvar in np.logspace(-3.5, -0.5, num=population_size):
-        target_cvar.value = cvar
-        problem.solve()
-        weights.append(w.value)
+    weights = get_optimization_weights(problem=problem,
+                                       variable=w,
+                                       parameter=target_cvar,
+                                       parameter_array=np.logspace(-3.5, -0.5, num=population_size))
 
-    return np.array(weights)
+    return weights
