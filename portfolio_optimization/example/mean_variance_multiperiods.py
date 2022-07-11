@@ -39,38 +39,30 @@ if __name__ == '__main__':
         test_end = test_start + dt.timedelta(days=test_duration)
 
         train, test = load_train_test_assets(prices=prices,
-                                train_period=(train_start, train_end),
+                                             train_period=(train_start, train_end),
                                              test_period=(test_start, test_end),
                                              correlation_threshold_pre_selection=-0.5,
                                              pre_selection_number=100)
 
         if test.date_nb < test_duration / 2:
             break
+
+        print(train)
         try:
-            portfolios_weights = mean_variance(expected_returns=train.mu,
-                                               cov=train.cov,
-                                               investment_type=InvestmentType.FULLY_INVESTED,
-                                               weight_bounds=(0, None),
-                                               target_variance=target_variance)
+            weights = mean_variance(expected_returns=train.mu,
+                                    cov=train.cov,
+                                    investment_type=InvestmentType.FULLY_INVESTED,
+                                    weight_bounds=(0, None),
+                                    target_variance=target_variance)
         except OptimizationError:
             continue
 
-        multi_period_portfolio_train.add(Portfolio(weights=portfolios_weights[0],
-                                    fitness_type=FitnessType.MEAN_STD,
-                                    assets=train,
-                                    pid=f'train_{train.name}',
-                                    name=f'train_{train.name}',
-                                    tag=f'train'))
-
-        multi_period_portfolio_test.add(Portfolio(weights=portfolios_weights[0],
-                                   fitness_type=FitnessType.MEAN_STD,
-                                   assets=test,
-                                   pid=f'test_{test.name}',
-                                   name=f'test_{test.name}',
-                                   tag=f'test'))
-
-
-
+        for tag, asset in [('train', train), ('test', test)]:
+            multi_period_portfolio_train.add(Portfolio(weights=weights[0],
+                                                       assets=asset,
+                                                       pid=asset.name,
+                                                       name=asset.name,
+                                                       tag=tag))
 
     metrics.append({'train_sharpe': train_portfolio.sharpe_ratio,
                     'train_sric': train_portfolio.sric,

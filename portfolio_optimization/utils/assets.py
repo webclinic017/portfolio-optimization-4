@@ -158,7 +158,7 @@ def load_assets(prices: pd.DataFrame,
     if correlation_threshold_removal is not None:
         new_assets_names = remove_highly_correlated_assets(assets=assets,
                                                            correlation_threshold=correlation_threshold_removal)
-        logger.info(f'Reloading Assets after removing highly correlated assets')
+        # Reloading Assets after removing highly correlated assets
         assets = Assets(prices=prices,
                         start_date=start_date,
                         end_date=end_date,
@@ -171,7 +171,7 @@ def load_assets(prices: pd.DataFrame,
         new_assets_names = pre_selection(assets=assets,
                                          k=pre_selection_number,
                                          correlation_threshold=correlation_threshold_pre_selection)
-        logger.info(f'Reloading Assets after removing assets discarded form the pre-selection process')
+        # Reloading Assets after removing assets discarded form the pre-selection process
         assets = Assets(prices=prices,
                         start_date=start_date,
                         end_date=end_date,
@@ -211,15 +211,15 @@ def load_train_test_assets(prices: pd.DataFrame,
     """
     train_start, train_end = train_period
     test_start, test_end = test_period
-    train_name = f'{train_start}-{train_end}'
-    test_name = f'{test_start}-{test_end}'
+    train_name = f'train_{train_start}-{train_end}'
+    test_name = f'test_{test_start}-{test_end}'
 
     if train_start >= train_end or test_start >= test_end:
         raise ValueError(f'Periods are incorrect')
 
     if train_start < test_start < train_end or train_start < test_end < train_end:
         logger.warning(f'Train and Test periods are overlapping')
-    logger.info(f'Loading Train Assets from {train_start} to {train_end}')
+    # Loading Train Assets from train_start to train_end
     train_assets = Assets(prices=prices,
                           start_date=train_start,
                           end_date=train_end,
@@ -232,7 +232,7 @@ def load_train_test_assets(prices: pd.DataFrame,
     if correlation_threshold_removal is not None:
         new_assets_names = remove_highly_correlated_assets(assets=train_assets,
                                                            correlation_threshold=correlation_threshold_removal)
-        logger.info(f'Reloading Train Assets after removing highly correlated assets')
+        # Reloading Train Assets after removing highly correlated assets
         train_assets = Assets(prices=prices,
                               start_date=train_start,
                               end_date=train_end,
@@ -245,7 +245,7 @@ def load_train_test_assets(prices: pd.DataFrame,
         new_assets_names = pre_selection(assets=train_assets,
                                          k=pre_selection_number,
                                          correlation_threshold=correlation_threshold_pre_selection)
-        logger.info(f'Reloading Train Assets after removing assets discarded form the pre-selection process')
+        # Reloading Train Assets after removing assets discarded form the pre-selection process
         train_assets = Assets(prices=prices,
                               start_date=train_start,
                               end_date=train_end,
@@ -253,7 +253,7 @@ def load_train_test_assets(prices: pd.DataFrame,
                               dates_missing_threshold=dates_missing_threshold,
                               names_to_keep=new_assets_names,
                               name=train_name)
-    logger.info(f'Loading Test Assets')
+    # Loading Test Assets
     test_assets = Assets(prices=prices,
                          start_date=test_start,
                          end_date=test_end,
@@ -266,7 +266,7 @@ def load_train_test_assets(prices: pd.DataFrame,
     if set(train_assets.names) != set(test_assets.names):
         names = [name for name in train_assets.names if name in test_assets.names]
         if set(train_assets.names) != set(names):
-            logger.info(f'Reloading Train Assets to match Test Assets universe')
+            # Reloading Train Assets to match Test Assets universe
             train_assets = Assets(prices=prices,
                                   start_date=train_start,
                                   end_date=train_end,
@@ -276,7 +276,7 @@ def load_train_test_assets(prices: pd.DataFrame,
                                   name=train_name)
 
         if set(test_assets.names) != set(names):
-            logger.info(f'Reloading Test Assets to match Train Assets universe')
+            # Reloading Test Assets to match Train Assets universe
             test_assets = Assets(prices=prices,
                                  start_date=test_start,
                                  end_date=test_end,

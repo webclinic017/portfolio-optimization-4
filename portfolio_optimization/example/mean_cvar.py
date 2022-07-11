@@ -32,7 +32,6 @@ def mean_variance_vs_mean_cvar():
                                        population_size=30)
     for i, weights in enumerate(portfolios_weights):
         population.add(Portfolio(weights=weights,
-                                 fitness_type=FitnessType.MEAN_STD,
                                  assets=assets,
                                  pid=f'mean_variance_{i}',
                                  name=str(i),
