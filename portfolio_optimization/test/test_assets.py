@@ -41,11 +41,12 @@ def test_load_assets():
     pre_selection_number = 10
 
     assets = load_assets(prices=prices,
-                         start_date=dt.date(2016, 1, 1),
-                         end_date=dt.date(2017, 1, 1),
+                         start_date=dt.date(2018, 1, 1),
+                         end_date=dt.date(2019, 1, 1),
                          random_selection=random_selection,
                          correlation_threshold_removal=correlation_threshold,
-                         pre_selection_number=pre_selection_number)
+                         pre_selection_number=pre_selection_number,
+                         verbose=False)
     for i in range(assets.asset_nb):
         for j in range(assets.asset_nb):
             if i != j:
@@ -56,14 +57,15 @@ def test_load_assets():
 def test_load_train_test_assets():
     prices = load_prices(file=TEST_PRICES_PATH)
 
-    train_period = (dt.date(2016, 1, 1), dt.date(2017, 1, 1))
-    test_period = (dt.date(2017, 1, 1), dt.date(2018, 1, 1))
+    train_period = (dt.date(2018, 1, 1), dt.date(2019, 1, 1))
+    test_period = (dt.date(2019, 1, 1), dt.date(2020, 1, 1))
 
     train_assets, test_assets = load_train_test_assets(prices=prices,
                                                        train_period=train_period,
                                                        test_period=test_period,
                                                        random_selection=15,
-                                                       pre_selection_number=10)
+                                                       pre_selection_number=10,
+                                                       verbose=False)
 
     assert set(train_assets.names) == set(test_assets.names)
     assert (train_assets.start_date, train_assets.end_date) == train_period

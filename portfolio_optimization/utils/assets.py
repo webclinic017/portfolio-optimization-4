@@ -9,40 +9,11 @@ from portfolio_optimization.meta import FitnessType
 from portfolio_optimization.population import *
 from portfolio_optimization.portfolio import *
 
-__all__ = ['remove_highly_correlated_assets',
-           'pre_selection',
+__all__ = ['pre_selection',
            'load_train_test_assets',
            'load_assets']
 
 logger = logging.getLogger('portfolio_optimization.utils.assets')
-
-
-def remove_highly_correlated_assets(assets: Assets, correlation_threshold: float = 0.99) -> list[str]:
-    """
-    When two assets have a correlation above correlation_threshold, we keep the asset with higher returns.
-    Highly correlated assets increase calculus overhead and can cause matrix calculus errors without adding
-    significant information.
-
-    :param assets: Assets class
-    :param correlation_threshold: correlation threshold
-    :return: asset names
-    """
-    if not -1 <= correlation_threshold <= 1:
-        raise ValueError(f'correlation_threshold has to be between -1 and 1')
-
-    n = assets.asset_nb
-    to_remove = set()
-    for i in range(n - 1):
-        for j in range(i + 1, n):
-            if assets.corr[i, j] > correlation_threshold:
-                if i not in to_remove and j not in to_remove:
-                    if assets.mu[i] < assets.mu[j]:
-                        to_remove.add(i)
-                    else:
-                        to_remove.add(j)
-    logger.info(f'{len(to_remove)} assets removed with a correlation above {correlation_threshold}')
-    new_assets_names = list(np.delete(assets.names, list(to_remove)))
-    return new_assets_names
 
 
 def pre_selection(assets: Assets,
@@ -127,7 +98,8 @@ def load_assets(prices: pd.DataFrame,
                 correlation_threshold_removal: float = 0.99,
                 pre_selection_number: Optional[int] = None,
                 correlation_threshold_pre_selection: float = 0,
-                name: Optional[str] = 'assets') -> Assets:
+                name: Optional[str] = 'assets',
+                verbose:bool=True) -> Assets:
     """
     Load Assets form multiple periods
     :param prices: DataFrame of asset prices. Index has to be DateTime and columns names are the assets names
@@ -143,6 +115,7 @@ def load_assets(prices: pd.DataFrame,
     :param correlation_threshold_pre_selection: asset pair with a correlation below this threshold are included in the
            nondomination sorting of the pre selection method.
     :param name: name of the Assets class
+    :param verbose: True to print logging info
     """
     logger.info(f'Loading Assets from {start_date} to {end_date}')
 
@@ -153,19 +126,9 @@ def load_assets(prices: pd.DataFrame,
                     dates_missing_threshold=dates_missing_threshold,
                     names_to_keep=names_to_keep,
                     random_selection=random_selection,
-                    name=name)
-
-    if correlation_threshold_removal is not None:
-        new_assets_names = remove_highly_correlated_assets(assets=assets,
-                                                           correlation_threshold=correlation_threshold_removal)
-        # Reloading Assets after removing highly correlated assets
-        assets = Assets(prices=prices,
-                        start_date=start_date,
-                        end_date=end_date,
-                        asset_missing_threshold=asset_missing_threshold,
-                        dates_missing_threshold=dates_missing_threshold,
-                        names_to_keep=new_assets_names,
-                        name=name)
+                    correlation_threshold=correlation_threshold_removal,
+                    name=name,
+                    verbose=verbose)
 
     if pre_selection_number is not None:
         new_assets_names = pre_selection(assets=assets,
@@ -177,8 +140,10 @@ def load_assets(prices: pd.DataFrame,
                         end_date=end_date,
                         asset_missing_threshold=asset_missing_threshold,
                         dates_missing_threshold=dates_missing_threshold,
+                        correlation_threshold=None,
                         names_to_keep=new_assets_names,
-                        name=name)
+                        name=name,
+                        verbose=verbose)
 
     return assets
 
@@ -192,7 +157,8 @@ def load_train_test_assets(prices: pd.DataFrame,
                            random_selection: Optional[int] = None,
                            correlation_threshold_removal: float = 0.99,
                            pre_selection_number: Optional[int] = None,
-                           correlation_threshold_pre_selection: float = 0) -> (Assets, Assets):
+                           correlation_threshold_pre_selection: float = 0,
+                           verbose:bool=True) -> (Assets, Assets):
     """
     Load Assets form multiple periods
     :param prices: DataFrame of asset prices. Index has to be DateTime and columns names are the assets names
@@ -207,6 +173,7 @@ def load_train_test_assets(prices: pd.DataFrame,
     :param pre_selection_number: number of assets to pre-select using the Assets Preselection Process
     :param correlation_threshold_pre_selection: asset pair with a correlation below this threshold are included in the
            nondomination sorting of the pre selection method.
+    :param verbose: True to print logging info
     :return a tuple of train Assets and test Assets
     """
     train_start, train_end = train_period
@@ -225,21 +192,11 @@ def load_train_test_assets(prices: pd.DataFrame,
                           end_date=train_end,
                           asset_missing_threshold=asset_missing_threshold,
                           dates_missing_threshold=dates_missing_threshold,
+                          correlation_threshold=correlation_threshold_removal,
                           names_to_keep=names_to_keep,
                           random_selection=random_selection,
-                          name=train_name)
-
-    if correlation_threshold_removal is not None:
-        new_assets_names = remove_highly_correlated_assets(assets=train_assets,
-                                                           correlation_threshold=correlation_threshold_removal)
-        # Reloading Train Assets after removing highly correlated assets
-        train_assets = Assets(prices=prices,
-                              start_date=train_start,
-                              end_date=train_end,
-                              asset_missing_threshold=asset_missing_threshold,
-                              dates_missing_threshold=dates_missing_threshold,
-                              names_to_keep=new_assets_names,
-                              name=train_name)
+                          name=train_name,
+                          verbose=verbose)
 
     if pre_selection_number is not None:
         new_assets_names = pre_selection(assets=train_assets,
@@ -251,39 +208,30 @@ def load_train_test_assets(prices: pd.DataFrame,
                               end_date=train_end,
                               asset_missing_threshold=asset_missing_threshold,
                               dates_missing_threshold=dates_missing_threshold,
+                              correlation_threshold=None,
                               names_to_keep=new_assets_names,
-                              name=train_name)
+                              name=train_name,
+                              verbose=verbose)
     # Loading Test Assets
     test_assets = Assets(prices=prices,
                          start_date=test_start,
                          end_date=test_end,
                          asset_missing_threshold=asset_missing_threshold,
                          dates_missing_threshold=dates_missing_threshold,
+                         correlation_threshold=None,
                          names_to_keep=train_assets.names,
-                         name=test_name)
+                         name=test_name,
+                         verbose=verbose)
 
     # Ensure than train_assets and test_assets contains the same assets
     if set(train_assets.names) != set(test_assets.names):
         names = [name for name in train_assets.names if name in test_assets.names]
         if set(train_assets.names) != set(names):
-            # Reloading Train Assets to match Test Assets universe
-            train_assets = Assets(prices=prices,
-                                  start_date=train_start,
-                                  end_date=train_end,
-                                  asset_missing_threshold=asset_missing_threshold,
-                                  dates_missing_threshold=dates_missing_threshold,
-                                  names_to_keep=names,
-                                  name=train_name)
+            train_assets.keep_assets(assets_to_keep=list(names))
 
         if set(test_assets.names) != set(names):
-            # Reloading Test Assets to match Train Assets universe
-            test_assets = Assets(prices=prices,
-                                 start_date=test_start,
-                                 end_date=test_end,
-                                 asset_missing_threshold=asset_missing_threshold,
-                                 dates_missing_threshold=dates_missing_threshold,
-                                 names_to_keep=names,
-                                 name=test_name)
+            test_assets.keep_assets(assets_to_keep=list(names))
+
     if set(train_assets.names) != set(test_assets.names):
         raise ValueError(f'Unable to generate train and test period with identical asset names')
 
