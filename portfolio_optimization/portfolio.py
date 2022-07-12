@@ -2,6 +2,7 @@ import numpy as np
 import uuid
 import pandas as pd
 from typing import Optional
+import plotly.express as px
 
 from portfolio_optimization.meta import *
 from portfolio_optimization.assets import *
@@ -153,8 +154,6 @@ class BasePortfolio:
     def cvar_95_ratio(self):
         return self.annualized_mean / self.cvar_95
 
-
-
     @property
     def fitness(self):
         """
@@ -240,6 +239,22 @@ class BasePortfolio:
             yaxis_title='Sharpe Ratio'
         )
         fig.show()
+
+    @property
+    def composition(self) -> pd.DataFrame:
+        """Implemented in Portfolio and MultiPeriodPortfolio"""
+        return pd.DataFrame()
+
+    def plot_composition(self):
+        df = self.composition.T
+        if len(df.index) == 1:
+            df.index = ['Portfolio']
+        fig = px.bar(df, x=df.index, y=df.columns)
+        fig.update_layout(title='Portfolio Composition',
+                          xaxis_title='Assets',
+                          yaxis_title='Weight')
+        fig.show()
+
 
 class Portfolio(BasePortfolio):
 
@@ -364,7 +379,7 @@ class MultiPeriodPortfolio(BasePortfolio):
     def composition(self):
         df = pd.concat([portfolio.composition for portfolio in self.portfolios], axis=1)
         df.fillna(0, inplace=True)
-        df.columns = [f'weight_{portfolio.assets.start_date}_{portfolio.assets.end_date}'
+        df.columns = [f'portfolio_{portfolio.assets.start_date}_{portfolio.assets.end_date}'
                       for portfolio in self.portfolios]
         return df
 
