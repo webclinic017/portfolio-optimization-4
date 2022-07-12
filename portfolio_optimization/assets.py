@@ -48,6 +48,8 @@ class Assets:
         self.end_date = end_date
         self.prices = prices.loc[start_date:end_date].copy()
 
+        self._info(f'Loading Assets from {start_date} to {end_date}')
+
         if names_to_keep is not None:
             self.prices = self.prices[names_to_keep]
 
@@ -186,8 +188,8 @@ class Assets:
         return self._corr
 
     @property
-    def dates(self):
-        return [date.date() for date in self.prices.index]
+    def dates(self) -> np.array:
+        return np.array([date.date() for date in self.prices.index])
 
     @property
     def asset_nb(self):

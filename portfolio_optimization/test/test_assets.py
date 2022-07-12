@@ -1,10 +1,11 @@
 import datetime as dt
 import numpy as np
 
-from portfolio_optimization.assets import *
-from portfolio_optimization.utils.assets import *
-from portfolio_optimization.paths import *
-from portfolio_optimization.bloomberg.loader import *
+from portfolio_optimization import (Assets,
+                                    load_prices,
+                                    load_assets,
+                                    load_train_test_assets,
+                                    TEST_PRICES_PATH)
 
 
 def test_assets_class():
@@ -44,8 +45,9 @@ def test_load_assets():
                          start_date=dt.date(2018, 1, 1),
                          end_date=dt.date(2019, 1, 1),
                          random_selection=random_selection,
-                         correlation_threshold_removal=correlation_threshold,
+                         removal_correlation=correlation_threshold,
                          pre_selection_number=pre_selection_number,
+                         pre_selection_correlation=0,
                          verbose=False)
     for i in range(assets.asset_nb):
         for j in range(assets.asset_nb):
@@ -65,6 +67,7 @@ def test_load_train_test_assets():
                                                        test_period=test_period,
                                                        random_selection=15,
                                                        pre_selection_number=10,
+                                                       pre_selection_correlation=0,
                                                        verbose=False)
 
     assert set(train_assets.names) == set(test_assets.names)

@@ -49,6 +49,9 @@ def test_portfolio_metrics():
     portfolio.reset_metrics()
     assert portfolio._mean is None
     assert portfolio._std is None
+    portfolio.plot_returns()
+    portfolio.plot_prices_compounded()
+    portfolio.plot_prices_uncompounded()
     portfolio.plot_rolling_sharpe(days=20)
 
 
@@ -56,7 +59,7 @@ def test_portfolio_dominate():
     prices = load_prices(file=TEST_PRICES_PATH)
 
     start_date = dt.date(2017, 1, 1)
-    assets = Assets(prices=prices,  start_date=start_date)
+    assets = Assets(prices=prices, start_date=start_date)
 
     for _ in range(1000):
         weights_1 = rand_weights(n=assets.asset_nb)

@@ -4,8 +4,8 @@ from portfolio_optimization.meta import *
 from portfolio_optimization.paths import *
 from portfolio_optimization.portfolio import *
 from portfolio_optimization.population import *
-from portfolio_optimization.optimization.mean_variance import *
-from portfolio_optimization.optimization.mean_cvar import *
+from portfolio_optimization.optimization.variance import *
+from portfolio_optimization.optimization.cvar import *
 from portfolio_optimization.utils.assets import *
 from portfolio_optimization.bloomberg.loader import *
 
@@ -20,7 +20,8 @@ def mean_variance_vs_mean_cvar():
                          start_date=dt.date(2018, 1, 1),
                          end_date=dt.date(2019, 1, 1),
                          random_selection=200,
-                         pre_selection_number=100)
+                         pre_selection_number=100,
+                         pre_selection_correlation=0)
 
     population = Population()
 

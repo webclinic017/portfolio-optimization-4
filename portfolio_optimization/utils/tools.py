@@ -1,3 +1,4 @@
+import datetime as dt
 from typing import Union, Optional
 import numpy as np
 
@@ -10,7 +11,8 @@ __all__ = ['dominate',
            'rand_weights',
            'rand_weights_dirichlet',
            'get_lower_and_upper_bounds',
-           'get_investment_target']
+           'get_investment_target',
+           'walk_forward']
 
 
 def dominate(fitness_1: np.array, fitness_2: np.array) -> bool:
@@ -90,3 +92,37 @@ def get_investment_target(investment_type: InvestmentType) -> Optional[int]:
         return 1
     elif investment_type == InvestmentType.MARKET_NEUTRAL:
         return 0
+
+
+def walk_forward(start_date: dt.date,
+                 end_date: dt.date,
+                 train_duration: int,
+                 test_duration: int,
+                 full_period: bool = True) -> tuple[tuple[dt.date, dt.date], tuple[dt.date, dt.date]]:
+    """
+    Yield train and test periods in a walk forward manner.
+
+    The proprieties are:
+        * The test periods are not overlapping
+        * The test periods are directly following the train periods
+
+    Example:
+        0 --> Train
+        1 -- Test
+
+        00000111------
+        ---00000111---
+        ------00000111
+    """
+    train_start = start_date
+    while True:
+        train_end = train_start + dt.timedelta(days=train_duration)
+        test_start = train_end
+        test_end = test_start + dt.timedelta(days=test_duration)
+        if test_end > end_date:
+            if full_period or test_start >= end_date:
+                return
+            else:
+                test_end = end_date
+        yield (train_start, train_end), (test_start, test_end)
+        train_start = train_start + dt.timedelta(days=test_duration)

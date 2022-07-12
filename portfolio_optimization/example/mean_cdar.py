@@ -1,14 +1,12 @@
 import datetime as dt
 
-from portfolio_optimization.meta import *
-from portfolio_optimization.paths import *
-from portfolio_optimization.portfolio import *
-from portfolio_optimization.population import *
-from portfolio_optimization.optimization.mean_variance import *
-from portfolio_optimization.optimization.mean_cdar import *
-from portfolio_optimization.optimization.mean_cvar import *
-from portfolio_optimization.utils.assets import *
-from portfolio_optimization.bloomberg.loader import *
+from portfolio_optimization.meta import FitnessType, InvestmentType, Metrics
+from portfolio_optimization.paths import EXAMPLE_PRICES_PATH
+from portfolio_optimization.portfolio import Portfolio
+from portfolio_optimization.population import Population
+from portfolio_optimization.optimization import mean_variance, mean_cdar, mean_cvar
+from portfolio_optimization.utils.assets import load_assets
+from portfolio_optimization.bloomberg.loader import load_prices
 
 
 def mean_variance_vs_mean_cdar():
@@ -21,7 +19,8 @@ def mean_variance_vs_mean_cdar():
                          start_date=dt.date(2018, 1, 1),
                          end_date=dt.date(2019, 1, 1),
                          random_selection=200,
-                         pre_selection_number=100)
+                         pre_selection_number=100,
+                         pre_selection_correlation=0)
 
     population = Population()
 
@@ -89,7 +88,8 @@ def mean_cdar_vs_mean_cvar():
                          start_date=dt.date(2018, 1, 1),
                          end_date=dt.date(2019, 1, 1),
                          random_selection=200,
-                         pre_selection_number=100)
+                         pre_selection_number=100,
+                         pre_selection_correlation=0)
 
     population = Population()
 

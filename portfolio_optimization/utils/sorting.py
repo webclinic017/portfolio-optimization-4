@@ -1,6 +1,6 @@
 import numpy as np
 
-from portfolio_optimization.portfolio import Portfolio
+from portfolio_optimization.portfolio import *
 
 __all__ = ['fast_nondominated_sorting']
 
