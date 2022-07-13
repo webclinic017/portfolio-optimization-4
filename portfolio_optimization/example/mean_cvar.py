@@ -6,7 +6,7 @@ from portfolio_optimization.portfolio import *
 from portfolio_optimization.population import *
 from portfolio_optimization.optimization.variance import *
 from portfolio_optimization.optimization.cvar import *
-from portfolio_optimization.utils.assets import *
+from portfolio_optimization.loader import *
 from portfolio_optimization.bloomberg.loader import *
 
 
@@ -34,8 +34,7 @@ def mean_variance_vs_mean_cvar():
     for i, weights in enumerate(portfolios_weights):
         population.add(Portfolio(weights=weights,
                                  assets=assets,
-                                 pid=f'mean_variance_{i}',
-                                 name=str(i),
+                                 name=f'mean_variance_{i}',
                                  tag='mean_variance'))
 
     # Efficient Frontier -- Mean CVaR
@@ -49,8 +48,7 @@ def mean_variance_vs_mean_cvar():
         population.add(Portfolio(weights=weights,
                                  fitness_type=FitnessType.MEAN_STD,
                                  assets=assets,
-                                 pid=f'mean_cvar_{i}',
-                                 name=str(i),
+                                 name=f'mean_cvar_{i}',
                                  tag='mean_cvar'))
 
     # Plot
@@ -69,4 +67,4 @@ def mean_variance_vs_mean_cvar():
     print(max_cvar_95_ratio.cvar_95_ratio)
 
     # Composition
-    population.plot_composition(pids=[max_sharpe.pid, max_cvar_95_ratio.pid])
+    population.plot_composition(names=[max_sharpe.name, max_cvar_95_ratio.name])

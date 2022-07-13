@@ -6,19 +6,24 @@ from portfolio_optimization.assets import *
 from portfolio_optimization.portfolio import *
 from portfolio_optimization.population import *
 from portfolio_optimization.paths import *
-from portfolio_optimization.bloomberg.loader import *
+from portfolio_optimization.bloomberg import *
 
 
 def test_population():
     prices = load_prices(file=TEST_PRICES_PATH)
 
     start_date = dt.date(2017, 1, 1)
-    assets = Assets(prices=prices, start_date=start_date)
+    assets = Assets(prices=prices,
+                    start_date=start_date,
+                    verbose=False)
     # Create a population of portfolios with 3 objectives
     population = Population()
-    for _ in range(100):
+    for i in range(100):
         weights = rand_weights(n=assets.asset_nb, zeros=assets.asset_nb - 10)
-        portfolio = Portfolio(weights=weights, fitness_type=FitnessType.MEAN_DOWNSIDE_STD_MAX_DRAWDOWN, assets=assets)
+        portfolio = Portfolio(weights=weights,
+                              fitness_type=FitnessType.MEAN_DOWNSIDE_STD_MAX_DRAWDOWN,
+                              assets=assets,
+                              name=f'portfolio_{i}')
         population.add(portfolio)
 
     # test non-dominated sorting into fronts
@@ -36,23 +41,50 @@ def test_population():
         assert dominates
 
     # test plots
-    population.plot(x=Metrics.ANNUALIZED_DOWNSIDE_STD, y=Metrics.ANNUALIZED_MEAN, z=Metrics.MAX_DRAWDOWN, fronts=True)
+    population.plot(x=Metrics.ANNUALIZED_DOWNSIDE_STD,
+                    y=Metrics.ANNUALIZED_MEAN,
+                    z=Metrics.MAX_DRAWDOWN,
+                    fronts=True)
 
     # Create a population of portfolios with 2 objectives
     population = Population()
     for i in range(10):
         weights = rand_weights(n=assets.asset_nb, zeros=assets.asset_nb - 10)
-        portfolio = Portfolio(pid=str(i), weights=weights, fitness_type=FitnessType.MEAN_STD, assets=assets)
+        portfolio = Portfolio(weights=weights,
+                              fitness_type=FitnessType.MEAN_STD,
+                              assets=assets,
+                              name=f'portfolio_{i}')
         population.add(portfolio)
 
-    population.plot(x=Metrics.ANNUALIZED_STD, y=Metrics.ANNUALIZED_MEAN, fronts=True)
+    # Add the multi period portfolio
+    periods = [(dt.date(2018, 1, 1), dt.date(2018, 3, 1)),
+               (dt.date(2018, 3, 15), dt.date(2018, 5, 1)),
+               (dt.date(2018, 5, 1), dt.date(2018, 8, 1))]
+
+    mpp = MultiPeriodPortfolio(name='mmp')
+    for i, period in enumerate(periods):
+        assets = Assets(prices=prices,
+                        start_date=period[0],
+                        end_date=period[1],
+                        verbose=False)
+        weights = rand_weights(n=assets.asset_nb, zeros=assets.asset_nb - 5)
+        portfolio = Portfolio(weights=weights,
+                              assets=assets,
+                              name=f'portfolio_period_{i}')
+        population.add(portfolio)
+        mpp.add(portfolio)
+    population.add(mpp)
+
+    population.plot(x=Metrics.ANNUALIZED_STD,
+                    y=Metrics.ANNUALIZED_MEAN,
+                    fronts=True)
 
     assert (population.min(metric=Metrics.ANNUALIZED_MEAN).annualized_mean
             <= population.max(metric=Metrics.ANNUALIZED_MEAN).annualized_mean)
 
     # get
-    assert population.get(pid='2') == population.iloc(2)
+    assert population.get(name='portfolio_2') == population.iloc(2)
 
     # composition
-    population.composition()
+    print(population.composition())
     population.plot_composition()

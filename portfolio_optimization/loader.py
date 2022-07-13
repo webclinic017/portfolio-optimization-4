@@ -4,8 +4,8 @@ import datetime as dt
 import numpy as np
 import pandas as pd
 
-from portfolio_optimization.assets import *
 from portfolio_optimization.meta import *
+from portfolio_optimization.assets import *
 from portfolio_optimization.population import *
 from portfolio_optimization.portfolio import *
 
@@ -13,7 +13,7 @@ __all__ = ['pre_selection',
            'load_train_test_assets',
            'load_assets']
 
-logger = logging.getLogger('portfolio_optimization.utils.assets')
+logger = logging.getLogger('portfolio_optimization.loader')
 
 
 def pre_selection(assets: Assets,

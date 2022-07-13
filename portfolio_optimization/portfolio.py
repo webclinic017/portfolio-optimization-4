@@ -18,9 +18,8 @@ class BasePortfolio:
     def __init__(self,
                  returns: np.array,
                  dates: np.array,
-                 pid: Optional[str] = None,
+                 name: Optional[str] = None,
                  tag: str = 'portfolio',
-                 name: str = '',
                  fitness_type: FitnessType = FitnessType.MEAN_STD):
 
         if len(returns) != len(dates):
@@ -30,12 +29,11 @@ class BasePortfolio:
         self.fitness_type = fitness_type
 
         # Ids
-        if pid is None:
-            self.pid = str(uuid.uuid4())
+        if name is None:
+            self.name = str(uuid.uuid4())
         else:
-            self.pid = pid
+            self.name = name
         self.tag = tag
-        self.name = name
 
         # Prices
         self._prices_compounded = None
@@ -198,29 +196,26 @@ class BasePortfolio:
 
     def plot_prices_compounded(self, idx=slice(None)):
         fig = self.prices_compounded_df.iloc[idx].plot()
-        fig.update_layout(
-            title='Prices Compounded',
-            xaxis_title='Dates',
-            yaxis_title='Prices'
-        )
+        fig.update_layout(title='Prices Compounded',
+                          xaxis_title='Dates',
+                          yaxis_title='Prices',
+                          showlegend=False)
         fig.show()
 
     def plot_prices_uncompounded(self, idx=slice(None)):
         fig = self.prices_uncompounded_df.iloc[idx].plot()
-        fig.update_layout(
-            title='Prices Uncompounded',
-            xaxis_title='Dates',
-            yaxis_title='Prices'
-        )
+        fig.update_layout(title='Prices Uncompounded',
+                          xaxis_title='Dates',
+                          yaxis_title='Prices',
+                          showlegend=False)
         fig.show()
 
     def plot_returns(self, idx=slice(None)):
         fig = self.returns_df.iloc[idx].plot()
-        fig.update_layout(
-            title='Returns',
-            xaxis_title='Dates',
-            yaxis_title='Returns'
-        )
+        fig.update_layout(title='Returns',
+                          xaxis_title='Dates',
+                          yaxis_title='Returns',
+                          showlegend=False)
         fig.show()
 
     def plot_rolling_sharpe(self, days: int = 30):
@@ -233,11 +228,10 @@ class BasePortfolio:
         fig.add_hrect(y0=0, y1=rolling_sharpe.max() * 1.3, line_width=0, fillcolor='green', opacity=0.1)
         fig.add_hrect(y0=rolling_sharpe.min() * 1.3, y1=0, line_width=0, fillcolor='red', opacity=0.1)
 
-        fig.update_layout(
-            title=f'Rolling Sharpe - {days} days',
-            xaxis_title='Dates',
-            yaxis_title='Sharpe Ratio'
-        )
+        fig.update_layout(title=f'Rolling Sharpe - {days} days',
+                          xaxis_title='Dates',
+                          yaxis_title='Sharpe Ratio',
+                          showlegend=False)
         fig.show()
 
     @property
@@ -247,12 +241,11 @@ class BasePortfolio:
 
     def plot_composition(self):
         df = self.composition.T
-        if len(df.index) == 1:
-            df.index = ['Portfolio']
         fig = px.bar(df, x=df.index, y=df.columns)
         fig.update_layout(title='Portfolio Composition',
-                          xaxis_title='Assets',
-                          yaxis_title='Weight')
+                          xaxis_title='Portfolio',
+                          yaxis_title='Weight',
+                          legend_title_text='Assets')
         fig.show()
 
 
@@ -261,9 +254,8 @@ class Portfolio(BasePortfolio):
     def __init__(self,
                  weights: np.ndarray,
                  assets: Assets,
-                 pid: Optional[str] = None,
+                 name: Optional[str] = None,
                  tag: str = 'ptf',
-                 name: str = '',
                  fitness_type: FitnessType = FitnessType.MEAN_STD):
 
         # Sanity checks
@@ -280,9 +272,8 @@ class Portfolio(BasePortfolio):
 
         super().__init__(returns=returns,
                          dates=assets.dates[1:],
-                         pid=pid,
-                         tag=tag,
                          name=name,
+                         tag=tag,
                          fitness_type=fitness_type)
 
     @property
@@ -317,9 +308,10 @@ class Portfolio(BasePortfolio):
     @property
     def composition(self):
         weights = self.weights[self.assets_index]
-        df = pd.DataFrame({'name': self.assets_names, 'weight': weights})
+        df = pd.DataFrame({'asset': self.assets_names, 'weight': weights})
         df.sort_values(by='weight', ascending=False, inplace=True)
-        df.set_index('name', inplace=True)
+        df.rename(columns={'weight': self.name}, inplace=True)
+        df.set_index('asset', inplace=True)
         return df
 
     @property
@@ -327,7 +319,7 @@ class Portfolio(BasePortfolio):
         return np.count_nonzero(abs(self.weights) > ZERO_THRESHOLD)
 
     def __str__(self):
-        return f'Portfolio < {self.pid} - {self.name} - {self.tag} - {len(self.assets_names)} assets>'
+        return f'Portfolio < {self.name} >'
 
     def __repr__(self):
         return str(self)
@@ -337,15 +329,13 @@ class MultiPeriodPortfolio(BasePortfolio):
 
     def __init__(self,
                  portfolios: Optional[list[Portfolio]] = None,
-                 pid: Optional[str] = None,
+                 name: Optional[str] = None,
                  tag: str = 'multi-period-portfolio',
-                 name: str = '',
                  fitness_type: FitnessType = FitnessType.MEAN_STD):
         super().__init__(returns=np.array([]),
                          dates=np.array([]),
-                         pid=pid,
-                         tag=tag,
                          name=name,
+                         tag=tag,
                          fitness_type=fitness_type)
 
         # Ensure that Portfolios dates do not overlap
@@ -379,8 +369,8 @@ class MultiPeriodPortfolio(BasePortfolio):
     def composition(self):
         df = pd.concat([portfolio.composition for portfolio in self.portfolios], axis=1)
         df.fillna(0, inplace=True)
-        df.columns = [f'portfolio_{portfolio.assets.start_date}_{portfolio.assets.end_date}'
-                      for portfolio in self.portfolios]
+        # df.columns = [f'portfolio_{portfolio.assets.start_date}_{portfolio.assets.end_date}'
+        #               for portfolio in self.portfolios]
         return df
 
     @property
@@ -388,7 +378,7 @@ class MultiPeriodPortfolio(BasePortfolio):
         return [portfolio.length for portfolio in self.portfolios]
 
     def __str__(self):
-        return f'MultiPeriodPortfolio <{self.pid} - {self.name} - {self.tag}>'
+        return f'MultiPeriodPortfolio < {self.name} >'
 
     def __repr__(self):
         return str(self)

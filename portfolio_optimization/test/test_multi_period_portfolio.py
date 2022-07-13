@@ -13,7 +13,7 @@ from portfolio_optimization.bloomberg import *
 def test_multi_period_portfolio():
     prices = load_prices(file=TEST_PRICES_PATH)
 
-    N = 10
+    n = 10
     periods = [(dt.date(2018, 1, 1), dt.date(2018, 3, 1)),
                (dt.date(2018, 3, 15), dt.date(2018, 5, 1)),
                (dt.date(2018, 5, 1), dt.date(2018, 8, 1))]
@@ -21,9 +21,14 @@ def test_multi_period_portfolio():
     mpp = MultiPeriodPortfolio()
     returns = np.array([])
     for i, period in enumerate(periods):
-        assets = Assets(prices=prices, start_date=period[0], end_date=period[1], verbose=False)
-        weights = rand_weights(n=assets.asset_nb, zeros=assets.asset_nb - N)
-        portfolio = Portfolio(weights=weights, assets=assets, pid=str(i))
+        assets = Assets(prices=prices,
+                        start_date=period[0],
+                        end_date=period[1],
+                        verbose=False)
+        weights = rand_weights(n=assets.asset_nb, zeros=assets.asset_nb - n)
+        portfolio = Portfolio(weights=weights,
+                              assets=assets,
+                              name=f'portfolio_{i}')
         mpp.add(portfolio)
         returns = np.concatenate([returns, portfolio_returns(assets.returns, weights)])
 
@@ -57,4 +62,6 @@ def test_multi_period_portfolio():
     mpp.plot_prices_compounded()
     mpp.plot_prices_uncompounded()
     mpp.plot_rolling_sharpe(days=20)
+    print(mpp.composition)
+    mpp.plot_composition()
 

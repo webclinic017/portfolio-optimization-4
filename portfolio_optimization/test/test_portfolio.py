@@ -14,10 +14,14 @@ def test_portfolio_metrics():
     prices = load_prices(file=TEST_PRICES_PATH)
 
     start_date = dt.date(2017, 1, 1)
-    assets = Assets(prices=prices, start_date=start_date)
-    N = 10
-    weights = rand_weights(n=assets.asset_nb, zeros=assets.asset_nb - N)
-    portfolio = Portfolio(weights=weights, fitness_type=FitnessType.MEAN_STD, assets=assets)
+    assets = Assets(prices=prices,
+                    start_date=start_date,
+                    verbose=False)
+    n = 10
+    weights = rand_weights(n=assets.asset_nb, zeros=assets.asset_nb - n)
+    portfolio = Portfolio(weights=weights,
+                          assets=assets,
+                          name='portfolio_1')
 
     returns = portfolio_returns(assets.returns, weights)
 
@@ -35,9 +39,9 @@ def test_portfolio_metrics():
     portfolio.reset_fitness(fitness_type=FitnessType.MEAN_DOWNSIDE_STD_MAX_DRAWDOWN)
     assert np.array_equal(portfolio.fitness,
                           np.array([portfolio.mean, -portfolio.downside_std, -portfolio.max_drawdown]))
-    assert len(portfolio.assets_index) == N
-    assert len(portfolio.assets_names) == N
-    assert len(portfolio.composition) == N
+    assert len(portfolio.assets_index) == n
+    assert len(portfolio.assets_names) == n
+    assert len(portfolio.composition) == n
     idx = np.nonzero(weights)[0]
     assert np.array_equal(portfolio.assets_index, idx)
     names_1 = np.array(assets.prices.columns[idx])
@@ -53,13 +57,17 @@ def test_portfolio_metrics():
     portfolio.plot_prices_compounded()
     portfolio.plot_prices_uncompounded()
     portfolio.plot_rolling_sharpe(days=20)
+    print(portfolio.composition)
+    portfolio.plot_composition()
 
 
 def test_portfolio_dominate():
     prices = load_prices(file=TEST_PRICES_PATH)
 
     start_date = dt.date(2017, 1, 1)
-    assets = Assets(prices=prices, start_date=start_date)
+    assets = Assets(prices=prices,
+                    start_date=start_date,
+                    verbose=False)
 
     for _ in range(1000):
         weights_1 = rand_weights(n=assets.asset_nb)

@@ -7,7 +7,7 @@ from portfolio_optimization.portfolio import *
 from portfolio_optimization.population import *
 from portfolio_optimization.utils.tools import *
 from portfolio_optimization.optimization.variance import *
-from portfolio_optimization.utils.assets import *
+from portfolio_optimization.loader import *
 from portfolio_optimization.bloomberg.loader import *
 
 if __name__ == '__main__':
@@ -53,7 +53,6 @@ if __name__ == '__main__':
         population.add(Portfolio(weights=weights,
                                  fitness_type=FitnessType.MEAN_STD,
                                  assets=assets,
-                                 name=str(i),
                                  tag='mean_variance'))
 
     population.plot(x=Metrics.ANNUALIZED_STD, y=Metrics.ANNUALIZED_MEAN, color_scale=Metrics.SHARPE_RATIO)

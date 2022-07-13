@@ -5,7 +5,7 @@ from portfolio_optimization.paths import *
 from portfolio_optimization.portfolio import *
 from portfolio_optimization.population import *
 from portfolio_optimization.optimization.variance import *
-from portfolio_optimization.utils.assets import *
+from portfolio_optimization.loader import *
 from portfolio_optimization.bloomberg.loader import *
 
 if __name__ == '__main__':
@@ -35,8 +35,7 @@ if __name__ == '__main__':
             population.add(Portfolio(weights=weights,
                                      fitness_type=FitnessType.MEAN_STD,
                                      assets=assets,
-                                     pid=f'train_{assets.name}_{i}',
-                                     name=str(i),
+                                     name=f'train_{assets.name}_{i}',
                                      tag=f'train_{assets.name}'))
 
     # Test the portfolios on the test period
@@ -44,8 +43,7 @@ if __name__ == '__main__':
         population.add(Portfolio(weights=portfolio.weights,
                                  fitness_type=FitnessType.MEAN_STD,
                                  assets=assets_test,
-                                 pid=f'test_{assets.name}_{portfolio.name}',
-                                 name=portfolio.name,
+                                 name=f'test_{assets.name}_{portfolio.name}',
                                  tag=f'test_{assets_test.name}'))
 
     # Plot

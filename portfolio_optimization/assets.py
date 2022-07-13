@@ -205,6 +205,10 @@ class Assets:
 
     def plot(self, idx=slice(None)):
         fig = self.cum_returns.iloc[:, idx].plot(title='Prices')
+        fig.update_layout(title='Prices',
+                          xaxis_title='Dates',
+                          yaxis_title='Prices',
+                          legend_title_text='Assets')
         fig.show()
 
     def _info(self, msg: str):

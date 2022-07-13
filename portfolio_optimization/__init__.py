@@ -7,6 +7,8 @@ from .portfolio import *
 from .population import *
 from .paths import *
 from .meta import *
+from .exception import *
+from.loader import *
 
 __all__ = optimization.__all__
 __all__ += bloomberg.__all__
@@ -16,6 +18,8 @@ __all__ += portfolio.__all__
 __all__ += population.__all__
 __all__ += paths.__all__
 __all__ += meta.__all__
+__all__ += exception.__all__
+__all__ += loader.__all__
 
 
 class CustomFormatter(logging.Formatter):

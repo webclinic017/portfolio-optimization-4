@@ -2,7 +2,7 @@ from typing import Union, Optional
 import pandas as pd
 import plotly.express as px
 
-from portfolio_optimization.meta import Metrics
+from portfolio_optimization.meta import *
 from portfolio_optimization.portfolio import *
 from portfolio_optimization.utils.sorting import *
 
@@ -10,11 +10,11 @@ __all__ = ['Population']
 
 
 class Population:
-    def __init__(self, portfolios: list[Portfolio] = None):
+    def __init__(self, portfolios: list[Union[Portfolio, MultiPeriodPortfolio]] = None):
         if portfolios is None:
             portfolios = []
         self.portfolios = portfolios
-        self.hashmap = {p.pid: p for p in self.portfolios}
+        self.hashmap = {p.name: p for p in self.portfolios}
         self._fronts = None
 
     def non_denominated_sort(self, first_front_only: bool = False) -> list[list[int]]:
@@ -31,26 +31,26 @@ class Population:
         return len(self.portfolios)
 
     def add(self, portfolio: Portfolio):
-        if portfolio.pid in self.hashmap.keys():
-            raise KeyError(f'portfolio id {portfolio.pid} is already in the population')
+        if portfolio.name in self.hashmap.keys():
+            raise KeyError(f'portfolio id {portfolio.name} is already in the population')
         self.portfolios.append(portfolio)
-        self.hashmap[portfolio.pid] = portfolio
+        self.hashmap[portfolio.name] = portfolio
 
-    def get(self, pid: str) -> Portfolio:
-        return self.hashmap[pid]
+    def get(self, name: str) -> Portfolio:
+        return self.hashmap[name]
 
     def iloc(self, i: int) -> Portfolio:
         return self.portfolios[i]
 
     def get_portfolios(self,
-                       pids: Optional[Union[str, list[str]]] = None,
+                       names: Optional[Union[str, list[str]]] = None,
                        tags: Optional[Union[str, list[str]]] = None) -> list[Portfolio]:
-        if tags is None and pids is None:
+        if tags is None and names is None:
             return self.portfolios
-        if pids is not None:
-            if isinstance(pids, str):
-                pids = [pids]
-            return [self.get(pid) for pid in pids]
+        if names is not None:
+            if isinstance(names, str):
+                names = [names]
+            return [self.get(name) for name in names]
         if tags is not None:
             if isinstance(tags, str):
                 tags = [tags]
@@ -59,53 +59,57 @@ class Population:
     def sort(self,
              metric: Metrics,
              reverse: bool = False,
-             pids: Union[str, list[str]] = None,
+             names: Union[str, list[str]] = None,
              tags: Union[str, list[str]] = None) -> list[Portfolio]:
-        portfolios = self.get_portfolios(pids=pids, tags=tags)
+        portfolios = self.get_portfolios(names=names, tags=tags)
         return sorted(portfolios, key=lambda x: x.__getattribute__(metric.value), reverse=reverse)
 
     def k_min(self, metric: Metrics,
               k: int,
-              pids: Union[str, list[str]] = None,
+              names: Union[str, list[str]] = None,
               tags: Union[str, list[str]] = None) -> list[Portfolio]:
-        return self.sort(metric=metric, reverse=False, pids=pids, tags=tags)[:k]
+        return self.sort(metric=metric, reverse=False, names=names, tags=tags)[:k]
 
     def k_max(self,
               metric: Metrics,
               k: int,
-              pids: Union[str, list[str]] = None,
+              names: Union[str, list[str]] = None,
               tags: Union[str, list[str]] = None) -> list[Portfolio]:
-        return self.sort(metric=metric, reverse=True, pids=pids, tags=tags)[:k]
+        return self.sort(metric=metric, reverse=True, names=names, tags=tags)[:k]
 
     def min(self,
             metric: Metrics,
-            pids: Union[str, list[str]] = None,
+            names: Union[str, list[str]] = None,
             tags: Union[str, list[str]] = None) -> Portfolio:
-        return self.sort(metric=metric, reverse=False, pids=pids, tags=tags)[0]
+        return self.sort(metric=metric, reverse=False, names=names, tags=tags)[0]
 
     def max(self,
             metric: Metrics,
-            pids: Union[str, list[str]] = None,
+            names: Union[str, list[str]] = None,
             tags: Union[str, list[str]] = None) -> Portfolio:
-        return self.sort(metric=metric, reverse=True, pids=pids, tags=tags)[0]
+        return self.sort(metric=metric, reverse=True, names=names, tags=tags)[0]
 
     def composition(self,
-                    pids: Union[str, list[str]] = None,
+                    names: Union[str, list[str]] = None,
                     tags: Union[str, list[str]] = None) -> pd.DataFrame:
-        portfolios = self.get_portfolios(pids=pids, tags=tags)
-        res = []
-        idx = []
+        portfolios = self.get_portfolios(names=names, tags=tags)
+        comp_list = []
         for p in portfolios:
-            res.append(p.composition.to_dict()['weight'])
-            idx.append(p.pid)
-        df = pd.DataFrame(res, index=idx)
+            if isinstance(p, MultiPeriodPortfolio):
+                comp = p.composition
+                comp.rename(columns={c: f'{p.name}_{c}' for c in comp.columns}, inplace=True)
+                comp_list.append(comp)
+            else:
+                comp_list.append(p.composition)
+
+        df = pd.concat(comp_list, axis=1)
         df.fillna(0, inplace=True)
         return df
 
     def plot_composition(self,
-                         pids: Union[str, list[str]] = None,
+                         names: Union[str, list[str]] = None,
                          tags: Union[str, list[str]] = None):
-        df = self.composition(pids=pids, tags=tags)
+        df = self.composition(names=names, tags=tags).T
         fig = px.bar(df, x=df.index, y=df.columns, title='Portfolios Composition')
         fig.show()
 
@@ -115,9 +119,9 @@ class Population:
              z: Metrics = None,
              fronts: bool = False,
              color_scale: Union[Metrics, str] = None,
-             pids: Union[str, list[str]] = None,
+             names: Union[str, list[str]] = None,
              tags: Union[str, list[str]] = None):
-        portfolios = self.get_portfolios(pids=pids, tags=tags)
+        portfolios = self.get_portfolios(names=names, tags=tags)
         columns = [x.value, y.value, 'tag']
         if z is not None:
             columns.append(z.value)
