@@ -30,21 +30,21 @@ class Population:
     def length(self) -> int:
         return len(self.portfolios)
 
-    def add(self, portfolio: Portfolio):
+    def add(self, portfolio: Union[Portfolio, MultiPeriodPortfolio]):
         if portfolio.name in self.hashmap.keys():
             raise KeyError(f'portfolio id {portfolio.name} is already in the population')
         self.portfolios.append(portfolio)
         self.hashmap[portfolio.name] = portfolio
 
-    def get(self, name: str) -> Portfolio:
+    def get(self, name: str) -> Union[Portfolio, MultiPeriodPortfolio]:
         return self.hashmap[name]
 
-    def iloc(self, i: int) -> Portfolio:
+    def iloc(self, i: int) -> Union[Portfolio, MultiPeriodPortfolio]:
         return self.portfolios[i]
 
     def get_portfolios(self,
                        names: Optional[Union[str, list[str]]] = None,
-                       tags: Optional[Union[str, list[str]]] = None) -> list[Portfolio]:
+                       tags: Optional[Union[str, list[str]]] = None) -> list[Union[Portfolio, MultiPeriodPortfolio]]:
         if tags is None and names is None:
             return self.portfolios
         if names is not None:
@@ -60,33 +60,33 @@ class Population:
              metric: Metrics,
              reverse: bool = False,
              names: Union[str, list[str]] = None,
-             tags: Union[str, list[str]] = None) -> list[Portfolio]:
+             tags: Union[str, list[str]] = None) -> list[Union[Portfolio, MultiPeriodPortfolio]]:
         portfolios = self.get_portfolios(names=names, tags=tags)
         return sorted(portfolios, key=lambda x: x.__getattribute__(metric.value), reverse=reverse)
 
     def k_min(self, metric: Metrics,
               k: int,
               names: Union[str, list[str]] = None,
-              tags: Union[str, list[str]] = None) -> list[Portfolio]:
+              tags: Union[str, list[str]] = None) -> list[Union[Portfolio, MultiPeriodPortfolio]]:
         return self.sort(metric=metric, reverse=False, names=names, tags=tags)[:k]
 
     def k_max(self,
               metric: Metrics,
               k: int,
               names: Union[str, list[str]] = None,
-              tags: Union[str, list[str]] = None) -> list[Portfolio]:
+              tags: Union[str, list[str]] = None) -> list[Union[Portfolio, MultiPeriodPortfolio]]:
         return self.sort(metric=metric, reverse=True, names=names, tags=tags)[:k]
 
     def min(self,
             metric: Metrics,
             names: Union[str, list[str]] = None,
-            tags: Union[str, list[str]] = None) -> Portfolio:
+            tags: Union[str, list[str]] = None) -> Union[Portfolio, MultiPeriodPortfolio]:
         return self.sort(metric=metric, reverse=False, names=names, tags=tags)[0]
 
     def max(self,
             metric: Metrics,
             names: Union[str, list[str]] = None,
-            tags: Union[str, list[str]] = None) -> Portfolio:
+            tags: Union[str, list[str]] = None) -> Union[Portfolio, MultiPeriodPortfolio]:
         return self.sort(metric=metric, reverse=True, names=names, tags=tags)[0]
 
     def composition(self,
