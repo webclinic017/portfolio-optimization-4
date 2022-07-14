@@ -1,8 +1,5 @@
 import datetime as dt
-from typing import Union, Optional
 import numpy as np
-
-from portfolio_optimization.meta import *
 
 __all__ = ['dominate',
            'dominate_slow',
@@ -10,8 +7,6 @@ __all__ = ['dominate',
            'portfolio_returns',
            'rand_weights',
            'rand_weights_dirichlet',
-           'get_lower_and_upper_bounds',
-           'get_investment_target',
            'walk_forward']
 
 
@@ -65,33 +60,6 @@ def rand_weights_dirichlet(n: int) -> np.array:
     Produces n random weights that sum to 1 with uniform distribution over the simplex
     """
     return np.random.dirichlet(np.ones(n))
-
-
-def get_lower_and_upper_bounds(
-        weight_bounds: Union[tuple[np.ndarray, np.ndarray], tuple[Optional[float], Optional[float]]],
-        assets_number: int) -> tuple[np.ndarray, np.ndarray]:
-    # Upper and lower bounds
-    lower_bounds, upper_bounds = weight_bounds
-    if lower_bounds is None:
-        lower_bounds = -1
-    if upper_bounds is None:
-        upper_bounds = 1
-    if np.isscalar(lower_bounds):
-        lower_bounds = np.array([lower_bounds] * assets_number)
-    if np.isscalar(upper_bounds):
-        upper_bounds = np.array([upper_bounds] * assets_number)
-
-    return lower_bounds, upper_bounds
-
-
-def get_investment_target(investment_type: InvestmentType) -> Optional[int]:
-    # Upper and lower bounds
-
-    # Sum of weights
-    if investment_type == InvestmentType.FULLY_INVESTED:
-        return 1
-    elif investment_type == InvestmentType.MARKET_NEUTRAL:
-        return 0
 
 
 def walk_forward(start_date: dt.date,

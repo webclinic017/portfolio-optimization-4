@@ -4,7 +4,7 @@ import numpy as np
 import cvxpy as cp
 
 from portfolio_optimization.meta import *
-from portfolio_optimization.utils import *
+from portfolio_optimization.optimization.helpers import *
 
 __all__ = ['mean_variance']
 
