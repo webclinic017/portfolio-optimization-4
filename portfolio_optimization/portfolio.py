@@ -22,11 +22,10 @@ class BasePortfolio:
                  tag: str = 'portfolio',
                  fitness_type: FitnessType = FitnessType.MEAN_STD):
 
-        if len(returns) != len(dates):
-            raise ValueError(f'returns and dates should be of same size : {len(returns)} vs {len(dates)}')
         self.returns = returns
         self.dates = dates
         self.fitness_type = fitness_type
+        self._sanity_check()
 
         # Ids
         if name is None:
@@ -47,6 +46,14 @@ class BasePortfolio:
         self._cdar_95 = None
         self._cvar_95 = None
         self._fitness = None
+
+    def _sanity_check(self):
+        if len(self.returns) != len(self.dates):
+            raise ValueError(f'returns and dates should be of same size : {len(self.returns)} vs {len(self.dates)}')
+        if not isinstance(self.returns, np.ndarray):
+            raise TypeError('returns should be of type numpy.ndarray')
+        if np.any(np.isnan(self.returns)):
+            raise TypeError('returns should not contain nan')
 
     @property
     def prices_compounded(self):
@@ -258,23 +265,30 @@ class Portfolio(BasePortfolio):
                  tag: str = 'ptf',
                  fitness_type: FitnessType = FitnessType.MEAN_STD):
 
-        # Sanity checks
-        if assets.asset_nb != len(weights):
-            raise ValueError(f'weights should be of size {assets.asset_nb}')
-        if not isinstance(weights, np.ndarray):
-            raise TypeError(f'weights should be of type numpy.ndarray')
-        if abs(weights.sum() - 1) > 1e-5:
-            raise TypeError(f'weights should sum to 1')
-
         self.assets = assets
         self.weights = weights
         returns = self.weights @ self.assets.returns
+        self._sanity_check()
 
         super().__init__(returns=returns,
                          dates=assets.dates[1:],
                          name=name,
                          tag=tag,
                          fitness_type=fitness_type)
+
+    def _sanity_check(self):
+        # Sanity checks
+        for name, value in [('weights', self.weights),
+                            ('assets.returns', self.assets.returns)]:
+            if not isinstance(value, np.ndarray):
+                raise TypeError(f'{name} should be of type numpy.ndarray')
+            if np.any(np.isnan(value)):
+                raise TypeError(f'{name} should not contain nan')
+
+        if self.assets.asset_nb != len(self.weights):
+            raise ValueError(f'weights should be of size {self.assets.asset_nb}')
+        if abs(self.weights.sum() - 1) > 1e-5:
+            raise TypeError(f'weights should sum to 1')
 
     @property
     def mean(self):

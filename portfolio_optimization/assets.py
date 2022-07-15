@@ -106,6 +106,12 @@ class Assets:
         self.prices.fillna(method='ffill', inplace=True)
         # Backward fill missing values to the start
         self.prices.fillna(method='bfill', inplace=True)
+        # Drop column if all its values are missing
+        self.prices.dropna(axis=1, how='all',  inplace=True)
+        # Check that no nan are left
+        if np.any(self.prices.isna()):
+            raise ValueError(f'nan found in prices')
+
 
     def _remove_highly_correlated_assets(self,
                                          correlation_threshold: Optional[float]):
