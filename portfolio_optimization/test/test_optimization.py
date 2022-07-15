@@ -12,11 +12,12 @@ from portfolio_optimization.bloomberg import *
 
 def test_mean_variance():
     prices = load_prices(file=EXAMPLE_PRICES_PATH)
-    prices=prices.iloc[:, :20].copy()
+    prices=prices.iloc[:, :100].copy()
 
     assets = load_assets(prices=prices,
-                         start_date=dt.date(2018, 1, 1),
-                         end_date=dt.date(2019, 1, 1),
+                         asset_missing_threshold=0.1,
+                         dates_missing_threshold=0.1,
+                         removal_correlation=0.99,
                          verbose=True)
 
     # Efficient Frontier -- Mean Variance
@@ -24,5 +25,14 @@ def test_mean_variance():
                                        cov=assets.cov,
                                        investment_type=InvestmentType.FULLY_INVESTED,
                                        weight_bounds=(0, None),
-                                       target_variance=0.02**2/360)
+                                       population_size=30)
+    population=Population()
+    for i, weights in enumerate(portfolios_weights):
+        population.add(Portfolio(weights=weights,
+                                 assets=assets,
+                                 name=f'portfolio_{i}',
+                                 tag='mean_variance'))
 
+    population.plot(x=Metrics.ANNUALIZED_STD,
+                    y=Metrics.ANNUALIZED_MEAN,
+                    hover_metrics=[Metrics.SHARPE_RATIO])

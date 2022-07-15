@@ -180,15 +180,27 @@ class Population:
              x: Metrics,
              y: Metrics,
              z: Metrics = None,
+             hover_metrics: list[Metrics] = None,
              fronts: bool = False,
              color_scale: Union[Metrics, str] = None,
              names: Union[str, list[str]] = None,
-             tags: Union[str, list[str]] = None):
+             tags: Union[str, list[str]] = None,
+             title='Portfolios'):
         portfolios = self.get_portfolios(names=names, tags=tags)
-        columns = [x.value, y.value, 'tag']
-        if z is not None:
-            columns.append(z.value)
+        num_fmt = ':.3f'
+        hover_data = {x.value: num_fmt,
+                      y.value: num_fmt,
+                      'tag': True}
 
+        if z is not None:
+            hover_data[z.value] = num_fmt
+
+        if hover_metrics is not None:
+            for metric in hover_metrics:
+                hover_data[metric.value] = num_fmt
+
+        columns = list(hover_data.keys())
+        columns.append('name')
         if isinstance(color_scale, Metrics):
             color_scale = color_scale.value
 
@@ -211,16 +223,28 @@ class Population:
             color = 'tag'
 
         if z is not None:
-            fig = px.scatter_3d(df, x=x.value, y=y.value, z=z.value, color=color, symbol='tag')
+            fig = px.scatter_3d(df,
+                                x=x.value,
+                                y=y.value,
+                                z=z.value,
+                                hover_name='name',
+                                hover_data=hover_data,
+                                color=color,
+                                symbol='tag')
         else:
-            fig = px.scatter(df, x=x.value, y=y.value, color=color, symbol='tag')
+            fig = px.scatter(df,
+                             x=x.value,
+                             y=y.value,
+                             hover_name='name',
+                             hover_data=hover_data,
+                             color=color,
+                             symbol='tag')
         fig.update_traces(marker_size=10)
-        fig.update_layout(legend=dict(
-            yanchor='top',
-            y=0.995,
-            xanchor='left',
-            x=1.1
-        ))
+        fig.update_layout(title=title,
+                          legend=dict(yanchor='top',
+                                      y=0.995,
+                                      xanchor='left',
+                                      x=1.1))
         fig.show()
 
     def __str__(self):
