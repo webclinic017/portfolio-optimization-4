@@ -1,17 +1,22 @@
 import logging
-from .assets import *
-from .portfolio import *
-from .population import *
+from .assets import Assets
+from .portfolio import Portfolio, MultiPeriodPortfolio
+from .population import Population
+from .loader import load_assets, load_train_test_assets
+from .optimization import *
+
 from .paths import *
 from .meta import *
-from .loader import *
 
-__all__ = assets.__all__
-__all__ += portfolio.__all__
-__all__ += population.__all__
+__all__ = ['Assets',
+           'Portfolio',
+           'MultiPeriodPortfolio',
+           'Population',
+           'load_assets',
+           'load_train_test_assets']
 __all__ += paths.__all__
 __all__ += meta.__all__
-__all__ += loader.__all__
+__all__ += optimization.__all__
 
 
 class CustomFormatter(logging.Formatter):

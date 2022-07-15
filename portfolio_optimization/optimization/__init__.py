@@ -1,9 +1,9 @@
-from .variance import *
-from .semivariance import *
-from .cvar import *
-from .cdar import *
+from .variance import mean_variance
+from .semivariance import mean_semivariance
+from .cvar import mean_cvar
+from .cdar import mean_cdar
 
-__all__ = variance.__all__
-__all__ += semivariance.__all__
-__all__ += cvar.__all__
-__all__ += cdar.__all__
+__all__ = ['mean_variance',
+           'mean_semivariance',
+           'mean_cvar',
+           'mean_cdar']

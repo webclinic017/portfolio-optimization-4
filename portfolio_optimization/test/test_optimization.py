@@ -5,7 +5,6 @@ from portfolio_optimization.meta import *
 from portfolio_optimization.paths import *
 from portfolio_optimization.portfolio import *
 from portfolio_optimization.population import *
-from portfolio_optimization.utils.tools import *
 from portfolio_optimization.optimization import *
 from portfolio_optimization.loader import *
 from portfolio_optimization.bloomberg import *
@@ -26,6 +25,8 @@ def test_mean_variance():
                                        investment_type=InvestmentType.FULLY_INVESTED,
                                        weight_bounds=(0, None),
                                        population_size=30)
+
+
     population=Population()
     for i, weights in enumerate(portfolios_weights):
         population.add(Portfolio(weights=weights,

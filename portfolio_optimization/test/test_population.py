@@ -53,7 +53,8 @@ def test_population():
         portfolio = Portfolio(weights=weights,
                               fitness_type=FitnessType.MEAN_STD,
                               assets=assets,
-                              name=f'portfolio_{i}')
+                              name=f'portfolio_{i}',
+                              tag='random')
         population.add(portfolio)
 
     # Add the multi period portfolio
@@ -70,7 +71,8 @@ def test_population():
         weights = rand_weights(n=assets.asset_nb, zeros=assets.asset_nb - 5)
         portfolio = Portfolio(weights=weights,
                               assets=assets,
-                              name=f'portfolio_period_{i}')
+                              name=f'portfolio_period_{i}',
+                              tag='mpp')
         population.add(portfolio)
         mpp.add(portfolio)
     population.add(mpp)
@@ -78,6 +80,12 @@ def test_population():
     population.plot(x=Metrics.ANNUALIZED_STD,
                     y=Metrics.ANNUALIZED_MEAN,
                     fronts=True)
+
+    population.plot(x=Metrics.ANNUALIZED_STD,
+                    y=Metrics.ANNUALIZED_MEAN,
+                    hover_metrics=[Metrics.SHARPE_RATIO],
+                    tags='random',
+                    title='Portfolios -- with sharpe ration')
 
     assert (population.min(metric=Metrics.ANNUALIZED_MEAN).annualized_mean
             <= population.max(metric=Metrics.ANNUALIZED_MEAN).annualized_mean)
