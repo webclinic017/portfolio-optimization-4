@@ -11,48 +11,6 @@ __all__ = ['mean_variance']
 logger = logging.getLogger('portfolio_optimization.mean_variance_optimization')
 
 
-def maximize_portfolio_returns(expected_returns: np.ndarray,
-                               w: cp.Variable,
-                               costs: Optional[Union[float, np.ndarray]] = 0,
-                               prev_w: Optional[np.ndarray] = None) -> cp.Maximize:
-    """
-    :param expected_returns: Expected returns for each asset.
-    :type expected_returns: np.ndarray of shape(Number of Assets)
-
-    :param w: Weight variable
-    :type w: cp.Variable of shape(Number of Assets)
-
-    :param costs: Transaction costs.
-    :type costs: float or np.ndarray of shape(Number of Assets)
-
-    :param prev_w: previous weights
-    :type prev_w: np.ndarray of shape(Number of Assets), default None (equivalent to an array of zeros)
-
-
-    """
-    n = len(expected_returns)
-    portfolio_return = expected_returns @ w
-    if np.isscalar(costs) and costs == 0:
-        portfolio_cost = 0
-    else:
-        if prev_w is None:
-            prev_w = np.zeros(n)
-        else:
-            if not isinstance(prev_w, np.ndarray):
-                raise TypeError(f'prev_w should be of type numpy.ndarray')
-            if len(prev_w) != n:
-                raise ValueError(f'prev_w should be of size {n} but received {len(prev_w)}')
-
-        if np.isscalar(costs):
-            portfolio_cost = costs * cp.norm(prev_w - w, 1)
-        else:
-            portfolio_cost = cp.norm(cp.multiply(costs, (prev_w - w)), 1)
-
-    objective = cp.Maximize(portfolio_return - portfolio_cost)
-
-    return objective
-
-
 def mean_variance(expected_returns: np.ndarray,
                   cov: np.matrix,
                   weight_bounds: Union[tuple[np.ndarray, np.ndarray],
@@ -60,7 +18,8 @@ def mean_variance(expected_returns: np.ndarray,
                   investment_type: InvestmentType,
                   population_size: Optional[int] = None,
                   target_variance: Optional[float] = None,
-                  costs: Optional[Union[float, np.ndarray]] = 0,
+                  costs: Optional[Union[float, np.ndarray]] = None,
+                  investment_duration_in_days: Optional[int] = None,
                   prev_w: Optional[np.ndarray] = None) -> np.array:
     """
     Optimization along the mean-variance frontier (Markowitz optimization).
@@ -84,21 +43,34 @@ def mean_variance(expected_returns: np.ndarray,
     :param target_variance: minimize return for the targeted variance.
     :type target_variance: float, optional
 
-    :param costs: Transaction costs. Costs represent fixed costs charged on the nominal invested
-                  and need to be scaled back to an equivalent daily cost.
-                  This is because the optimization problem has no notion of investment duration.
-                  For example, let assume that asset A has an expected daily return of 0.1%
-                  with a fixed entry cost of 1% and asset B has an expected daily return of 0.05%
-                  with a fixed entry cost of 0%
-
+    :param costs: Transaction costs. Costs represent fixed costs charged on the notional amount invested.
+                  Example:
+                          - For a fixed entry cost of 1% based the nominal amount in the asset currency, then costs=0.01
+                          - For a fixed entry cost of 5 Ccy (asset currency), then that cost needs to be converted
+                            in a notional amount equivalent with costs = 5 * asset price
     :type costs: float or np.ndarray of shape(Number of Assets)
+
+    :param investment_duration_in_days: The expected investment duration in business days.
+              When costs are provided, they need to be converted to an average daily cost over the expected investment
+              duration. This is because the optimization problem has no notion of investment duration.
+              For example, lets assume that asset A has an expected daily return of 0.01%
+              with a fixed entry cost of 1% and asset B has an expected daily return of 0.005%
+              with a fixed entry cost of 0%. Both having same volatility and correlated with r=1.
+              If the investment duration is only one month, we should allocate all the weights to asset B
+              whereas if the investment duration is one year, we should allocate all the weights to asset A.
+              Duration = 1 months (21 business days):
+                    expected return A = (1+0.01%)^21 - 1 - 1% ≈ 0.01% * 21 - 1% ≈ -0.8%
+                    expected return B ≈ 0.005% * 21 - 0% ≈ 0.1%
+              Duration = 1 year (255 business days):
+                    expected return A ≈ 0.01% * 255 - 1% ≈ 1.5%
+                    expected return B ≈ 0.005% * 21 - 0% ≈ 1.3%
+             In order to take that into account, the costs provided are divided by the expected investment duration in
+             days in the optimization problem.
 
     :param prev_w: previous weights
     :type prev_w: np.ndarray of shape(Number of Assets), default None (equivalent to an array of zeros)
 
-
     :return the portfolio weights that are in the efficient frontier
-
     """
     if population_size is None and target_variance is None:
         raise ValueError(f'You have to provide either population_size or target_variance')
@@ -115,7 +87,8 @@ def mean_variance(expected_returns: np.ndarray,
     objective = maximize_portfolio_returns(expected_returns=expected_returns,
                                            w=w,
                                            costs=costs,
-                                           prev_w=prev_w)
+                                           prev_w=prev_w,
+                                           investment_duration_in_days=investment_duration_in_days)
 
     # Constraints
     portfolio_variance = cp.quad_form(w, cov)
