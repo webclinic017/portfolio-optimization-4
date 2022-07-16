@@ -30,7 +30,7 @@ def test_mean_variance():
     portfolio_ref = Portfolio(weights=portfolios_weights[0],
                               assets=assets,
                               name='ptf_ref')
-    # Same costs for all assets and empty prev_weight --> no impact on weights
+    # uniform costs for all assets and empty prev_weight --> no impact on weights
     portfolios_weights = mean_variance(costs=0.1,
                                        prev_w=None,
                                        **params)
@@ -38,7 +38,7 @@ def test_mean_variance():
                           assets=assets)
     assert abs(portfolio.weights - portfolio_ref.weights).sum() < 1e-3
 
-    # Same costs for all assets and same prev_weight --> no impact on weights
+    # uniform costs for all assets and uniform prev_weight --> no impact on weights
     portfolios_weights = mean_variance(costs=0.1,
                                        prev_w=np.ones(n),
                                        **params)
@@ -46,45 +46,53 @@ def test_mean_variance():
                           assets=assets)
     assert abs(portfolio.weights - portfolio_ref.weights).sum() < 1e-3
 
-    # costs on one invested asset and same prev_weight --> impact on the invested asset weight
-    portfolio_ref.composition
-    costs = {'AGSBPKA FP Equity': 0.1,
-             'C40 FP Equity': 0.2,
-             'wrong_ticker': 0.4}
-    self=assets
-
-    portfolios_weights = mean_variance(costs=0.1,
-                                       prev_w=np.ones(n),
+    # costs on top two invested assets and uniform prev_weight --> impact on the two invested assets weight
+    asset_1 = portfolio_ref.composition.index[0]
+    asset_2 = portfolio_ref.composition.index[1]
+    costs = {asset_1: 0.2,
+             asset_2: 0.1}
+    portfolios_weights = mean_variance(costs=assets.dict_to_array(assets_dict=costs),
+                                       prev_w=None,
                                        **params)
     portfolio = Portfolio(weights=portfolios_weights[0],
                           assets=assets)
+    assert asset_1 not in portfolio.composition.index
+    assert asset_2 not in portfolio.composition.index
+    assert abs(portfolio.weights - portfolio_ref.weights).sum() > 1e-3
+
+    # costs on top two invested assets and uniform prev_weight --> the top two assets weights become 0
+
+    # costs and identical prev_weight on top two invested assets --> the top two assets weights stay > 0
+    asset_1 = portfolio_ref.composition.index[0]
+    asset_2 = portfolio_ref.composition.index[1]
+    costs = {asset_1: 0.2,
+             asset_2: 0.1}
+    prev_weights = {asset_1: portfolio_ref.get_weight(asset_name=asset_1),
+                    asset_2: portfolio_ref.get_weight(asset_name=asset_2)}
+
+    portfolios_weights = mean_variance(costs=assets.dict_to_array(assets_dict=costs),
+                                       prev_w=assets.dict_to_array(assets_dict=prev_weights),
+                                       **params)
+    portfolio = Portfolio(weights=portfolios_weights[0],
+                          assets=assets)
+    assert asset_1 in portfolio.composition.index
+    assert asset_2 in portfolio.composition.index
     assert abs(portfolio.weights - portfolio_ref.weights).sum() < 1e-3
 
+    # identical costs on all assets and large prev_weight on top two invested assets
+    # --> the top two assets weights become larger
+    asset_1 = portfolio_ref.composition.index[0]
+    asset_2 = portfolio_ref.composition.index[1]
+    prev_weights = {asset_1: 1,
+                    asset_2: 1}
 
-    portfolios_weights = mean_variance(expected_returns=assets.mu,
-                                       cov=assets.cov,
-                                       investment_type=InvestmentType.FULLY_INVESTED,
-                                       weight_bounds=(0, None),
-                                       target_variance=0.02 ** 2 / 255,
-                                       costs=0,
-                                       prev_w=None)
-
-    portfolio_1 = Portfolio(weights=portfolios_weights[0],
-                            assets=assets)
-
-    print(portfolio_1.annualized_mean)
-    print(portfolio_1.annualized_std)
-
-    portfolios_weights = mean_variance(expected_returns=assets.mu,
-                                       cov=assets.cov,
-                                       investment_type=InvestmentType.FULLY_INVESTED,
-                                       weight_bounds=(0, None),
-                                       target_variance=0.02 ** 2 / 255,
-                                       costs=1,
-                                       prev_w=None)
-
-    portfolio_2 = Portfolio(weights=portfolios_weights[0],
-                            assets=assets)
-
-    print(portfolio_2.annualized_mean)
-    print(portfolio_2.annualized_std)
+    portfolios_weights = mean_variance(costs=10,
+                                       prev_w=assets.dict_to_array(assets_dict=prev_weights),
+                                       **params)
+    portfolio = Portfolio(weights=portfolios_weights[0],
+                          assets=assets)
+    assert asset_1 in portfolio.composition.index
+    assert asset_2 in portfolio.composition.index
+    assert portfolio.get_weight(asset_1) > portfolio_ref.get_weight(asset_1)
+    assert portfolio.get_weight(asset_2) > portfolio_ref.get_weight(asset_2)
+    assert abs(portfolio.weights - portfolio_ref.weights).sum() > 1e-3

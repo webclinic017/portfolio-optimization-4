@@ -15,9 +15,24 @@ def maximize_portfolio_returns(expected_returns: np.ndarray,
                                w: cp.Variable,
                                costs: Optional[Union[float, np.ndarray]] = 0,
                                prev_w: Optional[np.ndarray] = None) -> cp.Maximize:
+    """
+    :param expected_returns: Expected returns for each asset.
+    :type expected_returns: np.ndarray of shape(Number of Assets)
+
+    :param w: Weight variable
+    :type w: cp.Variable of shape(Number of Assets)
+
+    :param costs: Transaction costs.
+    :type costs: float or np.ndarray of shape(Number of Assets)
+
+    :param prev_w: previous weights
+    :type prev_w: np.ndarray of shape(Number of Assets), default None (equivalent to an array of zeros)
+
+
+    """
     n = len(expected_returns)
     portfolio_return = expected_returns @ w
-    if costs == 0:
+    if np.isscalar(costs) and costs == 0:
         portfolio_cost = 0
     else:
         if prev_w is None:
@@ -68,6 +83,19 @@ def mean_variance(expected_returns: np.ndarray,
 
     :param target_variance: minimize return for the targeted variance.
     :type target_variance: float, optional
+
+    :param costs: Transaction costs. Costs represent fixed costs charged on the nominal invested
+                  and need to be scaled back to an equivalent daily cost.
+                  This is because the optimization problem has no notion of investment duration.
+                  For example, let assume that asset A has an expected daily return of 0.1%
+                  with a fixed entry cost of 1% and asset B has an expected daily return of 0.05%
+                  with a fixed entry cost of 0%
+
+    :type costs: float or np.ndarray of shape(Number of Assets)
+
+    :param prev_w: previous weights
+    :type prev_w: np.ndarray of shape(Number of Assets), default None (equivalent to an array of zeros)
+
 
     :return the portfolio weights that are in the efficient frontier
 

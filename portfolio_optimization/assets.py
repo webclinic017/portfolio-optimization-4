@@ -208,16 +208,16 @@ class Assets:
     def names(self):
         return np.array(self.prices.columns)
 
-    def costs_to_array(self, costs: dict[str, float]) -> np.ndarray:
+    def dict_to_array(self, assets_dict: dict[str, float]) -> np.ndarray:
         """
-        Take a dict of cost per asset name and return a numpy array of costs in the same order as the
+        Take a dict of number per asset name and return a numpy array of values in the same order as the
         other assets arrays
         """
-        missing_names = np.setdiff1d(list(costs.keys()), self.names)
+        missing_names = np.setdiff1d(list(assets_dict.keys()), self.names)
         if len(missing_names) > 0:
             logger.warning(f'The following names are not in the Assets universe {list(missing_names)}')
 
-        return np.array([costs.get(name, 0) for name in self.names])
+        return np.array([assets_dict.get(name, 0) for name in self.names])
 
     def plot(self, idx=slice(None)):
         fig = self.cum_returns.iloc[:, idx].plot(title='Prices')

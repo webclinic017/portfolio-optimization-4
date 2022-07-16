@@ -45,7 +45,7 @@ def test_assets_class():
 
     costs = {assets.names[2]: 0.1,
              assets.names[10]: 0.2}
-    costs_array = assets.costs_to_array(costs=costs)
+    costs_array = assets.dict_to_array(assets_dict=costs)
     for i, name in enumerate(assets.names):
         assert costs.get(name, 0) == costs_array[i]
 

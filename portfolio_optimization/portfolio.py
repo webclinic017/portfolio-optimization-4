@@ -332,6 +332,12 @@ class Portfolio(BasePortfolio):
     def length(self):
         return np.count_nonzero(abs(self.weights) > ZERO_THRESHOLD)
 
+    def get_weight(self, asset_name: str):
+        try:
+            return self.weights[np.where(self.assets.names == asset_name)[0][0]]
+        except IndexError:
+            raise IndexError(f'{asset_name} is not in the assets universe')
+
     def __str__(self):
         return f'Portfolio < {self.name} >'
 
