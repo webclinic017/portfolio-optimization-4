@@ -4,6 +4,7 @@ from .portfolio import Portfolio, MultiPeriodPortfolio
 from .population import Population
 from .loader import load_assets, load_train_test_assets
 from .optimization import *
+from .bloomberg import *
 
 from .paths import *
 from .meta import *
@@ -17,6 +18,7 @@ __all__ = ['Assets',
 __all__ += paths.__all__
 __all__ += meta.__all__
 __all__ += optimization.__all__
+__all__ += bloomberg.__all__
 
 
 class CustomFormatter(logging.Formatter):

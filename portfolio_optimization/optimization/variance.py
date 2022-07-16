@@ -11,13 +11,42 @@ __all__ = ['mean_variance']
 logger = logging.getLogger('portfolio_optimization.mean_variance_optimization')
 
 
+def maximize_portfolio_returns(expected_returns: np.ndarray,
+                               w: cp.Variable,
+                               costs: Optional[Union[float, np.ndarray]] = 0,
+                               prev_w: Optional[np.ndarray] = None) -> cp.Maximize:
+    n = len(expected_returns)
+    portfolio_return = expected_returns @ w
+    if costs == 0:
+        portfolio_cost = 0
+    else:
+        if prev_w is None:
+            prev_w = np.zeros(n)
+        else:
+            if not isinstance(prev_w, np.ndarray):
+                raise TypeError(f'prev_w should be of type numpy.ndarray')
+            if len(prev_w) != n:
+                raise ValueError(f'prev_w should be of size {n} but received {len(prev_w)}')
+
+        if np.isscalar(costs):
+            portfolio_cost = costs * cp.norm(prev_w - w, 1)
+        else:
+            portfolio_cost = cp.norm(cp.multiply(costs, (prev_w - w)), 1)
+
+    objective = cp.Maximize(portfolio_return - portfolio_cost)
+
+    return objective
+
+
 def mean_variance(expected_returns: np.ndarray,
                   cov: np.matrix,
                   weight_bounds: Union[tuple[np.ndarray, np.ndarray],
                                        tuple[Optional[float], Optional[float]]],
                   investment_type: InvestmentType,
                   population_size: Optional[int] = None,
-                  target_variance: Optional[float] = None) -> np.array:
+                  target_variance: Optional[float] = None,
+                  costs: Optional[Union[float, np.ndarray]] = 0,
+                  prev_w: Optional[np.ndarray] = None) -> np.array:
     """
     Optimization along the mean-variance frontier (Markowitz optimization).
 
@@ -55,8 +84,10 @@ def mean_variance(expected_returns: np.ndarray,
     target_variance_param = cp.Parameter(nonneg=True)
 
     # Objectives
-    portfolio_return = expected_returns.T @ w
-    objective = cp.Maximize(portfolio_return)
+    objective = maximize_portfolio_returns(expected_returns=expected_returns,
+                                           w=w,
+                                           costs=costs,
+                                           prev_w=prev_w)
 
     # Constraints
     portfolio_variance = cp.quad_form(w, cov)

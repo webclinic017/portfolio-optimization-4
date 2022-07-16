@@ -107,11 +107,10 @@ class Assets:
         # Backward fill missing values to the start
         self.prices.fillna(method='bfill', inplace=True)
         # Drop column if all its values are missing
-        self.prices.dropna(axis=1, how='all',  inplace=True)
+        self.prices.dropna(axis=1, how='all', inplace=True)
         # Check that no nan are left
         if np.any(self.prices.isna()):
             raise ValueError(f'nan found in prices')
-
 
     def _remove_highly_correlated_assets(self,
                                          correlation_threshold: Optional[float]):
@@ -208,6 +207,17 @@ class Assets:
     @property
     def names(self):
         return np.array(self.prices.columns)
+
+    def costs_to_array(self, costs: dict[str, float]) -> np.ndarray:
+        """
+        Take a dict of cost per asset name and return a numpy array of costs in the same order as the
+        other assets arrays
+        """
+        missing_names = np.setdiff1d(list(costs.keys()), self.names)
+        if len(missing_names) > 0:
+            logger.warning(f'The following names are not in the Assets universe {list(missing_names)}')
+
+        return np.array([costs.get(name, 0) for name in self.names])
 
     def plot(self, idx=slice(None)):
         fig = self.cum_returns.iloc[:, idx].plot(title='Prices')

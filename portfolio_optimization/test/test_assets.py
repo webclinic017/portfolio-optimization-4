@@ -12,7 +12,12 @@ def test_assets_class():
     prices = load_prices(file=TEST_PRICES_PATH)
 
     start_date = dt.date(2017, 1, 1)
-    assets = Assets(prices=prices, start_date=start_date)
+    assets = Assets(prices=prices,
+                    start_date=start_date,
+                    asset_missing_threshold=0.1,
+                    dates_missing_threshold=0.1,
+                    correlation_threshold=0.99,
+                    verbose=False)
 
     names = np.array(assets.prices.columns)
     assert assets.asset_nb == len(names)
@@ -27,11 +32,22 @@ def test_assets_class():
     assert (abs(np.cov(ret) - assets.cov)).sum() < 1e-10
 
     new_names = [names[i] for i in np.random.choice(len(names), 15, replace=False)]
-    assets = Assets(prices=prices, start_date=start_date, names_to_keep=new_names)
+
+    assets = Assets(prices=prices,
+                    start_date=start_date,
+                    names_to_keep=new_names,
+                    verbose=False)
+
     assert assets.asset_nb == len(new_names)
     assert assets.date_nb == len(assets.prices) - 1
     assets.plot()
     assets.plot(idx=[2, 5])
+
+    costs = {assets.names[2]: 0.1,
+             assets.names[10]: 0.2}
+    costs_array = assets.costs_to_array(costs=costs)
+    for i, name in enumerate(assets.names):
+        assert costs.get(name, 0) == costs_array[i]
 
 
 def test_load_assets():
