@@ -18,7 +18,7 @@ def test_mean_variance():
                          removal_correlation=0.99,
                          verbose=False)
 
-    target_variance=0.02 ** 2 / 255
+    target_variance = 0.02 ** 2 / 255
 
     model = Optimization(assets=assets,
                          investment_type=InvestmentType.FULLY_INVESTED,
@@ -39,10 +39,8 @@ def test_mean_variance():
     assert abs(portfolio.weights - portfolio_ref.weights).sum() < 1e-3
 
     # uniform costs for all assets and uniform prev_weight --> no impact on weights
-    portfolios_weights = mean_variance(costs=0.1,
-                                       prev_w=np.ones(n),
-                                       investment_duration_in_days=255,
-                                       **params)
+    model.update(prev_w=np.ones(assets.asset_nb))
+    portfolios_weights = model.mean_variance(target_variance=target_variance)
     portfolio = Portfolio(weights=portfolios_weights[0],
                           assets=assets)
     assert abs(portfolio.weights - portfolio_ref.weights).sum() < 1e-3
@@ -52,10 +50,9 @@ def test_mean_variance():
     asset_2 = portfolio_ref.composition.index[1]
     costs = {asset_1: 0.2,
              asset_2: 0.1}
-    portfolios_weights = mean_variance(costs=assets.dict_to_array(assets_dict=costs),
-                                       prev_w=None,
-                                       investment_duration_in_days=255,
-                                       **params)
+    model.update(costs=assets.dict_to_array(assets_dict=costs),
+                 prev_w=None)
+    portfolios_weights = model.mean_variance(target_variance=target_variance)
     portfolio = Portfolio(weights=portfolios_weights[0],
                           assets=assets)
     assert asset_1 not in portfolio.composition.index
@@ -69,11 +66,9 @@ def test_mean_variance():
              asset_2: 0.1}
     prev_weights = {asset_1: portfolio_ref.get_weight(asset_name=asset_1),
                     asset_2: portfolio_ref.get_weight(asset_name=asset_2)}
-
-    portfolios_weights = mean_variance(costs=assets.dict_to_array(assets_dict=costs),
-                                       prev_w=assets.dict_to_array(assets_dict=prev_weights),
-                                       investment_duration_in_days=255,
-                                       **params)
+    model.update(costs=assets.dict_to_array(assets_dict=costs),
+                 prev_w=assets.dict_to_array(assets_dict=prev_weights))
+    portfolios_weights = model.mean_variance(target_variance=target_variance)
     portfolio = Portfolio(weights=portfolios_weights[0],
                           assets=assets)
     assert asset_1 in portfolio.composition.index
@@ -86,11 +81,9 @@ def test_mean_variance():
     asset_2 = portfolio_ref.composition.index[1]
     prev_weights = {asset_1: 1,
                     asset_2: 1}
-
-    portfolios_weights = mean_variance(costs=0.1,
-                                       prev_w=assets.dict_to_array(assets_dict=prev_weights),
-                                       investment_duration_in_days=255,
-                                       **params)
+    model.update(costs=0.1,
+                 prev_w=assets.dict_to_array(assets_dict=prev_weights))
+    portfolios_weights = model.mean_variance(target_variance=target_variance)
     portfolio = Portfolio(weights=portfolios_weights[0],
                           assets=assets)
     assert asset_1 in portfolio.composition.index
