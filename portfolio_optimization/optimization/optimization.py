@@ -18,9 +18,9 @@ logger = logging.getLogger('portfolio_optimization.optimization')
 class Optimization:
     def __init__(self,
                  assets: Assets,
-                 investment_type: InvestmentType,
-                 weight_bounds: Union[tuple[np.ndarray, np.ndarray],
-                                      tuple[Optional[float], Optional[float]]],
+                 investment_type: InvestmentType = InvestmentType.FULLY_INVESTED,
+                 weight_bounds: tuple[Optional[Union[float, np.ndarray]],
+                                      Optional[Union[float, np.ndarray]]] = (None, None),
                  costs: Optional[Union[float, np.ndarray]] = None,
                  investment_duration_in_days: Optional[int] = None,
                  prev_w: Optional[np.ndarray] = None):
@@ -95,15 +95,10 @@ class Optimization:
             raise ValueError(f'assets should contains more than one asset')
         if not isinstance(self.weight_bounds, tuple) or len(self.weight_bounds) != 2:
             raise ValueError(f'weight_bounds should be a tuple of size 2')
-        if (isinstance(self.weight_bounds[0], np.ndarray) and not isinstance(self.weight_bounds[1], np.ndarray)
-                or isinstance(self.weight_bounds[1], np.ndarray) and not isinstance(self.weight_bounds[0], np.ndarray)):
-            raise ValueError(f'if one element of weight_bounds is an numpy array, '
-                             f'the other one should also be a numpy array')
-        if isinstance(self.weight_bounds[0], np.ndarray):
-            for i in [0, 1]:
-                if len(self.weight_bounds[i]) != self.assets.asset_nb:
-                    raise ValueError(f'the weight_bounds arrays should be of size {self.assets.asset_nb}, '
-                                     f'but received {len(self.weight_bounds[i])}')
+        for i in [0, 1]:
+            if isinstance(self.weight_bounds[i], np.ndarray) and len(self.weight_bounds[i]) != self.assets.asset_nb:
+                raise ValueError(f'the weight_bounds arrays should be of size {self.assets.asset_nb}, '
+                                 f'but received {len(self.weight_bounds[i])}')
         if self.costs is not None and not (np.isscalar(self.costs) and self.costs == 0):
             if self.investment_duration_in_days is None:
                 raise ValueError(f'investment_duration_in_days cannot be missing when costs is provided')
@@ -150,7 +145,7 @@ class Optimization:
     def _get_optimization_weights(problem: cp.Problem,
                                   w: cp.Variable,
                                   parameter: cp.Parameter,
-                                  parameter_array: np.array) -> np.array:
+                                  parameter_array: np.ndarray) -> np.ndarray:
         weights = []
         try:
             for value in parameter_array:
@@ -177,7 +172,7 @@ class Optimization:
 
     def mean_variance(self,
                       population_size: Optional[int] = None,
-                      target_variance: Optional[float] = None) -> np.array:
+                      target_variance: Optional[float] = None) -> np.ndarray:
         """
         Optimization along the mean-variance frontier (Markowitz optimization).
 
@@ -231,9 +226,9 @@ class Optimization:
         return weights
 
     def mean_semivariance(self,
-                          returns_target: Union[float, np.ndarray],
+                          returns_target: Optional[Union[float, np.ndarray]] = None,
                           target_semivariance: Optional[float] = None,
-                          population_size: Optional[int] = None) -> np.array:
+                          population_size: Optional[int] = None) -> np.ndarray:
         """
         Optimization along the mean-semivariance frontier.
 
@@ -251,6 +246,9 @@ class Optimization:
         if ((population_size is None and target_semivariance is None) or
                 (population_size is not None and target_semivariance is not None)):
             raise ValueError(f'You have to provide population_size OR target_semivariance')
+
+        if returns_target is None:
+            returns_target = self.assets.mu
 
         # Additional matrix
         if not np.isscalar(returns_target):
@@ -302,7 +300,7 @@ class Optimization:
     def mean_cvar(self,
                   beta: float = 0.95,
                   target_cvar: Optional[float] = None,
-                  population_size: Optional[int] = None) -> np.array:
+                  population_size: Optional[int] = None) -> np.ndarray:
         """
         Optimization along the mean-CVaR frontier (conditional drawdown-at-risk).
 
@@ -365,7 +363,7 @@ class Optimization:
     def mean_cdar(self,
                   beta: float = 0.95,
                   target_cdar: Optional[float] = None,
-                  population_size: Optional[int] = None) -> np.array:
+                  population_size: Optional[int] = None) -> np.ndarray:
         """
         Optimization along the mean-CDaR frontier (conditional drawdown-at-risk).
 
@@ -429,27 +427,29 @@ class Optimization:
 
         return weights
 
-    def inverse_volatility(self):
+    def inverse_volatility(self) -> np.ndarray:
         """
         Asset Weights are proportional to 1 / asset volatility and sums to 1
         """
-        weights = np.ones(self.assets.asset_nb) / self.assets.std
-        return weights / sum(weights)
+        weights = 1 / self.assets.std
+        weights = weights / sum(weights)
+        return weights
 
-    def equi_weighted(self):
+    def equal_weighted(self) -> np.ndarray:
         """
-        Equal Weighted
+        Equal Weighted, summing to 1
         """
-        return np.ones(self.assets.asset_nb) / self.assets.asset_nb
+        weights = np.ones(self.assets.asset_nb) / self.assets.asset_nb
+        return weights
 
-    def random(self):
+    def random(self) -> np.ndarray:
         """
         Random positive weights that sum to 1 and respects the bounds.
         """
         # Produces n random weights that sum to 1 with uniform distribution over the simplex
-        weighs = rand_weights_dirichlet(n=self.assets.asset_nb)
+        weights = rand_weights_dirichlet(n=self.assets.asset_nb)
         # Respecting bounds
         lower_bounds, upper_bounds = self._get_lower_and_upper_bounds()
-        weighs = np.minimum(np.maximum(weighs, lower_bounds), upper_bounds)
-        weighs = weighs / sum(weighs)
-        return weighs
+        weights = np.minimum(np.maximum(weights, lower_bounds), upper_bounds)
+        weights = weights / sum(weights)
+        return weights

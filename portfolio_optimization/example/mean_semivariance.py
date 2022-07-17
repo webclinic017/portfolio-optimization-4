@@ -24,29 +24,21 @@ def mean_variance_vs_mean_semivariance():
 
     population = Population()
 
+    model = Optimization(assets=assets,
+                         weight_bounds=(0, None))
+
     # Efficient Frontier -- Mean Variance
-    portfolios_weights = mean_variance(expected_returns=assets.mu,
-                                       cov=assets.cov,
-                                       investment_type=InvestmentType.FULLY_INVESTED,
-                                       weight_bounds=(0, None),
-                                       population_size=30)
+    portfolios_weights = model.mean_variance(population_size=30)
     for i, weights in enumerate(portfolios_weights):
         population.add(Portfolio(weights=weights,
-                                 fitness_type=FitnessType.MEAN_STD,
                                  assets=assets,
                                  name=f'mean_variance_{i}',
                                  tag='mean_variance'))
 
     # Efficient Frontier -- Mean Semivariance
-    portfolios_weights = mean_semivariance(expected_returns=assets.mu,
-                                           returns=assets.returns,
-                                           returns_target=assets.mu,
-                                           investment_type=InvestmentType.FULLY_INVESTED,
-                                           weight_bounds=(0, None),
-                                           population_size=30)
+    portfolios_weights = model.mean_semivariance(population_size=30)
     for i, weights in enumerate(portfolios_weights):
         population.add(Portfolio(weights=weights,
-                                 fitness_type=FitnessType.MEAN_STD,
                                  assets=assets,
                                  name=f'mean_semivariance_{i}',
                                  tag='mean_semivariance'))
@@ -54,10 +46,12 @@ def mean_variance_vs_mean_semivariance():
     # Plot
     population.plot_metrics(x=Metrics.ANNUALIZED_STD,
                             y=Metrics.ANNUALIZED_MEAN,
-                            color_scale=Metrics.SHARPE_RATIO)
+                            color_scale=Metrics.SHARPE_RATIO,
+                            hover_metrics=[Metrics.SORTINO_RATIO])
     population.plot_metrics(x=Metrics.ANNUALIZED_DOWNSIDE_STD,
                             y=Metrics.ANNUALIZED_MEAN,
-                            color_scale=Metrics.SORTINO_RATIO)
+                            color_scale=Metrics.SORTINO_RATIO,
+                            hover_metrics=[Metrics.SHARPE_RATIO])
 
     # Metrics
     max_sharpe = population.max(metric=Metrics.SHARPE_RATIO)
@@ -68,3 +62,7 @@ def mean_variance_vs_mean_semivariance():
 
     # Composition
     population.plot_composition(names=[max_sharpe.name, max_sortino.name])
+
+    # Prices
+    population.plot_prices(names=[max_sharpe.name, max_sortino.name])
+

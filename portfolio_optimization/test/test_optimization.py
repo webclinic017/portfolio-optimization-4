@@ -8,6 +8,38 @@ from portfolio_optimization.loader import *
 from portfolio_optimization.bloomberg import *
 
 
+def test_inverse_volatility():
+    prices = load_prices(file=EXAMPLE_PRICES_PATH)
+    assets = load_assets(prices=prices, verbose=False)
+    model = Optimization(assets=assets)
+    weights = model.inverse_volatility()
+
+    assert abs(sum(weights) - 1) < 1e-10
+    w = 1 / assets.std
+    w = w / sum(w)
+    assert abs(weights - w).sum() < 1e-10
+
+
+def test_equal_weighted():
+    prices = load_prices(file=EXAMPLE_PRICES_PATH)
+    assets = load_assets(prices=prices, verbose=False)
+    model = Optimization(assets=assets)
+    weights = model.equal_weighted()
+
+    assert abs(sum(weights) - 1) < 1e-10
+    w = 1 / assets.asset_nb
+    assert abs(weights - w).sum() < 1e-10
+
+
+def test_random():
+    prices = load_prices(file=EXAMPLE_PRICES_PATH)
+    assets = load_assets(prices=prices, verbose=False)
+    model = Optimization(assets=assets)
+    weights = model.random()
+
+    assert abs(sum(weights) - 1) < 1e-10
+
+
 def test_mean_variance():
     prices = load_prices(file=EXAMPLE_PRICES_PATH)
     prices = prices.iloc[:, :100].copy()
