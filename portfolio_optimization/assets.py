@@ -40,6 +40,7 @@ class Assets:
         self._returns = None
         self._cum_returns = None
         self._mu = None
+        self._std = None
         self._cov = None
         self._corr = None
         self.verbose = verbose
@@ -183,6 +184,12 @@ class Assets:
     @property
     def expected_returns(self):
         return self.mu
+
+    @property
+    def std(self):
+        if self._std is None:
+            self._std = np.std(self.returns, axis=1)
+        return self._std
 
     @property
     def cov(self):

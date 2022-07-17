@@ -8,6 +8,7 @@ from scipy.sparse.linalg import ArpackNoConvergence
 from portfolio_optimization.meta import *
 from portfolio_optimization.assets import *
 from portfolio_optimization.exception import *
+from portfolio_optimization.utils.tools import *
 
 __all__ = ['Optimization']
 
@@ -427,3 +428,28 @@ class Optimization:
                                                  parameter_array=cdar_array)
 
         return weights
+
+    def inverse_volatility(self):
+        """
+        Asset Weights are proportional to 1 / asset volatility and sums to 1
+        """
+        weights = np.ones(self.assets.asset_nb) / self.assets.std
+        return weights / sum(weights)
+
+    def equi_weighted(self):
+        """
+        Equal Weighted
+        """
+        return np.ones(self.assets.asset_nb) / self.assets.asset_nb
+
+    def random(self):
+        """
+        Random positive weights that sum to 1 and respects the bounds.
+        """
+        # Produces n random weights that sum to 1 with uniform distribution over the simplex
+        weighs = rand_weights_dirichlet(n=self.assets.asset_nb)
+        # Respecting bounds
+        lower_bounds, upper_bounds = self._get_lower_and_upper_bounds()
+        weighs = np.minimum(np.maximum(weighs, lower_bounds), upper_bounds)
+        weighs = weighs / sum(weighs)
+        return weighs

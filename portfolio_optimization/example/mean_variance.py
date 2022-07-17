@@ -6,7 +6,7 @@ from portfolio_optimization.paths import *
 from portfolio_optimization.portfolio import *
 from portfolio_optimization.population import *
 from portfolio_optimization.utils.tools import *
-from portfolio_optimization.optimization.variance import *
+from portfolio_optimization.optimization import *
 from portfolio_optimization.loader import *
 from portfolio_optimization.bloomberg.loader import *
 
@@ -34,6 +34,11 @@ if __name__ == '__main__':
                                  fitness_type=FitnessType.MEAN_STD,
                                  assets=assets,
                                  tag='single_asset'))
+
+    model = Optimization(assets=assets,
+                         investment_type=InvestmentType.FULLY_INVESTED,
+                         weight_bounds=(0, None))
+
 
     # Random portfolios
     for _ in range(10):

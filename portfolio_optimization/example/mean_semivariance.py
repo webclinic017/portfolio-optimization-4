@@ -4,8 +4,7 @@ from portfolio_optimization.meta import *
 from portfolio_optimization.paths import *
 from portfolio_optimization.portfolio import *
 from portfolio_optimization.population import *
-from portfolio_optimization.optimization.variance import *
-from portfolio_optimization.optimization.semivariance import *
+from portfolio_optimization.optimization import *
 from portfolio_optimization.loader import *
 from portfolio_optimization.bloomberg.loader import *
 
