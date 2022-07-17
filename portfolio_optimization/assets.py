@@ -181,6 +181,10 @@ class Assets:
         return self._mu
 
     @property
+    def expected_returns(self):
+        return self.mu
+
+    @property
     def cov(self):
         if self._cov is None:
             self._cov = np.cov(self.returns)

@@ -67,8 +67,9 @@ def maximize_portfolio_returns(expected_returns: np.ndarray,
                 raise TypeError(f'prev_w should be of type numpy.ndarray')
             if len(prev_w) != n:
                 raise ValueError(f'prev_w should be of size {n} but received {len(prev_w)}')
-            if investment_duration_in_days is None:
-                raise ValueError(f'investment_duration_in_days cannot be missing when costs is provided')
+
+        if investment_duration_in_days is None:
+            raise ValueError(f'investment_duration_in_days cannot be missing when costs is provided')
 
         costs = costs / investment_duration_in_days
         if np.isscalar(costs):

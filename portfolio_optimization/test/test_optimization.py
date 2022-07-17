@@ -33,6 +33,7 @@ def test_mean_variance():
     # uniform costs for all assets and empty prev_weight --> no impact on weights
     portfolios_weights = mean_variance(costs=0.1,
                                        prev_w=None,
+                                       investment_duration_in_days=255,
                                        **params)
     portfolio = Portfolio(weights=portfolios_weights[0],
                           assets=assets)
@@ -41,6 +42,7 @@ def test_mean_variance():
     # uniform costs for all assets and uniform prev_weight --> no impact on weights
     portfolios_weights = mean_variance(costs=0.1,
                                        prev_w=np.ones(n),
+                                       investment_duration_in_days=255,
                                        **params)
     portfolio = Portfolio(weights=portfolios_weights[0],
                           assets=assets)
@@ -53,14 +55,13 @@ def test_mean_variance():
              asset_2: 0.1}
     portfolios_weights = mean_variance(costs=assets.dict_to_array(assets_dict=costs),
                                        prev_w=None,
+                                       investment_duration_in_days=255,
                                        **params)
     portfolio = Portfolio(weights=portfolios_weights[0],
                           assets=assets)
     assert asset_1 not in portfolio.composition.index
     assert asset_2 not in portfolio.composition.index
     assert abs(portfolio.weights - portfolio_ref.weights).sum() > 1e-3
-
-    # costs on top two invested assets and uniform prev_weight --> the top two assets weights become 0
 
     # costs and identical prev_weight on top two invested assets --> the top two assets weights stay > 0
     asset_1 = portfolio_ref.composition.index[0]
@@ -72,6 +73,7 @@ def test_mean_variance():
 
     portfolios_weights = mean_variance(costs=assets.dict_to_array(assets_dict=costs),
                                        prev_w=assets.dict_to_array(assets_dict=prev_weights),
+                                       investment_duration_in_days=255,
                                        **params)
     portfolio = Portfolio(weights=portfolios_weights[0],
                           assets=assets)
@@ -86,8 +88,9 @@ def test_mean_variance():
     prev_weights = {asset_1: 1,
                     asset_2: 1}
 
-    portfolios_weights = mean_variance(costs=10,
+    portfolios_weights = mean_variance(costs=0.1,
                                        prev_w=assets.dict_to_array(assets_dict=prev_weights),
+                                       investment_duration_in_days=255,
                                        **params)
     portfolio = Portfolio(weights=portfolios_weights[0],
                           assets=assets)
