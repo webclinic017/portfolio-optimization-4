@@ -64,7 +64,28 @@ class Optimization:
         self.costs = costs
         self.investment_duration_in_days = investment_duration_in_days
         self.prev_w = prev_w
+        self.loaded = True
         self._validation()
+
+    def update(self, **kwargs):
+        self.loaded = False
+        valid_kwargs = ['assets',
+                        'investment_type',
+                        'weight_bounds',
+                        'costs',
+                        'investment_duration_in_days',
+                        'prev_w']
+        for k, v in kwargs.items():
+            if k not in valid_kwargs:
+                raise TypeError(f'Invalid keyword argument {k}')
+            setattr(self, k, v)
+        self._validation()
+        self.loaded = True
+
+    def __setattr__(self, name, value):
+        if self.__dict__.get('loaded'):
+            logger.warning(f'Attributes should be updated with the update() method to allow proper validation')
+        super().__setattr__(name, value)
 
     def _validation(self):
         if self.assets.asset_nb < 2:
@@ -80,7 +101,7 @@ class Optimization:
                 if len(self.weight_bounds[i]) != self.assets.asset_nb:
                     raise ValueError(f'the weight_bounds arrays should be of size {self.assets.asset_nb}, '
                                      f'but received {len(self.weight_bounds[i])}')
-        if self.costs is not None or not (np.isscalar(self.costs) and self.costs == 0):
+        if self.costs is not None and not (np.isscalar(self.costs) and self.costs == 0):
             if self.investment_duration_in_days is None:
                 raise ValueError(f'investment_duration_in_days cannot be missing when costs is provided')
         if self.prev_w is not None:

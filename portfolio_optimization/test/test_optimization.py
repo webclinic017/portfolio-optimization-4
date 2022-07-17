@@ -17,24 +17,23 @@ def test_mean_variance():
                          dates_missing_threshold=0.1,
                          removal_correlation=0.99,
                          verbose=False)
-    n = assets.asset_nb
 
-    params = dict(expected_returns=assets.mu,
-                  cov=assets.cov,
-                  investment_type=InvestmentType.FULLY_INVESTED,
-                  weight_bounds=(0, None),
-                  target_variance=0.02 ** 2 / 255)
+    target_variance=0.02 ** 2 / 255
+
+    model = Optimization(assets=assets,
+                         investment_type=InvestmentType.FULLY_INVESTED,
+                         weight_bounds=(0, None))
 
     # Ref with no costs
-    portfolios_weights = mean_variance(**params)
+    portfolios_weights = model.mean_variance(target_variance=target_variance)
     portfolio_ref = Portfolio(weights=portfolios_weights[0],
                               assets=assets,
                               name='ptf_ref')
     # uniform costs for all assets and empty prev_weight --> no impact on weights
-    portfolios_weights = mean_variance(costs=0.1,
-                                       prev_w=None,
-                                       investment_duration_in_days=255,
-                                       **params)
+    model.update(costs=0.1,
+                 prev_w=None,
+                 investment_duration_in_days=255)
+    portfolios_weights = model.mean_variance(target_variance=target_variance)
     portfolio = Portfolio(weights=portfolios_weights[0],
                           assets=assets)
     assert abs(portfolio.weights - portfolio_ref.weights).sum() < 1e-3
