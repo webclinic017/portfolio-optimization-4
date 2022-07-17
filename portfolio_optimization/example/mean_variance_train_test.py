@@ -47,13 +47,13 @@ if __name__ == '__main__':
                                  tag=f'test_{assets_test.name}'))
 
     # Plot
-    population.plot(x=Metrics.ANNUALIZED_STD,
-                    y=Metrics.ANNUALIZED_MEAN,
-                    color_scale=Metrics.SHARPE_RATIO)
-    population.plot(x=Metrics.ANNUALIZED_STD,
-                    y=Metrics.ANNUALIZED_MEAN,
-                    color_scale='name',
-                    tags=[f'train_{assets_train.name}', f'test_{assets_test.name}'])
+    population.plot_metrics(x=Metrics.ANNUALIZED_STD,
+                            y=Metrics.ANNUALIZED_MEAN,
+                            color_scale=Metrics.SHARPE_RATIO)
+    population.plot_metrics(x=Metrics.ANNUALIZED_STD,
+                            y=Metrics.ANNUALIZED_MEAN,
+                            color_scale='name',
+                            tags=[f'train_{assets_train.name}', f'test_{assets_test.name}'])
     population.plot_composition(tags=[f'train_{assets_train.name}', f'train_{assets_test.name}'])
 
     # Metrics

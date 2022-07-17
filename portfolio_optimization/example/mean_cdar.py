@@ -1,10 +1,10 @@
 import datetime as dt
 
-from portfolio_optimization.meta import FitnessType, InvestmentType, Metrics
+from portfolio_optimization.meta import InvestmentType, Metrics
 from portfolio_optimization.paths import EXAMPLE_PRICES_PATH
 from portfolio_optimization.portfolio import Portfolio
 from portfolio_optimization.population import Population
-from portfolio_optimization.optimization import mean_variance, mean_cdar, mean_cvar
+from portfolio_optimization.optimization import Optimization
 from portfolio_optimization.loader import load_assets
 from portfolio_optimization.bloomberg.loader import load_prices
 
@@ -24,46 +24,43 @@ def mean_variance_vs_mean_cdar():
 
     population = Population()
 
+    model = Optimization(assets=assets,
+                         investment_type=InvestmentType.FULLY_INVESTED,
+                         weight_bounds=(0, None))
     # Efficient Frontier -- Mean Variance
-    portfolios_weights = mean_variance(expected_returns=assets.mu,
-                                       cov=assets.cov,
-                                       investment_type=InvestmentType.FULLY_INVESTED,
-                                       weight_bounds=(0, None),
-                                       population_size=30)
+    portfolios_weights = model.mean_variance(population_size=30)
     for i, weights in enumerate(portfolios_weights):
         population.add(Portfolio(weights=weights,
-                                 fitness_type=FitnessType.MEAN_STD,
                                  assets=assets,
                                  name=f'mean_variance_{i}',
                                  tag='mean_variance'))
 
     # Efficient Frontier -- Mean CDaR
-    portfolios_weights = mean_cdar(expected_returns=assets.mu,
-                                   returns=assets.returns,
-                                   investment_type=InvestmentType.FULLY_INVESTED,
-                                   weight_bounds=(0, None),
-                                   beta=0.95,
-                                   population_size=30)
+    portfolios_weights = model.mean_cdar(beta=0.95,
+                                         population_size=30)
     for i, weights in enumerate(portfolios_weights):
         population.add(Portfolio(weights=weights,
-                                 fitness_type=FitnessType.MEAN_STD,
                                  assets=assets,
                                  name=f'mean_cdar_{i}',
                                  tag='mean_cdar'))
 
     # Plot
-    population.plot(x=Metrics.ANNUALIZED_STD,
-                    y=Metrics.ANNUALIZED_MEAN,
-                    color_scale=Metrics.SHARPE_RATIO)
-    population.plot(x=Metrics.ANNUALIZED_DOWNSIDE_STD,
-                    y=Metrics.ANNUALIZED_MEAN,
-                    color_scale=Metrics.SORTINO_RATIO)
-    population.plot(x=Metrics.MAX_DRAWDOWN,
-                    y=Metrics.ANNUALIZED_MEAN,
-                    color_scale=Metrics.CALMAR_RATIO)
-    population.plot(x=Metrics.CDAR_95,
-                    y=Metrics.ANNUALIZED_MEAN,
-                    color_scale=Metrics.CDAR_95_RATIO)
+    population.plot_metrics(x=Metrics.ANNUALIZED_STD,
+                            y=Metrics.ANNUALIZED_MEAN,
+                            color_scale=Metrics.SHARPE_RATIO,
+                            hover_metrics=[Metrics.SHARPE_RATIO])
+    population.plot_metrics(x=Metrics.ANNUALIZED_DOWNSIDE_STD,
+                            y=Metrics.ANNUALIZED_MEAN,
+                            color_scale=Metrics.SORTINO_RATIO,
+                            hover_metrics=[Metrics.SHARPE_RATIO])
+    population.plot_metrics(x=Metrics.MAX_DRAWDOWN,
+                            y=Metrics.ANNUALIZED_MEAN,
+                            color_scale=Metrics.CALMAR_RATIO,
+                            hover_metrics=[Metrics.SHARPE_RATIO])
+    population.plot_metrics(x=Metrics.CDAR_95,
+                            y=Metrics.ANNUALIZED_MEAN,
+                            color_scale=Metrics.CDAR_95_RATIO,
+                            hover_metrics=[Metrics.SHARPE_RATIO])
 
     # Metrics
     max_sharpe = population.max(metric=Metrics.SHARPE_RATIO)
@@ -74,6 +71,10 @@ def mean_variance_vs_mean_cdar():
 
     # Composition
     population.plot_composition(names=[max_sharpe.name, max_cdar_95_ratio.name])
+
+    # Prices
+    population.plot_prices(names=[max_sharpe.name, max_cdar_95_ratio.name])
+
 
 
 def mean_cdar_vs_mean_cvar():
@@ -91,41 +92,37 @@ def mean_cdar_vs_mean_cvar():
 
     population = Population()
 
+    model = Optimization(assets=assets,
+                         investment_type=InvestmentType.FULLY_INVESTED,
+                         weight_bounds=(0, None))
+
     # Efficient Frontier -- Mean CDaR
-    portfolios_weights = mean_cdar(expected_returns=assets.mu,
-                                   returns=assets.returns,
-                                   investment_type=InvestmentType.FULLY_INVESTED,
-                                   weight_bounds=(0, None),
-                                   beta=0.95,
-                                   population_size=30)
+    portfolios_weights = model.mean_cdar(beta=0.95,
+                                         population_size=30)
     for i, weights in enumerate(portfolios_weights):
         population.add(Portfolio(weights=weights,
-                                 fitness_type=FitnessType.MEAN_STD,
                                  assets=assets,
                                  name=f'mean_cdar_{i}',
                                  tag='mean_cdar'))
 
     # Efficient Frontier -- Mean CVaR
-    portfolios_weights = mean_cvar(expected_returns=assets.mu,
-                                   returns=assets.returns,
-                                   investment_type=InvestmentType.FULLY_INVESTED,
-                                   weight_bounds=(0, None),
-                                   beta=0.95,
-                                   population_size=30)
+    portfolios_weights = model.mean_cvar(beta=0.95,
+                                         population_size=30)
     for i, weights in enumerate(portfolios_weights):
         population.add(Portfolio(weights=weights,
-                                 fitness_type=FitnessType.MEAN_STD,
                                  assets=assets,
                                  name=f'mean_cvar_{i}',
                                  tag='mean_cvar'))
 
     # Plot
-    population.plot(x=Metrics.CDAR_95,
-                    y=Metrics.ANNUALIZED_MEAN,
-                    color_scale=Metrics.CDAR_95_RATIO)
-    population.plot(x=Metrics.CVAR_95,
-                    y=Metrics.ANNUALIZED_MEAN,
-                    color_scale=Metrics.CVAR_95_RATIO)
+    population.plot_metrics(x=Metrics.CDAR_95,
+                            y=Metrics.ANNUALIZED_MEAN,
+                            color_scale=Metrics.CDAR_95_RATIO,
+                            hover_metrics=[Metrics.SHARPE_RATIO])
+    population.plot_metrics(x=Metrics.CVAR_95,
+                            y=Metrics.ANNUALIZED_MEAN,
+                            color_scale=Metrics.CVAR_95_RATIO,
+                            hover_metrics=[Metrics.SHARPE_RATIO])
 
     # Metrics
     max_cdar_95_ratio = population.max(metric=Metrics.CDAR_95_RATIO)
@@ -136,3 +133,8 @@ def mean_cdar_vs_mean_cvar():
 
     # Composition
     population.plot_composition(names=[max_cdar_95_ratio.name, max_cvar_95_ratio.name])
+
+    # Prices
+    population.plot_prices(names=[max_cdar_95_ratio.name, max_cvar_95_ratio.name])
+
+

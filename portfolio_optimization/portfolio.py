@@ -25,7 +25,7 @@ class BasePortfolio:
         self.returns = returns
         self.dates = dates
         self.fitness_type = fitness_type
-        self._sanity_check()
+        self._validation()
 
         # Ids
         if name is None:
@@ -47,7 +47,7 @@ class BasePortfolio:
         self._cvar_95 = None
         self._fitness = None
 
-    def _sanity_check(self):
+    def _validation(self):
         if len(self.returns) != len(self.dates):
             raise ValueError(f'returns and dates should be of same size : {len(self.returns)} vs {len(self.dates)}')
         if not isinstance(self.returns, np.ndarray):
@@ -268,7 +268,7 @@ class Portfolio(BasePortfolio):
         self.assets = assets
         self.weights = weights
         returns = self.weights @ self.assets.returns
-        self._sanity_check()
+        self._validation()
 
         super().__init__(returns=returns,
                          dates=assets.dates[1:],
@@ -276,8 +276,7 @@ class Portfolio(BasePortfolio):
                          tag=tag,
                          fitness_type=fitness_type)
 
-    def _sanity_check(self):
-        # Sanity checks
+    def _validation(self):
         for name, value in [('weights', self.weights),
                             ('assets.returns', self.assets.returns)]:
             if not isinstance(value, np.ndarray):
@@ -287,8 +286,6 @@ class Portfolio(BasePortfolio):
 
         if self.assets.asset_nb != len(self.weights):
             raise ValueError(f'weights should be of size {self.assets.asset_nb}')
-        if abs(self.weights.sum() - 1) > 1e-5:
-            raise TypeError(f'weights should sum to 1')
 
     @property
     def mean(self):
@@ -389,8 +386,6 @@ class MultiPeriodPortfolio(BasePortfolio):
     def composition(self):
         df = pd.concat([portfolio.composition for portfolio in self.portfolios], axis=1)
         df.fillna(0, inplace=True)
-        # df.columns = [f'portfolio_{portfolio.assets.start_date}_{portfolio.assets.end_date}'
-        #               for portfolio in self.portfolios]
         return df
 
     @property

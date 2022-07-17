@@ -55,4 +55,4 @@ if __name__ == '__main__':
                                  assets=assets,
                                  tag='mean_variance'))
 
-    population.plot(x=Metrics.ANNUALIZED_STD, y=Metrics.ANNUALIZED_MEAN, color_scale=Metrics.SHARPE_RATIO)
+    population.plot_metrics(x=Metrics.ANNUALIZED_STD, y=Metrics.ANNUALIZED_MEAN, color_scale=Metrics.SHARPE_RATIO)

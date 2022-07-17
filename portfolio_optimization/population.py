@@ -169,6 +169,20 @@ class Population:
         df.fillna(0, inplace=True)
         return df
 
+    def plot_prices(self, idx=slice(None),
+                    names: Union[str, list[str]] = None,
+                    tags: Union[str, list[str]] = None):
+        portfolios = self.get_portfolios(names=names, tags=tags)
+        df = pd.concat([p.prices_compounded_df for p in portfolios], axis=1).iloc[:, idx]
+        df.columns = [p.name for p in portfolios]
+        fig = df.plot()
+        fig.update_layout(title='Prices',
+                          xaxis_title='Dates',
+                          yaxis_title='Prices',
+                          legend_title_text='Portfolios')
+
+        fig.show()
+
     def plot_composition(self,
                          names: Union[str, list[str]] = None,
                          tags: Union[str, list[str]] = None):
@@ -176,16 +190,16 @@ class Population:
         fig = px.bar(df, x=df.index, y=df.columns, title='Portfolios Composition')
         fig.show()
 
-    def plot(self,
-             x: Metrics,
-             y: Metrics,
-             z: Metrics = None,
-             hover_metrics: list[Metrics] = None,
-             fronts: bool = False,
-             color_scale: Union[Metrics, str] = None,
-             names: Union[str, list[str]] = None,
-             tags: Union[str, list[str]] = None,
-             title='Portfolios'):
+    def plot_metrics(self,
+                     x: Metrics,
+                     y: Metrics,
+                     z: Metrics = None,
+                     hover_metrics: list[Metrics] = None,
+                     fronts: bool = False,
+                     color_scale: Union[Metrics, str] = None,
+                     names: Union[str, list[str]] = None,
+                     tags: Union[str, list[str]] = None,
+                     title='Portfolios'):
         portfolios = self.get_portfolios(names=names, tags=tags)
         num_fmt = ':.3f'
         hover_data = {x.value: num_fmt,
@@ -203,6 +217,7 @@ class Population:
         columns.append('name')
         if isinstance(color_scale, Metrics):
             color_scale = color_scale.value
+            hover_data[color_scale] = num_fmt
 
         if color_scale is not None and color_scale not in columns:
             columns.append(color_scale)
@@ -242,9 +257,9 @@ class Population:
         fig.update_traces(marker_size=10)
         fig.update_layout(title=title,
                           legend=dict(yanchor='top',
-                                      y=0.995,
+                                      y=0.99,
                                       xanchor='left',
-                                      x=1.1))
+                                      x=1.15))
         fig.show()
 
     def __str__(self):

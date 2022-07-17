@@ -41,10 +41,10 @@ def test_population():
         assert dominates
 
     # test plots
-    population.plot(x=Metrics.ANNUALIZED_DOWNSIDE_STD,
-                    y=Metrics.ANNUALIZED_MEAN,
-                    z=Metrics.MAX_DRAWDOWN,
-                    fronts=True)
+    population.plot_metrics(x=Metrics.ANNUALIZED_DOWNSIDE_STD,
+                            y=Metrics.ANNUALIZED_MEAN,
+                            z=Metrics.MAX_DRAWDOWN,
+                            fronts=True)
 
     # Create a population of portfolios with 2 objectives
     population = Population()
@@ -77,15 +77,15 @@ def test_population():
         mpp.add(portfolio)
     population.add(mpp)
 
-    population.plot(x=Metrics.ANNUALIZED_STD,
-                    y=Metrics.ANNUALIZED_MEAN,
-                    fronts=True)
+    population.plot_metrics(x=Metrics.ANNUALIZED_STD,
+                            y=Metrics.ANNUALIZED_MEAN,
+                            fronts=True)
 
-    population.plot(x=Metrics.ANNUALIZED_STD,
-                    y=Metrics.ANNUALIZED_MEAN,
-                    hover_metrics=[Metrics.SHARPE_RATIO],
-                    tags='random',
-                    title='Portfolios -- with sharpe ration')
+    population.plot_metrics(x=Metrics.ANNUALIZED_STD,
+                            y=Metrics.ANNUALIZED_MEAN,
+                            hover_metrics=[Metrics.SHARPE_RATIO],
+                            tags='random',
+                            title='Portfolios -- with sharpe ration')
 
     assert (population.min(metric=Metrics.ANNUALIZED_MEAN).annualized_mean
             <= population.max(metric=Metrics.ANNUALIZED_MEAN).annualized_mean)

@@ -53,12 +53,12 @@ def mean_variance_vs_mean_semivariance():
                                  tag='mean_semivariance'))
 
     # Plot
-    population.plot(x=Metrics.ANNUALIZED_STD,
-                    y=Metrics.ANNUALIZED_MEAN,
-                    color_scale=Metrics.SHARPE_RATIO)
-    population.plot(x=Metrics.ANNUALIZED_DOWNSIDE_STD,
-                    y=Metrics.ANNUALIZED_MEAN,
-                    color_scale=Metrics.SORTINO_RATIO)
+    population.plot_metrics(x=Metrics.ANNUALIZED_STD,
+                            y=Metrics.ANNUALIZED_MEAN,
+                            color_scale=Metrics.SHARPE_RATIO)
+    population.plot_metrics(x=Metrics.ANNUALIZED_DOWNSIDE_STD,
+                            y=Metrics.ANNUALIZED_MEAN,
+                            color_scale=Metrics.SORTINO_RATIO)
 
     # Metrics
     max_sharpe = population.max(metric=Metrics.SHARPE_RATIO)

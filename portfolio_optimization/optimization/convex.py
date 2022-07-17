@@ -33,27 +33,29 @@ class Optimization:
 
         :param costs: Transaction costs. Costs represent fixed costs charged on the notional amount invested.
                       Example:
-                              - For a fixed entry cost of 1% based the nominal amount in the asset currency, then costs=0.01
-                              - For a fixed entry cost of 5 Ccy (asset currency), then that cost needs to be converted
+                              * For a fixed entry cost of 1% based the nominal amount in the asset currency,
+                                then costs=0.01
+                              * For a fixed entry cost of 5 Ccy (asset currency), then that cost needs to be converted
                                 in a notional amount equivalent with costs = 5 * asset price
         :type costs: float or np.ndarray of shape(Number of Assets)
 
         :param investment_duration_in_days: The expected investment duration in business days.
-                  When costs are provided, they need to be converted to an average daily cost over the expected investment
-                  duration. This is because the optimization problem has no notion of investment duration.
+                  When costs are provided, they need to be converted to an average daily cost over
+                  the expected investment duration. This is because the optimization problem has no notion of investment
+                  duration.
                   For example, lets assume that asset A has an expected daily return of 0.01%
                   with a fixed entry cost of 1% and asset B has an expected daily return of 0.005%
                   with a fixed entry cost of 0%. Both having same volatility and correlated with r=1.
                   If the investment duration is only one month, we should allocate all the weights to asset B
                   whereas if the investment duration is one year, we should allocate all the weights to asset A.
                   Duration = 1 months (21 business days):
-                        expected return A = (1+0.01%)^21 - 1 - 1% ≈ 0.01% * 21 - 1% ≈ -0.8%
-                        expected return B ≈ 0.005% * 21 - 0% ≈ 0.1%
+                        * expected return A = (1+0.01%)^21 - 1 - 1% ≈ 0.01% * 21 - 1% ≈ -0.8%
+                        * expected return B ≈ 0.005% * 21 - 0% ≈ 0.1%
                   Duration = 1 year (255 business days):
-                        expected return A ≈ 0.01% * 255 - 1% ≈ 1.5%
-                        expected return B ≈ 0.005% * 21 - 0% ≈ 1.3%
-                 In order to take that into account, the costs provided are divided by the expected investment duration in
-                 days in the optimization problem.
+                        * expected return A ≈ 0.01% * 255 - 1% ≈ 1.5%
+                        * expected return B ≈ 0.005% * 21 - 0% ≈ 1.3%
+                 In order to take that into account, the costs provided are divided by the expected investment duration
+                 in days in the optimization problem.
 
         :param prev_w: previous weights
         :type prev_w: np.ndarray of shape(Number of Assets), default None (equivalent to an array of zeros)
@@ -143,8 +145,8 @@ class Optimization:
 
         return lower_bounds, upper_bounds
 
-    def _get_optimization_weights(self,
-                                  problem: cp.Problem,
+    @staticmethod
+    def _get_optimization_weights(problem: cp.Problem,
                                   w: cp.Variable,
                                   parameter: cp.Parameter,
                                   parameter_array: np.array) -> np.array:
@@ -252,7 +254,7 @@ class Optimization:
         # Additional matrix
         if not np.isscalar(returns_target):
             returns_target = returns_target[:, np.newaxis]
-        B = (self.assets.returns - returns_target) / np.sqrt(self.assets.date_nb)
+        b = (self.assets.returns - returns_target) / np.sqrt(self.assets.date_nb)
 
         # Variables
         w = cp.Variable(self.assets.asset_nb)
@@ -270,7 +272,7 @@ class Optimization:
         lower_bounds, upper_bounds = self._get_lower_and_upper_bounds()
 
         constraints = [portfolio_semivariance <= target_semivariance_param,
-                       B.T @ w - p + n == 0,
+                       b.T @ w - p + n == 0,
                        w >= lower_bounds,
                        w <= upper_bounds]
 

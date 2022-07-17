@@ -47,7 +47,7 @@ if __name__ == '__main__':
                 mpp.add(portfolio)
     population.add(mpp)
 
-    population.plot(x=Metrics.ANNUALIZED_STD, y=Metrics.ANNUALIZED_MEAN)
+    population.plot_metrics(x=Metrics.ANNUALIZED_STD, y=Metrics.ANNUALIZED_MEAN)
     population.composition(tags=['train'])
     population.plot_composition(tags=['train'])
 

@@ -4,8 +4,7 @@ from portfolio_optimization.meta import *
 from portfolio_optimization.paths import *
 from portfolio_optimization.portfolio import *
 from portfolio_optimization.population import *
-from portfolio_optimization.optimization.variance import *
-from portfolio_optimization.optimization.cvar import *
+from portfolio_optimization.optimization import *
 from portfolio_optimization.loader import *
 from portfolio_optimization.bloomberg.loader import *
 
@@ -24,13 +23,13 @@ def mean_variance_vs_mean_cvar():
                          pre_selection_correlation=0)
 
     population = Population()
+    model = Optimization(assets=assets,
+                         investment_type=InvestmentType.FULLY_INVESTED,
+                         weight_bounds=(0, None))
 
     # Efficient Frontier -- Mean Variance
-    portfolios_weights = mean_variance(expected_returns=assets.mu,
-                                       cov=assets.cov,
-                                       investment_type=InvestmentType.FULLY_INVESTED,
-                                       weight_bounds=(0, None),
-                                       population_size=30)
+
+    portfolios_weights = model.mean_variance(population_size=30)
     for i, weights in enumerate(portfolios_weights):
         population.add(Portfolio(weights=weights,
                                  assets=assets,
@@ -38,26 +37,21 @@ def mean_variance_vs_mean_cvar():
                                  tag='mean_variance'))
 
     # Efficient Frontier -- Mean CVaR
-    portfolios_weights = mean_cvar(expected_returns=assets.mu,
-                                   returns=assets.returns,
-                                   investment_type=InvestmentType.FULLY_INVESTED,
-                                   weight_bounds=(0, None),
-                                   beta=0.95,
-                                   population_size=30)
+    portfolios_weights = model.mean_cvar(beta=0.95,
+                                         population_size=30)
     for i, weights in enumerate(portfolios_weights):
         population.add(Portfolio(weights=weights,
-                                 fitness_type=FitnessType.MEAN_STD,
                                  assets=assets,
                                  name=f'mean_cvar_{i}',
                                  tag='mean_cvar'))
 
     # Plot
-    population.plot(x=Metrics.ANNUALIZED_STD,
-                    y=Metrics.ANNUALIZED_MEAN,
-                    color_scale=Metrics.SHARPE_RATIO)
-    population.plot(x=Metrics.CDAR_95,
-                    y=Metrics.ANNUALIZED_MEAN,
-                    color_scale=Metrics.CVAR_95_RATIO)
+    population.plot_metrics(x=Metrics.ANNUALIZED_STD,
+                            y=Metrics.ANNUALIZED_MEAN,
+                            color_scale=Metrics.SHARPE_RATIO)
+    population.plot_metrics(x=Metrics.CDAR_95,
+                            y=Metrics.ANNUALIZED_MEAN,
+                            color_scale=Metrics.CVAR_95_RATIO)
 
     # Metrics
     max_sharpe = population.max(metric=Metrics.SHARPE_RATIO)
@@ -68,3 +62,6 @@ def mean_variance_vs_mean_cvar():
 
     # Composition
     population.plot_composition(names=[max_sharpe.name, max_cvar_95_ratio.name])
+
+    # Prices
+    population.plot_prices(names=[max_sharpe.name, max_cvar_95_ratio.name])
