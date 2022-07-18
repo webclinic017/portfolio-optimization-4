@@ -77,15 +77,17 @@ def test_population():
         mpp.add(portfolio)
     population.add(mpp)
 
-    population.plot_metrics(x=Metrics.ANNUALIZED_STD,
-                            y=Metrics.ANNUALIZED_MEAN,
-                            fronts=True)
+    assert population.plot_metrics(x=Metrics.ANNUALIZED_STD,
+                                   y=Metrics.ANNUALIZED_MEAN,
+                                   fronts=True,
+                                   show=False)
 
-    population.plot_metrics(x=Metrics.ANNUALIZED_STD,
-                            y=Metrics.ANNUALIZED_MEAN,
-                            hover_metrics=[Metrics.SHARPE_RATIO],
-                            tags='random',
-                            title='Portfolios -- with sharpe ration')
+    assert population.plot_metrics(x=Metrics.ANNUALIZED_STD,
+                                   y=Metrics.ANNUALIZED_MEAN,
+                                   hover_metrics=[Metrics.SHARPE_RATIO],
+                                   tags='random',
+                                   title='Portfolios -- with sharpe ration',
+                                   show=False)
 
     assert (population.min(metric=Metrics.ANNUALIZED_MEAN).annualized_mean
             <= population.max(metric=Metrics.ANNUALIZED_MEAN).annualized_mean)
@@ -94,5 +96,5 @@ def test_population():
     assert population.get(name='portfolio_2') == population.iloc(2)
 
     # composition
-    print(population.composition())
-    population.plot_composition()
+    assert population.composition()
+    assert population.plot_composition(show=False)

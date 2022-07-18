@@ -169,26 +169,33 @@ class Population:
         df.fillna(0, inplace=True)
         return df
 
-    def plot_prices(self, idx=slice(None),
-                    names: Union[str, list[str]] = None,
-                    tags: Union[str, list[str]] = None):
+    def plot_cumulative_returns(self, idx=slice(None),
+                                names: Union[str, list[str]] = None,
+                                tags: Union[str, list[str]] = None,
+                                show: bool = True):
         portfolios = self.get_portfolios(names=names, tags=tags)
-        df = pd.concat([p.prices_compounded_df for p in portfolios], axis=1).iloc[:, idx]
+        df = pd.concat([p.cumulative_returns_df for p in portfolios], axis=1).iloc[:, idx]
         df.columns = [p.name for p in portfolios]
         fig = df.plot()
         fig.update_layout(title='Prices',
                           xaxis_title='Dates',
                           yaxis_title='Prices',
                           legend_title_text='Portfolios')
-
-        fig.show()
+        if show:
+            fig.show()
+        else:
+            return fig
 
     def plot_composition(self,
                          names: Union[str, list[str]] = None,
-                         tags: Union[str, list[str]] = None):
+                         tags: Union[str, list[str]] = None,
+                         show: bool = True):
         df = self.composition(names=names, tags=tags).T
         fig = px.bar(df, x=df.index, y=df.columns, title='Portfolios Composition')
-        fig.show()
+        if show:
+            fig.show()
+        else:
+            return fig
 
     def plot_metrics(self,
                      x: Metrics,
@@ -199,7 +206,8 @@ class Population:
                      color_scale: Union[Metrics, str] = None,
                      names: Union[str, list[str]] = None,
                      tags: Union[str, list[str]] = None,
-                     title='Portfolios'):
+                     title='Portfolios',
+                     show: bool = True):
         portfolios = self.get_portfolios(names=names, tags=tags)
         num_fmt = ':.3f'
         hover_data = {x.value: num_fmt,
@@ -260,7 +268,10 @@ class Population:
                                       y=0.99,
                                       xanchor='left',
                                       x=1.15))
-        fig.show()
+        if show:
+            fig.show()
+        else:
+            return fig
 
     def __str__(self):
         return f'Population <{len(self.portfolios)} portfolios>'

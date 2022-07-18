@@ -35,8 +35,8 @@ class BasePortfolio:
         self.tag = tag
 
         # Prices
-        self._prices_compounded = None
-        self._prices_uncompounded = None
+        self._cumulative_returns = None
+        self._cumulative_returns_uncompounded = None
 
         # Metrics
         self._mean = None
@@ -56,34 +56,34 @@ class BasePortfolio:
             raise TypeError('returns should not contain nan')
 
     @property
-    def prices_compounded(self):
-        if self._prices_compounded is None:
-            prices_compounded = (self.returns + 1).cumprod()
-            self._prices_compounded = np.insert(prices_compounded, 0, 1)
-        return self._prices_compounded
+    def cumulative_returns(self):
+        if self._cumulative_returns is None:
+            cumulative_returns = (self.returns + 1).cumprod()
+            self._cumulative_returns = np.insert(cumulative_returns, 0, 1)
+        return self._cumulative_returns
 
     @property
-    def prices_uncompounded(self):
-        if self._prices_uncompounded is None:
+    def cumulative_returns_uncompounded(self):
+        if self._cumulative_returns_uncompounded is None:
             returns = np.insert(self.returns, 0, 1)
-            self._prices_uncompounded = np.cumsum(returns)
-        return self._prices_uncompounded
+            self._cumulative_returns_uncompounded = np.cumsum(returns)
+        return self._cumulative_returns_uncompounded
 
     @property
     def returns_df(self):
         return pd.Series(index=self.dates, data=self.returns, name='returns')
 
     @property
-    def prices_compounded_df(self):
+    def cumulative_returns_df(self):
         init_date = self.dates[0] - (self.dates[1] - self.dates[0])
         index = np.insert(self.dates, 0, init_date)
-        return pd.Series(index=index, data=self.prices_compounded, name='prices_compounded')
+        return pd.Series(index=index, data=self.cumulative_returns, name='prices_compounded')
 
     @property
-    def prices_uncompounded_df(self):
+    def cumulative_returns_uncompounded_df(self):
         init_date = self.dates[0] - (self.dates[1] - self.dates[0])
         index = np.insert(self.dates, 0, init_date)
-        return pd.Series(index=index, data=self.prices_uncompounded, name='prices_uncompounded')
+        return pd.Series(index=index, data=self.cumulative_returns_uncompounded, name='prices_uncompounded')
 
     @property
     def mean(self):
@@ -118,7 +118,7 @@ class BasePortfolio:
     @property
     def max_drawdown(self):
         if self._max_drawdown is None:
-            self._max_drawdown = max_drawdown(prices=self.prices_compounded)
+            self._max_drawdown = max_drawdown(prices=self.cumulative_returns)
         return self._max_drawdown
 
     @property
@@ -127,7 +127,7 @@ class BasePortfolio:
         Conditional Drawdown at Risk (CDaR) with a confidence level at 95%
         """
         if self._cdar_95 is None:
-            self._cdar_95 = cdar(prices=self.prices_uncompounded, beta=0.95)
+            self._cdar_95 = cdar(prices=self.cumulative_returns_uncompounded, beta=0.95)
         return self._cdar_95
 
     @property
@@ -201,36 +201,53 @@ class BasePortfolio:
         res = [self.__getattribute__(attr) for attr in idx]
         return pd.DataFrame(res, index=idx, columns=['metrics'])
 
-    def plot_prices_compounded(self, idx=slice(None)):
-        fig = self.prices_compounded_df.iloc[idx].plot()
+    def plot_cumulative_returns(self,
+                                idx=slice(None),
+                                show: bool = True):
+        fig = self.cumulative_returns_df.iloc[idx].plot()
         fig.update_layout(title='Prices Compounded',
                           xaxis_title='Dates',
                           yaxis_title='Prices',
                           showlegend=False)
-        fig.show()
+        if show:
+            fig.show()
+        else:
+            return fig
 
-    def plot_prices_uncompounded(self, idx=slice(None)):
-        fig = self.prices_uncompounded_df.iloc[idx].plot()
+    def plot_cumulative_returns_uncompounded(self,
+                                             idx=slice(None),
+                                             show: bool = True):
+        fig = self.cumulative_returns_uncompounded_df.iloc[idx].plot()
         fig.update_layout(title='Prices Uncompounded',
                           xaxis_title='Dates',
                           yaxis_title='Prices',
                           showlegend=False)
-        fig.show()
+        if show:
+            fig.show()
+        else:
+            return fig
 
-    def plot_returns(self, idx=slice(None)):
+    def plot_returns(self,
+                     idx=slice(None),
+                     show: bool = True):
         fig = self.returns_df.iloc[idx].plot()
         fig.update_layout(title='Returns',
                           xaxis_title='Dates',
                           yaxis_title='Returns',
                           showlegend=False)
-        fig.show()
+        if show:
+            fig.show()
+        else:
+            return fig
 
-    def plot_rolling_sharpe(self, days: int = 30):
+    def plot_rolling_sharpe(self,
+                            days: int = 30,
+                            show: bool = True):
         s = pd.Series(self.returns, index=self.dates)
         rolling = s.rolling(window=days)
         rolling_sharpe = np.sqrt(AVG_TRADING_DAYS_PER_YEAR) * rolling.mean() / rolling.std(ddof=1)
         rolling_sharpe.name = f'Sharpe {days} days'
-        fig = rolling_sharpe.plot()
+        fig = rolling_sharpe.plot_cumulative_returns()
         fig.add_hline(y=self.sharpe_ratio, line_width=1, line_dash='dash', line_color='blue')
         fig.add_hrect(y0=0, y1=rolling_sharpe.max() * 1.3, line_width=0, fillcolor='green', opacity=0.1)
         fig.add_hrect(y0=rolling_sharpe.min() * 1.3, y1=0, line_width=0, fillcolor='red', opacity=0.1)
@@ -239,21 +256,27 @@ class BasePortfolio:
                           xaxis_title='Dates',
                           yaxis_title='Sharpe Ratio',
                           showlegend=False)
-        fig.show()
+        if show:
+            fig.show()
+        else:
+            return fig
 
     @property
     def composition(self) -> pd.DataFrame:
         """Implemented in Portfolio and MultiPeriodPortfolio"""
         return pd.DataFrame()
 
-    def plot_composition(self):
+    def plot_composition(self, show: bool = True):
         df = self.composition.T
         fig = px.bar(df, x=df.index, y=df.columns)
         fig.update_layout(title='Portfolio Composition',
                           xaxis_title='Portfolio',
                           yaxis_title='Weight',
                           legend_title_text='Assets')
-        fig.show()
+        if show:
+            fig.show()
+        else:
+            return fig
 
 
 class Portfolio(BasePortfolio):

@@ -9,7 +9,7 @@ from portfolio_optimization import (Assets,
 
 
 def test_assets_class():
-    prices = load_prices(file=TEST_PRICES_PATH)
+    prices = load_prices(file=TEST_PRICES_PATH).iloc[:, :30]
 
     start_date = dt.date(2017, 1, 1)
     assets = Assets(prices=prices,
@@ -40,8 +40,8 @@ def test_assets_class():
 
     assert assets.asset_nb == len(new_names)
     assert assets.date_nb == len(assets.prices) - 1
-    assets.plot()
-    assets.plot(idx=[2, 5])
+    assert assets.plot_cumulative_returns(show=False)
+    assert assets.plot_cumulative_returns(idx=[2, 5], show=False)
 
     costs = {assets.names[2]: 0.1,
              assets.names[10]: 0.2}

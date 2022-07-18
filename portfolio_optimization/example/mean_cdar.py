@@ -73,7 +73,7 @@ def mean_variance_vs_mean_cdar():
     population.plot_composition(names=[max_sharpe.name, max_cdar_95_ratio.name])
 
     # Prices
-    population.plot_prices(names=[max_sharpe.name, max_cdar_95_ratio.name])
+    population.plot_cumulative_returns(names=[max_sharpe.name, max_cdar_95_ratio.name])
 
 
 
@@ -135,6 +135,6 @@ def mean_cdar_vs_mean_cvar():
     population.plot_composition(names=[max_cdar_95_ratio.name, max_cvar_95_ratio.name])
 
     # Prices
-    population.plot_prices(names=[max_cdar_95_ratio.name, max_cvar_95_ratio.name])
+    population.plot_cumulative_returns(names=[max_cdar_95_ratio.name, max_cvar_95_ratio.name])
 
 

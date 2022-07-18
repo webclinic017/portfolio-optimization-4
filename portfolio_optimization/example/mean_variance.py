@@ -88,7 +88,7 @@ if __name__ == '__main__':
                                        'inverse_volatility'])
 
     # Prices
-    population.plot_prices(names=[max_sharpe_ratio.name,
-                                  max_cdar_95_ratio.name,
+    population.plot_cumulative_returns(names=[max_sharpe_ratio.name,
+                                              max_cdar_95_ratio.name,
                                   'equal_weighted',
                                   'inverse_volatility'])

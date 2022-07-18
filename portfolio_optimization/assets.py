@@ -38,7 +38,7 @@ class Assets:
         :param verbose: True to print logging info
         """
         self._returns = None
-        self._cum_returns = None
+        self._cumulative_returns = None
         self._mu = None
         self._std = None
         self._cov = None
@@ -165,15 +165,15 @@ class Assets:
         return self._returns
 
     @property
-    def cum_returns(self):
+    def cumulative_returns(self):
         """
-        Compute the cumulative returns (1+R1)*(1+R2)*(1+R3)...  = S1/S0 - 1)
-        It's like rebasing prices to 1
+        Compute the compounded cumulative returns (1+R1)*(1+R2)*(1+R3)...  = S1/S0 - 1)
+        It's equivalent to rebasing prices to 1
         """
-        if self._cum_returns is None:
+        if self._cumulative_returns is None:
             df_returns = self.prices.pct_change()[1:]
-            self._cum_returns = (df_returns + 1).cumprod()
-        return self._cum_returns
+            self._cumulative_returns = (df_returns + 1).cumprod()
+        return self._cumulative_returns
 
     @property
     def mu(self):
@@ -230,13 +230,16 @@ class Assets:
 
         return np.array([assets_dict.get(name, 0) for name in self.names])
 
-    def plot(self, idx=slice(None)):
-        fig = self.cum_returns.iloc[:, idx].plot(title='Prices')
-        fig.update_layout(title='Prices',
+    def plot_cumulative_returns(self, idx=slice(None), show: bool = True):
+        fig = self.cumulative_returns.iloc[:, idx].plot()
+        fig.update_layout(title='Compounded Cumulative Returns',
                           xaxis_title='Dates',
-                          yaxis_title='Prices',
+                          yaxis_title='Cumulative Returns',
                           legend_title_text='Assets')
-        fig.show()
+        if show:
+            fig.show()
+        else:
+            return fig
 
     def _info(self, msg: str):
         if self.verbose:

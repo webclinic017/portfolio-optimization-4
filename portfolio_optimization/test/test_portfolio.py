@@ -32,7 +32,7 @@ def test_portfolio_metrics():
                - portfolio.downside_std) < 1e-10
     assert abs(portfolio.annualized_mean / portfolio.annualized_std - portfolio.sharpe_ratio) < 1e-10
     assert abs(portfolio.annualized_mean / portfolio.annualized_downside_std - portfolio.sortino_ratio) < 1e-10
-    assert max_drawdown_slow(portfolio.prices_compounded) == portfolio.max_drawdown
+    assert max_drawdown_slow(portfolio.cumulative_returns) == portfolio.max_drawdown
     assert np.array_equal(portfolio.fitness, np.array([portfolio.mean, -portfolio.std]))
     portfolio.reset_fitness(fitness_type=FitnessType.MEAN_DOWNSIDE_STD)
     assert np.array_equal(portfolio.fitness, np.array([portfolio.mean, -portfolio.downside_std]))
@@ -53,12 +53,12 @@ def test_portfolio_metrics():
     portfolio.reset_metrics()
     assert portfolio._mean is None
     assert portfolio._std is None
-    portfolio.plot_returns()
-    portfolio.plot_prices_compounded()
-    portfolio.plot_prices_uncompounded()
-    portfolio.plot_rolling_sharpe(days=20)
-    print(portfolio.composition)
-    portfolio.plot_composition()
+    assert portfolio.plot_returns(show=False)
+    assert portfolio.plot_cumulative_returns(show=False)
+    assert portfolio.plot_cumulative_returns_uncompounded(show=False)
+    assert portfolio.plot_rolling_sharpe(days=20)
+    assert portfolio.composition
+    assert portfolio.plot_composition(show=False)
 
 
 def test_portfolio_dominate():

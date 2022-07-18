@@ -64,5 +64,5 @@ def mean_variance_vs_mean_semivariance():
     population.plot_composition(names=[max_sharpe.name, max_sortino.name])
 
     # Prices
-    population.plot_prices(names=[max_sharpe.name, max_sortino.name])
+    population.plot_cumulative_returns(names=[max_sharpe.name, max_sortino.name])
 

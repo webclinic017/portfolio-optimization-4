@@ -41,7 +41,7 @@ def test_multi_period_portfolio():
                - mpp.sharpe_ratio) < 1e-10
     assert abs(mpp.annualized_mean / mpp.annualized_downside_std
                - mpp.sortino_ratio) < 1e-10
-    assert max_drawdown_slow(mpp.prices_compounded) == mpp.max_drawdown
+    assert max_drawdown_slow(mpp.cumulative_returns) == mpp.max_drawdown
     assert np.array_equal(mpp.fitness,
                           np.array([mpp.mean, -mpp.std]))
     mpp.reset_fitness(fitness_type=FitnessType.MEAN_DOWNSIDE_STD)
@@ -58,10 +58,10 @@ def test_multi_period_portfolio():
     mpp.reset_metrics()
     assert mpp._mean is None
     assert mpp._std is None
-    mpp.plot_returns()
-    mpp.plot_prices_compounded()
-    mpp.plot_prices_uncompounded()
-    mpp.plot_rolling_sharpe(days=20)
-    print(mpp.composition)
-    mpp.plot_composition()
+    assert mpp.plot_returns(show=False)
+    assert mpp.plot_cumulative_returns(show=False)
+    assert mpp.plot_cumulative_returns_uncompounded(show=False)
+    assert mpp.plot_rolling_sharpe(days=20)
+    assert mpp.composition
+    assert mpp.plot_composition(show=False)
 

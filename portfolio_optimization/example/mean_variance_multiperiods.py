@@ -50,6 +50,6 @@ if __name__ == '__main__':
     population.plot_composition(tags=['train'])
 
     mpp.plot_returns()
-    mpp.plot_prices_compounded()
+    mpp.plot_cumulative_returns()
     mpp.plot_rolling_sharpe(days=20)
     print(mpp.sharpe_ratio)
