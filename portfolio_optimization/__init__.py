@@ -3,8 +3,10 @@ from .assets import Assets
 from .portfolio import Portfolio, MultiPeriodPortfolio
 from .population import Population
 from .loader import load_assets, load_train_test_assets
+from .utils import walk_forward
 from .optimization import *
 from .bloomberg import *
+from .exception import *
 
 from .paths import *
 from .meta import *
@@ -14,11 +16,14 @@ __all__ = ['Assets',
            'MultiPeriodPortfolio',
            'Population',
            'load_assets',
-           'load_train_test_assets']
+           'load_train_test_assets',
+           'walk_forward']
+
 __all__ += paths.__all__
 __all__ += meta.__all__
 __all__ += optimization.__all__
 __all__ += bloomberg.__all__
+__all__ += exception.__all__
 
 
 class CustomFormatter(logging.Formatter):

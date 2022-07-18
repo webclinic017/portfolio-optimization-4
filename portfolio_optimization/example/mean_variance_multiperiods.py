@@ -1,4 +1,3 @@
-
 from portfolio_optimization import *
 
 if __name__ == '__main__':
@@ -27,11 +26,10 @@ if __name__ == '__main__':
                                              pre_selection_number=50,
                                              verbose=False)
         try:
-            weights = mean_variance(expected_returns=train.mu,
-                                    cov=train.cov,
-                                    investment_type=InvestmentType.FULLY_INVESTED,
-                                    weight_bounds=(0, None),
-                                    target_variance=target_variance)
+            model = Optimization(assets=train,
+                                 investment_type=InvestmentType.FULLY_INVESTED,
+                                 weight_bounds=(0, None))
+            weights = model.mean_variance(target_variance=target_variance)
         except OptimizationError:
             print('OptimizationError')
             continue
@@ -48,7 +46,7 @@ if __name__ == '__main__':
     population.add(mpp)
 
     population.plot_metrics(x=Metrics.ANNUALIZED_STD, y=Metrics.ANNUALIZED_MEAN)
-    population.composition(tags=['train'])
+    print(population.composition(tags=['train']))
     population.plot_composition(tags=['train'])
 
     mpp.plot_returns()

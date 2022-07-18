@@ -1,12 +1,6 @@
 import datetime as dt
 
-from portfolio_optimization.meta import *
-from portfolio_optimization.paths import *
-from portfolio_optimization.portfolio import *
-from portfolio_optimization.population import *
-from portfolio_optimization.optimization.variance import *
-from portfolio_optimization.loader import *
-from portfolio_optimization.bloomberg.loader import *
+from portfolio_optimization import *
 
 if __name__ == '__main__':
     """
@@ -14,7 +8,6 @@ if __name__ == '__main__':
     frontier tested on the test period (2019-2020)
     """
     prices = load_prices(file=EXAMPLE_PRICES_PATH)
-
     assets_train, assets_test = load_train_test_assets(prices=prices,
                                                        train_period=(dt.date(2018, 1, 1), dt.date(2019, 1, 1)),
                                                        test_period=(dt.date(2019, 1, 1), dt.date(2020, 1, 1)),
@@ -26,11 +19,10 @@ if __name__ == '__main__':
 
     # Efficient Frontier -- Mean Variance -- Per period
     for assets in [assets_train, assets_test]:
-        portfolios_weights = mean_variance(expected_returns=assets.mu,
-                                           cov=assets.cov,
-                                           investment_type=InvestmentType.FULLY_INVESTED,
-                                           weight_bounds=(0, None),
-                                           population_size=30)
+        model = Optimization(assets=assets,
+                             investment_type=InvestmentType.FULLY_INVESTED,
+                             weight_bounds=(0, None))
+        portfolios_weights = model.mean_variance(population_size=30)
         for i, weights in enumerate(portfolios_weights):
             population.add(Portfolio(weights=weights,
                                      fitness_type=FitnessType.MEAN_STD,
