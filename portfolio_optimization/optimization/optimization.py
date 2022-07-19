@@ -268,6 +268,11 @@ class Optimization:
                              '  --> you can find an approximation by computing the efficient frontier with '
                              ' mean_variance(population=30) and finding the portfolio with the highest sharpe ratio.')
 
+        if self.costs is not None:
+            raise ValueError('maximum_sharpe() cannot be solved with costs '
+                             '  --> you can find an approximation by computing the efficient frontier with '
+                             ' mean_variance(population=30) and finding the portfolio with the highest sharpe ratio.')
+
         # Variables
         w = cp.Variable(self.assets.asset_nb)
         k = cp.Variable()
@@ -378,9 +383,10 @@ class Optimization:
                   target_cvar: Optional[float] = None,
                   population_size: Optional[int] = None) -> np.ndarray:
         """
-        Optimization along the mean-CVaR frontier (conditional drawdown-at-risk).
+        Optimization along the mean-CVaR frontier (Conditional Value-at-Risk or Expected Shortfall).
+        CVaR is the average of the “extreme” losses beyond the VaR cutoff point.
 
-        :param beta: var confidence level (expected var on the worst (1-beta)% days)
+        :param beta: var confidence level (expected VaR on the worst (1-beta)% days)
         :type beta: float
 
         :param target_cvar: minimize return for the targeted cvar.
@@ -430,7 +436,7 @@ class Optimization:
             cvar_array = [target_cvar]
         else:
             # Solve for multiple cvar
-            cvar_array = np.logspace(-3.5, -0.5, num=population_size)
+            cvar_array = np.logspace(-2, -0.5, num=population_size)
 
         weights = self._get_optimization_weights(problem=problem,
                                                  w=w,
