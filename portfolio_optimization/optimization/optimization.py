@@ -108,7 +108,7 @@ class Optimization:
             if len(self.prev_w) != self.assets.asset_nb:
                 raise ValueError(f'prev_w should be of size {self.assets.asset_nb} but received {len(self.prev_w)}')
 
-    def _maximize_portfolio_returns(self, w: cp.Variable) -> cp.Maximize:
+    def _portfolio_returns(self, w: cp.Variable) -> cp.Expression:
         portfolio_return = self.assets.expected_returns @ w
         if self.costs is None or (np.isscalar(self.costs) and self.costs == 0):
             portfolio_cost = 0
@@ -123,9 +123,9 @@ class Optimization:
             else:
                 portfolio_cost = cp.norm(cp.multiply(daily_costs, (prev_w - w)), 1)
 
-        objective = cp.Maximize(portfolio_return - portfolio_cost)
+        portfolio_return_with_costs = portfolio_return - portfolio_cost
 
-        return objective
+        return portfolio_return_with_costs
 
     def _get_lower_and_upper_bounds(self) -> tuple[np.ndarray, np.ndarray]:
         # Upper and lower bounds
@@ -224,7 +224,7 @@ class Optimization:
         target_variance_param = cp.Parameter(nonneg=True)
 
         # Objectives
-        objective = self._maximize_portfolio_returns(w=w)
+        objective = cp.Maximize(self._portfolio_returns(w=w))
 
         # Constraints
         portfolio_variance = cp.quad_form(w, self.assets.cov)
@@ -255,6 +255,49 @@ class Optimization:
                                                  parameter_array=variance_array)
 
         return weights
+
+    def maximum_sharpe(self) -> np.ndarray:
+        """
+        Maximize the sharpe ratio.
+
+        :return the portfolio weights that maximize the sharpe ratio of the portfolio.
+        """
+
+        if self.investment_type != InvestmentType.FULLY_INVESTED:
+            raise ValueError('maximum_sharpe() can be solved only for investment_type=InvestmentType.FULLY_INVESTED'
+                             '  --> you can find an approximation by computing the efficient frontier with '
+                             ' mean_variance(population=30) and finding the portfolio with the highest sharpe ratio.')
+
+        # Variables
+        w = cp.Variable(self.assets.asset_nb)
+        k = cp.Variable()
+
+        # Objectives
+        objective = cp.Minimize(cp.quad_form(w, self.assets.cov))
+
+        # Constraints
+        lower_bounds, upper_bounds = self._get_lower_and_upper_bounds()
+        constraints = [self._portfolio_returns(w=w) == 1,
+                       w >= lower_bounds * k,
+                       w <= upper_bounds * k,
+                       cp.sum(w) == k,
+                       k >= 0]
+
+        # Problem
+        problem = cp.Problem(objective, constraints)
+
+        try:
+            problem.solve(solver='ECOS')
+            if w.value is None or k.value is None:
+                logger.warning(f'None return')
+                raise OptimizationError
+            return np.array(w.value / k.value, dtype=float)
+        except SolverError as e:
+            logger.warning(f'SolverError for: {e}')
+            raise OptimizationError
+        except ArpackNoConvergence as e:
+            logger.warning(f'ArpackNoConvergence for: {e}')
+            raise OptimizationError
 
     def mean_semivariance(self,
                           returns_target: Optional[Union[float, np.ndarray]] = None,
@@ -294,7 +337,7 @@ class Optimization:
         target_semivariance_param = cp.Parameter(nonneg=True)
 
         # Objectives
-        objective = self._maximize_portfolio_returns(w=w)
+        objective = cp.Maximize(self._portfolio_returns(w=w))
 
         # Constraints
         portfolio_semivariance = cp.sum(cp.square(n))
@@ -354,7 +397,6 @@ class Optimization:
         self._validate_args(population_size=population_size,
                             target_cvar=target_cvar)
 
-
         # Variables
         w = cp.Variable(self.assets.asset_nb)
         alpha = cp.Variable()
@@ -364,7 +406,7 @@ class Optimization:
         target_cvar_param = cp.Parameter(nonneg=True)
 
         # Objectives
-        objective = self._maximize_portfolio_returns(w=w)
+        objective = cp.Maximize(self._portfolio_returns(w=w))
 
         # Constraints
         portfolio_cvar = alpha + 1.0 / (self.assets.date_nb * (1 - beta)) * cp.sum(u)
@@ -431,7 +473,7 @@ class Optimization:
         target_cdar_param = cp.Parameter(nonneg=True)
 
         # Objectives
-        objective = self._maximize_portfolio_returns(w=w)
+        objective = cp.Maximize(self._portfolio_returns(w=w))
 
         # Constraints
         portfolio_cdar = alpha + 1.0 / (self.assets.date_nb * (1 - beta)) * cp.sum(z)

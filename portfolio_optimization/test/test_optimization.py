@@ -3,6 +3,7 @@ import numpy as np
 from portfolio_optimization.meta import *
 from portfolio_optimization.paths import *
 from portfolio_optimization.portfolio import *
+from portfolio_optimization.population import *
 from portfolio_optimization.optimization import *
 from portfolio_optimization.loader import *
 from portfolio_optimization.bloomberg import *
@@ -128,3 +129,33 @@ def test_mean_variance():
     portfolios_weights = model.mean_variance(population_size=30)
     assert portfolios_weights.shape[0] <= 30
     assert portfolios_weights.shape[1] == assets.asset_nb
+
+
+def test_maximum_sharpe():
+    prices = load_prices(file=EXAMPLE_PRICES_PATH)
+    prices = prices.iloc[:, :100].copy()
+    assets = load_assets(prices=prices,
+                         asset_missing_threshold=0.1,
+                         dates_missing_threshold=0.1,
+                         removal_correlation=0.99,
+                         verbose=False)
+
+    model = Optimization(assets=assets,
+                         investment_type=InvestmentType.FULLY_INVESTED,
+                         weight_bounds=(0.02, None))
+
+    weights = model.maximum_sharpe()
+    portfolio = Portfolio(weights=weights,
+                          assets=assets)
+
+    portfolios_weights = model.mean_variance(population_size=30)
+    population = Population()
+    for weights in portfolios_weights:
+        population.add(Portfolio(weights=weights,
+                                 assets=assets))
+
+    max_sharpe_ptf = population.max(metric=Metrics.SHARPE_RATIO)
+
+    assert abs(max_sharpe_ptf.sharpe_ratio - portfolio.sharpe_ratio) < 1e-2
+    assert abs(max_sharpe_ptf.std - portfolio.std) < 1e-3
+    assert abs(max_sharpe_ptf.mean - max_sharpe_ptf.mean) < 1e-4
