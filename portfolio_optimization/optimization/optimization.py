@@ -147,19 +147,24 @@ class Optimization:
                                   parameter: cp.Parameter,
                                   parameter_array: np.ndarray) -> np.ndarray:
         weights = []
-        try:
-            for value in parameter_array:
-                parameter.value = value
-                try:
-                    problem.solve(solver='ECOS')
-                    if w.value is None:
-                        logger.warning(f'None return for {value}')
-                    else:
-                        weights.append(w.value)
-                except SolverError as e:
-                    logger.warning(f'SolverError for {value}: {e}')
-        except ArpackNoConvergence:
+        for value in parameter_array:
+            parameter.value = value
+            try:
+                problem.solve(solver='ECOS')
+                if w.value is None:
+                    logger.warning(f'None return for {value}')
+                else:
+                    weights.append(w.value)
+            except SolverError as e:
+                logger.warning(f'SolverError for {value}: {e}')
+            except ArpackNoConvergence as e:
+                logger.warning(f'ArpackNoConvergence for {value}: {e}')
+
+        if len(weights) == 0:
             raise OptimizationError
+
+        if len(parameter_array) == 1:
+            return np.array(weights[0], dtype=float)
 
         return np.array(weights, dtype=float)
 
@@ -170,23 +175,47 @@ class Optimization:
         elif self.investment_type == InvestmentType.MARKET_NEUTRAL:
             return 0
 
+    @staticmethod
+    def _validate_args(**kwargs):
+        population_size = kwargs.get('population_size')
+        targets_names = [k for k, v in kwargs.items() if k.startswith('target_')]
+        not_none_targets_names = [k for k in targets_names if kwargs[k] is not None]
+        if len(not_none_targets_names) > 1:
+            raise ValueError(f'Only one target has to be provided but received {" AND ".join(not_none_targets_names)}')
+        elif len(not_none_targets_names) == 1:
+            target_name = targets_names[0]
+        else:
+            target_name = None
+
+        if ((population_size is None and target_name is None) or
+                (population_size is not None and target_name is not None)):
+            raise ValueError(f'You have to provide population_size OR {" OR ".join(not_none_targets_names)}')
+
+        if population_size is not None and population_size <= 1:
+            raise ValueError('f population_size should be strictly greater than one')
+
     def mean_variance(self,
                       population_size: Optional[int] = None,
-                      target_variance: Optional[float] = None) -> np.ndarray:
+                      target_volatility: Optional[float] = None) -> np.ndarray:
         """
         Optimization along the mean-variance frontier (Markowitz optimization).
 
         :param population_size: number of pareto optimal portfolio weights to compute along the efficient frontier
         :type population_size: int, optional
 
-        :param target_variance: minimize return for the targeted variance.
-        :type target_variance: float, optional
+        :param target_volatility: minimize return for the targeted daily volatility of the portfolio.
+        :type target_volatility: float, optional
 
-        :return the portfolio weights that are in the efficient frontier
+        :return the portfolio weights that are in the efficient frontier.
         """
-        if ((population_size is None and target_variance is None) or
-                (population_size is not None and target_variance is not None)):
-            raise ValueError(f'You have to provide population_size OR target_variance')
+        self._validate_args(population_size=population_size,
+                            target_volatility=target_volatility)
+
+        min_volatility = np.sqrt(1 / np.sum(np.linalg.pinv(self.assets.cov)))
+
+        if target_volatility is not None and target_volatility < min_volatility:
+            raise ValueError(f'The minimum volatility is {min_volatility:.3f}. '
+                             f'Please use a higher target_volatility')
 
         # Variables
         w = cp.Variable(self.assets.asset_nb)
@@ -210,13 +239,15 @@ class Optimization:
         # Problem
         problem = cp.Problem(objective, constraints)
 
-        if target_variance is not None:
+        if target_volatility is not None:
             # Solve for a variance target
-            variance_array = [target_variance]
+            variance_array = [target_volatility ** 2]
         else:
             # Solve for multiple volatilities
-            annualized_volatilities = np.logspace(-2.5, -0.5, num=population_size)
-            variance_array = annualized_volatilities ** 2 / 255
+            start = np.log10(min_volatility * 1.3)  # We start at min * 130% to increase proba of convergence
+            end = np.log10(0.3 / np.sqrt(255))  # We stop at 30% annualized volatility
+            volatilities = np.logspace(start, end, num=population_size)
+            variance_array = volatilities ** 2
 
         weights = self._get_optimization_weights(problem=problem,
                                                  w=w,
@@ -227,7 +258,7 @@ class Optimization:
 
     def mean_semivariance(self,
                           returns_target: Optional[Union[float, np.ndarray]] = None,
-                          target_semivariance: Optional[float] = None,
+                          target_semideviation: Optional[float] = None,
                           population_size: Optional[int] = None) -> np.ndarray:
         """
         Optimization along the mean-semivariance frontier.
@@ -235,17 +266,16 @@ class Optimization:
         :param returns_target: the return target to distinguish "downside" and "upside".
         :type returns_target: float or np.ndarray of shape(Number of Assets)
 
-        :param target_semivariance: minimize return for the targeted semivariance.
-        :type target_semivariance: float, optional
+        :param target_semideviation: minimize return for the targeted semideviation of the portfolio.
+        :type target_semideviation: float, optional
 
         :param population_size: number of pareto optimal portfolio weights to compute along the efficient frontier
         :type population_size: int
 
         :return the portfolio weights that are in the efficient frontier
         """
-        if ((population_size is None and target_semivariance is None) or
-                (population_size is not None and target_semivariance is not None)):
-            raise ValueError(f'You have to provide population_size OR target_semivariance')
+        self._validate_args(population_size=population_size,
+                            target_semideviation=target_semideviation)
 
         if returns_target is None:
             returns_target = self.assets.mu
@@ -282,13 +312,16 @@ class Optimization:
         # Problem
         problem = cp.Problem(objective, constraints)
 
-        if target_semivariance is not None:
+        if target_semideviation is not None:
             # Solve for a variance target
-            semivariance_array = [target_semivariance]
+            semivariance_array = [target_semideviation ** 2]
         else:
-            # Solve for multiple semivolatilities
-            annualized_semivolatilities = np.logspace(-2.5, -0.5, num=population_size)
-            semivariance_array = annualized_semivolatilities ** 2 / 255
+            # Solve for multiple semideviations
+            min_volatility = np.sqrt(1 / np.sum(np.linalg.pinv(self.assets.cov)))
+            start = np.log10(min_volatility * 1.3)  # We start at min_volatility * 130% to increase proba of convergence
+            end = np.log10(0.3 / np.sqrt(255))  # We stop at 30% annualized semideviation
+            semideviations = np.logspace(start, end, num=population_size)
+            semivariance_array = semideviations ** 2
 
         weights = self._get_optimization_weights(problem=problem,
                                                  w=w,
@@ -317,6 +350,10 @@ class Optimization:
         :return the portfolio weights that are in the efficient frontier
 
         """
+
+        self._validate_args(population_size=population_size,
+                            target_cvar=target_cvar)
+
 
         # Variables
         w = cp.Variable(self.assets.asset_nb)
@@ -380,6 +417,9 @@ class Optimization:
         :return the portfolio weights that are in the efficient frontier
 
         """
+
+        self._validate_args(population_size=population_size,
+                            target_cdar=target_cdar)
 
         # Variables
         w = cp.Variable(self.assets.asset_nb)

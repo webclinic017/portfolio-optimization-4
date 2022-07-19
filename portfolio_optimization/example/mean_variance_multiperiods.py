@@ -1,3 +1,5 @@
+import numpy as np
+
 from portfolio_optimization import *
 
 if __name__ == '__main__':
@@ -6,7 +8,7 @@ if __name__ == '__main__':
 
     start_date = prices.index[int(2 * len(prices) / 3)].date()
     end_date = prices.index[-1].date()
-    target_variance = 0.025 ** 2 / 255
+    target_volatility = 0.025 / np.sqrt(255)
     train_duration = 300
     test_duration = 30
 
@@ -29,13 +31,13 @@ if __name__ == '__main__':
             model = Optimization(assets=train,
                                  investment_type=InvestmentType.FULLY_INVESTED,
                                  weight_bounds=(0, None))
-            weights = model.mean_variance(target_variance=target_variance)
+            weights = model.mean_variance(target_volatility=target_volatility)
         except OptimizationError:
             print('OptimizationError')
             continue
 
         for tag, assets in [('train', train), ('test', test)]:
-            portfolio = Portfolio(weights=weights[0],
+            portfolio = Portfolio(weights=weights,
                                   assets=assets,
                                   name=f'portfolio_{assets.name}',
                                   tag=tag)
