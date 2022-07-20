@@ -145,28 +145,34 @@ class Optimization:
     def _get_optimization_weights(problem: cp.Problem,
                                   w: cp.Variable,
                                   parameter: cp.Parameter,
-                                  parameter_array: np.ndarray) -> np.ndarray:
+                                  target: Union[float, np.ndarray],
+                                  ignore_none: bool = True) -> list[Union[np.ndarray, None]]:
+
+        if np.isscalar(target):
+            parameter_array = [target]
+        else:
+            parameter_array = target
+
         weights = []
         for value in parameter_array:
             parameter.value = value
+            weight = None
             try:
                 problem.solve(solver='ECOS')
                 if w.value is None:
                     logger.warning(f'None return for {value}')
-                else:
-                    weights.append(w.value)
+                weight = w.value
             except SolverError as e:
                 logger.warning(f'SolverError for {value}: {e}')
             except ArpackNoConvergence as e:
                 logger.warning(f'ArpackNoConvergence for {value}: {e}')
+            if weight is not None or not ignore_none:
+                weights.append(weight)
 
-        if len(weights) == 0:
-            raise OptimizationError
+        if np.isscalar(target):
+            return weights[0]
 
-        if len(parameter_array) == 1:
-            return np.array(weights[0], dtype=float)
-
-        return np.array(weights, dtype=float)
+        return weights
 
     def _get_investment_target(self) -> Optional[int]:
         # Sum of weights
@@ -195,8 +201,9 @@ class Optimization:
             raise ValueError('f population_size should be strictly greater than one')
 
     def mean_variance(self,
+                      target_volatility: Optional[Union[float, list, np.ndarray]] = None,
                       population_size: Optional[int] = None,
-                      target_volatility: Optional[float] = None) -> np.ndarray:
+                      ignore_none:bool=True) -> list[Union[np.ndarray, None]]:
         """
         Optimization along the mean-variance frontier (Markowitz optimization).
 
@@ -204,7 +211,10 @@ class Optimization:
         :type population_size: int, optional
 
         :param target_volatility: minimize return for the targeted daily volatility of the portfolio.
-        :type target_volatility: float, optional
+        :type target_volatility: float or list or numpy.ndarray optional
+
+        :param ignore_none: if True, None are removed from the list of weights results when the optimization failed
+        :type ignore_none: bool, default True
 
         :return the portfolio weights that are in the efficient frontier.
         """
@@ -213,7 +223,7 @@ class Optimization:
 
         min_volatility = np.sqrt(1 / np.sum(np.linalg.pinv(self.assets.cov)))
 
-        if target_volatility is not None and target_volatility < min_volatility:
+        if np.isscalar(target_volatility) and target_volatility < min_volatility:
             raise ValueError(f'The minimum volatility is {min_volatility:.3f}. '
                              f'Please use a higher target_volatility')
 
@@ -240,19 +250,22 @@ class Optimization:
         problem = cp.Problem(objective, constraints)
 
         if target_volatility is not None:
-            # Solve for a variance target
-            variance_array = [target_volatility ** 2]
+            if np.isscalar(target_volatility):
+                target = target_volatility ** 2
+            else:
+                target = np.array(target_volatility) ** 2
+
         else:
-            # Solve for multiple volatilities
             start = np.log10(min_volatility * 1.3)  # We start at min * 130% to increase proba of convergence
             end = np.log10(0.3 / np.sqrt(255))  # We stop at 30% annualized volatility
             volatilities = np.logspace(start, end, num=population_size)
-            variance_array = volatilities ** 2
+            target = volatilities ** 2
 
         weights = self._get_optimization_weights(problem=problem,
                                                  w=w,
                                                  parameter=target_variance_param,
-                                                 parameter_array=variance_array)
+                                                 target=target,
+                                                 ignore_none=ignore_none)
 
         return weights
 
@@ -306,8 +319,9 @@ class Optimization:
 
     def mean_semivariance(self,
                           returns_target: Optional[Union[float, np.ndarray]] = None,
-                          target_semideviation: Optional[float] = None,
-                          population_size: Optional[int] = None) -> np.ndarray:
+                          target_semideviation: Optional[Union[float, list, np.ndarray]] = None,
+                          population_size: Optional[int] = None,
+                          ignore_none:bool=True) -> list[Union[np.ndarray, None]]:
         """
         Optimization along the mean-semivariance frontier.
 
@@ -315,10 +329,13 @@ class Optimization:
         :type returns_target: float or np.ndarray of shape(Number of Assets)
 
         :param target_semideviation: minimize return for the targeted semideviation of the portfolio.
-        :type target_semideviation: float, optional
+        :type target_semideviation: float or list or numpy.ndarray optional
 
         :param population_size: number of pareto optimal portfolio weights to compute along the efficient frontier
         :type population_size: int
+
+        :param ignore_none: if True, None are removed from the list of weights results when the optimization failed
+        :type ignore_none: bool, default True
 
         :return the portfolio weights that are in the efficient frontier
         """
@@ -361,40 +378,46 @@ class Optimization:
         problem = cp.Problem(objective, constraints)
 
         if target_semideviation is not None:
-            # Solve for a variance target
-            semivariance_array = [target_semideviation ** 2]
+            if np.isscalar(target_semideviation):
+                target = target_semideviation ** 2
+            else:
+                target = np.array(target_semideviation) ** 2
         else:
             # Solve for multiple semideviations
             min_volatility = np.sqrt(1 / np.sum(np.linalg.pinv(self.assets.cov)))
             start = np.log10(min_volatility * 1.3)  # We start at min_volatility * 130% to increase proba of convergence
             end = np.log10(0.3 / np.sqrt(255))  # We stop at 30% annualized semideviation
             semideviations = np.logspace(start, end, num=population_size)
-            semivariance_array = semideviations ** 2
+            target = semideviations ** 2
 
         weights = self._get_optimization_weights(problem=problem,
                                                  w=w,
                                                  parameter=target_semivariance_param,
-                                                 parameter_array=semivariance_array)
+                                                 target=target,
+                                                 ignore_none=ignore_none)
 
         return weights
 
     def mean_cvar(self,
                   beta: float = 0.95,
-                  target_cvar: Optional[float] = None,
-                  population_size: Optional[int] = None) -> np.ndarray:
+                  target_cvar: Optional[Union[float, list, np.ndarray]] = None,
+                  population_size: Optional[int] = None,
+                  ignore_none:bool=True) -> list[Union[np.ndarray, None]]:
         """
         Optimization along the mean-CVaR frontier (Conditional Value-at-Risk or Expected Shortfall).
-        CVaR is the average of the “extreme” losses beyond the VaR cutoff point.
+        CVaR is the average of the “extreme” losses beyond the VaR threshold.
 
         :param beta: var confidence level (expected VaR on the worst (1-beta)% days)
         :type beta: float
 
         :param target_cvar: minimize return for the targeted cvar.
-        :type target_cvar: float, optional
+        :type target_cvar: float or list or numpy.ndarray optional
 
         :param population_size: number of pareto optimal portfolio weights to compute along the efficient frontier
         :type population_size: int
 
+        :param ignore_none: if True, None are removed from the list of weights results when the optimization failed
+        :type ignore_none: bool, default True
 
         :return the portfolio weights that are in the efficient frontier
 
@@ -432,35 +455,41 @@ class Optimization:
         problem = cp.Problem(objective, constraints)
 
         if target_cvar is not None:
-            # Solve for a variance target
-            cvar_array = [target_cvar]
+            if np.isscalar(target_cvar):
+                target = target_cvar
+            else:
+                target = np.array(target_cvar)
         else:
-            # Solve for multiple cvar
-            cvar_array = np.logspace(-2, -0.5, num=population_size)
+            target = np.logspace(-2, -0.5, num=population_size)
 
         weights = self._get_optimization_weights(problem=problem,
                                                  w=w,
                                                  parameter=target_cvar_param,
-                                                 parameter_array=cvar_array)
+                                                 target=target,
+                                                 ignore_none=ignore_none)
 
         return weights
 
     def mean_cdar(self,
                   beta: float = 0.95,
-                  target_cdar: Optional[float] = None,
-                  population_size: Optional[int] = None) -> np.ndarray:
+                  target_cdar: Optional[Union[float, list, np.ndarray]] = None,
+                  population_size: Optional[int] = None,
+                  ignore_none:bool=True) -> list[Union[np.ndarray, None]]:
         """
-        Optimization along the mean-CDaR frontier (conditional drawdown-at-risk).
+        Optimization along the mean-CDaR frontier (Conditional Drawdown-at-Risk).
+        The Conditional Drawdown-at-Risk is the average drawdown for all the days that drawdown exceeds a threshold.
 
         :param beta: drawdown confidence level (expected drawdown on the worst (1-beta)% days)
         :type beta: float
 
         :param target_cdar: minimize return for the targeted cdar.
-        :type target_cdar: float, optional
+        :type target_cdar: float or list or numpy.ndarray optional
 
         :param population_size: number of pareto optimal portfolio weights to compute along the efficient frontier
         :type population_size: int
 
+        :param ignore_none: if True, None are removed from the list of weights results when the optimization failed
+        :type ignore_none: bool, default True
 
         :return the portfolio weights that are in the efficient frontier
 
@@ -502,16 +531,19 @@ class Optimization:
         problem = cp.Problem(objective, constraints)
 
         if target_cdar is not None:
-            # Solve for a cdar target
-            cdar_array = [target_cdar]
+            if np.isscalar(target_cdar):
+                target = target_cdar
+            else:
+                target = np.array(target_cdar)
         else:
             # Solve for multiple cdar
-            cdar_array = np.logspace(-3.5, -0.5, num=population_size)
+            target = np.logspace(-2, -0.5, num=population_size)
 
         weights = self._get_optimization_weights(problem=problem,
                                                  w=w,
                                                  parameter=target_cdar_param,
-                                                 parameter_array=cdar_array)
+                                                 target=target,
+                                                 ignore_none=ignore_none)
 
         return weights
 

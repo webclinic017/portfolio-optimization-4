@@ -359,3 +359,101 @@ def test_mean_cvar():
     portfolios_weights = model.mean_cvar(population_size=30)
     assert portfolios_weights.shape[0] <= 30
     assert portfolios_weights.shape[1] == assets.asset_nb
+
+
+
+def test_mean_cdar():
+    prices = load_prices(file=EXAMPLE_PRICES_PATH)
+    prices = prices.iloc[:, :100].copy()
+
+    assets = load_assets(prices=prices,
+                         asset_missing_threshold=0.1,
+                         dates_missing_threshold=0.1,
+                         removal_correlation=0.99,
+                         verbose=False)
+
+    target_cdar = 0.05
+
+    model = Optimization(assets=assets,
+                         investment_type=InvestmentType.FULLY_INVESTED,
+                         weight_bounds=(0, None))
+
+    # Ref with no costs
+    weights = model.mean_cdar(target_cdar=target_cdar)
+    portfolio_ref = Portfolio(weights=weights,
+                              assets=assets,
+                              name='ptf_ref')
+    assert abs(portfolio_ref.cdar_95 - target_cdar) < 5e-3
+    # uniform costs for all assets and empty prev_weight --> no impact on weights
+    model.update(costs=0.1,
+                 prev_w=None,
+                 investment_duration_in_days=255)
+    weights = model.mean_cdar(target_cdar=target_cdar)
+    portfolio = Portfolio(weights=weights,
+                          assets=assets)
+    assert abs(portfolio_ref.cdar_95 - target_cdar) < 5e-3
+    assert abs(portfolio.weights - portfolio_ref.weights).sum() < 1e-1
+
+    # uniform costs for all assets and uniform prev_weight --> no impact on weights
+    model.update(prev_w=np.ones(assets.asset_nb))
+    weights = model.mean_cdar(target_cdar=target_cdar)
+    portfolio = Portfolio(weights=weights,
+                          assets=assets)
+    assert abs(portfolio_ref.cdar_95 - target_cdar) < 5e-3
+    assert abs(portfolio.weights - portfolio_ref.weights).sum() < 1e-1
+
+    # costs on top two invested assets and uniform prev_weight --> impact on the two invested assets weight
+    asset_1 = portfolio_ref.composition.index[0]
+    asset_2 = portfolio_ref.composition.index[1]
+    costs = {asset_1: 0.2,
+             asset_2: 0.5}
+    model.update(costs=assets.dict_to_array(assets_dict=costs),
+                 prev_w=None)
+    weights = model.mean_cdar(target_cdar=target_cdar)
+    portfolio = Portfolio(weights=weights,
+                          assets=assets)
+    assert abs(portfolio_ref.cdar_95 - target_cdar) < 5e-3
+    assert asset_1 not in portfolio.composition.index
+    assert asset_2 not in portfolio.composition.index
+    assert abs(portfolio.weights - portfolio_ref.weights).sum() > 1e-1
+
+    # costs and identical prev_weight on top two invested assets --> the top two assets weights stay > 0
+    asset_1 = portfolio_ref.composition.index[0]
+    asset_2 = portfolio_ref.composition.index[1]
+    costs = {asset_1: 0.2,
+             asset_2: 0.5}
+    prev_weights = {asset_1: portfolio_ref.get_weight(asset_name=asset_1),
+                    asset_2: portfolio_ref.get_weight(asset_name=asset_2)}
+    model.update(costs=assets.dict_to_array(assets_dict=costs),
+                 prev_w=assets.dict_to_array(assets_dict=prev_weights))
+    weights = model.mean_cdar(target_cdar=target_cdar)
+    portfolio = Portfolio(weights=weights,
+                          assets=assets)
+    assert abs(portfolio_ref.cdar_95 - target_cdar) < 5e-3
+    assert asset_1 in portfolio.composition.index
+    assert asset_2 in portfolio.composition.index
+    assert abs(portfolio.weights - portfolio_ref.weights).sum() < 1e-1
+
+    # identical costs on all assets and large prev_weight on top two invested assets
+    # --> the top two assets weights become larger
+    asset_1 = portfolio_ref.composition.index[0]
+    asset_2 = portfolio_ref.composition.index[1]
+    prev_weights = {asset_1: 1,
+                    asset_2: 1}
+    model.update(costs=0.1,
+                 prev_w=assets.dict_to_array(assets_dict=prev_weights))
+    weights = model.mean_cdar(target_cdar=target_cdar)
+    portfolio = Portfolio(weights=weights,
+                          assets=assets)
+    assert abs(portfolio_ref.cdar_95 - target_cdar) <  5e-3
+    assert asset_1 in portfolio.composition.index
+    assert asset_2 in portfolio.composition.index
+    assert portfolio.get_weight(asset_1) > portfolio_ref.get_weight(asset_1)
+    assert portfolio.get_weight(asset_2) > portfolio_ref.get_weight(asset_2)
+    assert abs(portfolio.weights - portfolio_ref.weights).sum() > 1e-1
+
+    # Population size
+    portfolios_weights = model.mean_cdar(population_size=30)
+    assert portfolios_weights.shape[0] <= 30
+    assert portfolios_weights.shape[1] == assets.asset_nb
+
