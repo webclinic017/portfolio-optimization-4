@@ -200,10 +200,22 @@ class Optimization:
         if population_size is not None and population_size <= 1:
             raise ValueError('f population_size should be strictly greater than one')
 
+        if target_name is not None:
+            target = kwargs[target_name]
+            if np.isscalar(target):
+                if target <= 0:
+                    raise ValueError(f'{target_name} should be strictly positive')
+            elif isinstance(target, np.ndarray) or isinstance(target, list):
+                if np.any(np.array(target) <= 0):
+                    raise ValueError(f'All values of {target_name} should be strictly positive')
+            else:
+                raise ValueError(f'{target_name} should be a scalar, numpy.ndarray or list. '
+                                 f'But received {type(target)}')
+
     def mean_variance(self,
                       target_volatility: Optional[Union[float, list, np.ndarray]] = None,
                       population_size: Optional[int] = None,
-                      ignore_none:bool=True) -> list[Union[np.ndarray, None]]:
+                      ignore_none: bool = True) -> Union[list[np.ndarray], np.ndarray]:
         """
         Optimization along the mean-variance frontier (Markowitz optimization).
 
@@ -321,7 +333,7 @@ class Optimization:
                           returns_target: Optional[Union[float, np.ndarray]] = None,
                           target_semideviation: Optional[Union[float, list, np.ndarray]] = None,
                           population_size: Optional[int] = None,
-                          ignore_none:bool=True) -> list[Union[np.ndarray, None]]:
+                          ignore_none: bool = True) -> Union[list[np.ndarray], np.ndarray]:
         """
         Optimization along the mean-semivariance frontier.
 
@@ -402,7 +414,7 @@ class Optimization:
                   beta: float = 0.95,
                   target_cvar: Optional[Union[float, list, np.ndarray]] = None,
                   population_size: Optional[int] = None,
-                  ignore_none:bool=True) -> list[Union[np.ndarray, None]]:
+                  ignore_none: bool = True) -> Union[list[np.ndarray], np.ndarray]:
         """
         Optimization along the mean-CVaR frontier (Conditional Value-at-Risk or Expected Shortfall).
         CVaR is the average of the “extreme” losses beyond the VaR threshold.
@@ -474,7 +486,7 @@ class Optimization:
                   beta: float = 0.95,
                   target_cdar: Optional[Union[float, list, np.ndarray]] = None,
                   population_size: Optional[int] = None,
-                  ignore_none:bool=True) -> list[Union[np.ndarray, None]]:
+                  ignore_none: bool = True) -> Union[list[np.ndarray], np.ndarray]:
         """
         Optimization along the mean-CDaR frontier (Conditional Drawdown-at-Risk).
         The Conditional Drawdown-at-Risk is the average drawdown for all the days that drawdown exceeds a threshold.

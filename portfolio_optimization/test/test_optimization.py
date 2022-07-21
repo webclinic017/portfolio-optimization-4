@@ -361,7 +361,6 @@ def test_mean_cvar():
     assert portfolios_weights.shape[1] == assets.asset_nb
 
 
-
 def test_mean_cdar():
     prices = load_prices(file=EXAMPLE_PRICES_PATH)
     prices = prices.iloc[:, :100].copy()
@@ -445,7 +444,7 @@ def test_mean_cdar():
     weights = model.mean_cdar(target_cdar=target_cdar)
     portfolio = Portfolio(weights=weights,
                           assets=assets)
-    assert abs(portfolio_ref.cdar_95 - target_cdar) <  5e-3
+    assert abs(portfolio_ref.cdar_95 - target_cdar) < 5e-3
     assert asset_1 in portfolio.composition.index
     assert asset_2 in portfolio.composition.index
     assert portfolio.get_weight(asset_1) > portfolio_ref.get_weight(asset_1)
@@ -457,3 +456,83 @@ def test_mean_cdar():
     assert portfolios_weights.shape[0] <= 30
     assert portfolios_weights.shape[1] == assets.asset_nb
 
+
+def test_optimization_args():
+    prices = load_prices(file=EXAMPLE_PRICES_PATH)
+    prices = prices.iloc[:, :100].copy()
+
+    assets = load_assets(prices=prices,
+                         asset_missing_threshold=0.1,
+                         dates_missing_threshold=0.1,
+                         removal_correlation=0.99,
+                         verbose=False)
+
+    model = Optimization(assets=assets,
+                         investment_type=InvestmentType.FULLY_INVESTED,
+                         weight_bounds=(0, None))
+
+    args_name = {
+        'mean_variance': 'target_volatility',
+        'mean_semivariance': 'target_semideviation',
+        'mean_cvar': 'target_cvar',
+        'mean_cdar': 'target_cdar',
+    }
+
+    for method_name, arg_name in args_name.items():
+        func = getattr(model, method_name)
+
+        # target is a float
+        target = 0.05
+        weights = func(**{arg_name: target})
+        assert isinstance(weights, np.ndarray)
+        assert weights.shape == (assets.asset_nb,)
+
+        # target is a list or numpy array
+        for target in [[0.02, 0.05], np.array([0.02, 0.05])]:
+            weights = func(**{arg_name: target, 'ignore_none': False})
+            assert isinstance(weights, list)
+            assert len(weights) == len(target)
+            for w in weights:
+                assert isinstance(w, np.ndarray)
+                assert w.shape == (assets.asset_nb,)
+
+        # Ignore None
+        target = [1e10]
+        weights = func(**{arg_name: target, 'ignore_none': False})
+        assert isinstance(weights, list)
+        assert len(weights) == len(target)
+        assert weights[0] is None
+        weights = func(**{arg_name: target, 'ignore_none': True})
+        assert isinstance(weights, list)
+        assert len(weights) < len(target)
+
+        # Target is 0 or neg
+        target = [1, 0]
+        try:
+            func(**{arg_name: target})
+            raise
+        except ValueError:
+            pass
+
+        # Population
+        population_size = 3
+        weights = func(population_size=population_size, ignore_none=False)
+        assert isinstance(weights, list)
+        assert len(weights) == population_size
+        for w in weights:
+            assert isinstance(w, np.ndarray)
+            assert w.shape == (assets.asset_nb,)
+
+        # Both Population and Target is None
+        try:
+            func()
+            raise
+        except ValueError:
+            pass
+
+        # Both Population and Target is None
+        try:
+            func(**{arg_name: target, 'population_size': 3})
+            raise
+        except ValueError:
+            pass
