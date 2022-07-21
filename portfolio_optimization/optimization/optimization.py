@@ -229,11 +229,12 @@ class Optimization:
         :type ignore_none: bool, default True
 
         :return the portfolio weights that are in the efficient frontier.
+        :rtype: list of numpy.ndarray or numpy.ndarray
         """
         self._validate_args(population_size=population_size,
                             target_volatility=target_volatility)
 
-        min_volatility = np.sqrt(1 / np.sum(np.linalg.pinv(self.assets.cov)))
+        min_volatility = np.sqrt(1 / np.sum(np.linalg.pinv(self.assets.expected_cov)))
 
         if np.isscalar(target_volatility) and target_volatility < min_volatility:
             raise ValueError(f'The minimum volatility is {min_volatility:.3f}. '
@@ -249,7 +250,7 @@ class Optimization:
         objective = cp.Maximize(self._portfolio_returns(w=w))
 
         # Constraints
-        portfolio_variance = cp.quad_form(w, self.assets.cov)
+        portfolio_variance = cp.quad_form(w, self.assets.expected_cov)
         lower_bounds, upper_bounds = self._get_lower_and_upper_bounds()
         constraints = [portfolio_variance <= target_variance_param,
                        w >= lower_bounds,
@@ -286,6 +287,7 @@ class Optimization:
         Maximize the sharpe ratio.
 
         :return the portfolio weights that maximize the sharpe ratio of the portfolio.
+        :rtype: numpy.ndarray
         """
 
         if self.investment_type != InvestmentType.FULLY_INVESTED:
@@ -303,7 +305,7 @@ class Optimization:
         k = cp.Variable()
 
         # Objectives
-        objective = cp.Minimize(cp.quad_form(w, self.assets.cov))
+        objective = cp.Minimize(cp.quad_form(w, self.assets.expected_cov))
 
         # Constraints
         lower_bounds, upper_bounds = self._get_lower_and_upper_bounds()
@@ -350,12 +352,13 @@ class Optimization:
         :type ignore_none: bool, default True
 
         :return the portfolio weights that are in the efficient frontier
+        :rtype: list of numpy.ndarray or numpy.ndarray
         """
         self._validate_args(population_size=population_size,
                             target_semideviation=target_semideviation)
 
         if returns_target is None:
-            returns_target = self.assets.mu
+            returns_target = self.assets.expected_returns
 
         # Additional matrix
         if not np.isscalar(returns_target):
@@ -396,7 +399,7 @@ class Optimization:
                 target = np.array(target_semideviation) ** 2
         else:
             # Solve for multiple semideviations
-            min_volatility = np.sqrt(1 / np.sum(np.linalg.pinv(self.assets.cov)))
+            min_volatility = np.sqrt(1 / np.sum(np.linalg.pinv(self.assets.expected_cov)))
             start = np.log10(min_volatility * 1.3)  # We start at min_volatility * 130% to increase proba of convergence
             end = np.log10(0.3 / np.sqrt(255))  # We stop at 30% annualized semideviation
             semideviations = np.logspace(start, end, num=population_size)
@@ -432,7 +435,7 @@ class Optimization:
         :type ignore_none: bool, default True
 
         :return the portfolio weights that are in the efficient frontier
-
+        :rtype: list of numpy.ndarray or numpy.ndarray
         """
 
         self._validate_args(population_size=population_size,
@@ -504,6 +507,7 @@ class Optimization:
         :type ignore_none: bool, default True
 
         :return the portfolio weights that are in the efficient frontier
+        :rtype: list of numpy.ndarray or numpy.ndarray
 
         """
 

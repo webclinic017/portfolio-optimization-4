@@ -43,6 +43,9 @@ class Assets:
         self._std = None
         self._cov = None
         self._corr = None
+        self._custom_expected_returns = None
+        self._custom_expected_cov = None
+
         self.verbose = verbose
         self.name = name
         self.start_date = start_date
@@ -153,6 +156,28 @@ class Assets:
             if attr[0] == '_':
                 self.__setattr__(attr, None)
 
+    def custom_expected_returns(self, expected_returns: np.ndarray):
+        """
+        Asset.expected_returns will return this custom expected return instead of the historical mean (Asset.mu)
+        """
+        if not isinstance(expected_returns, np.ndarray):
+            raise ValueError(f'expected_returns has to be of type numpy.ndarray')
+        if expected_returns.shape != (self.asset_nb,):
+            raise ValueError(f'expected_returns must be of shape {(self.asset_nb,)}. '
+                             f'But received {expected_returns.shape}')
+        self._custom_expected_returns = expected_returns
+
+    def custom_expected_cov(self, expected_cov: np.ndarray):
+        """
+        Asset.expected_cov will return this custom expected covariance instead of the historical covariance (Asset.cov)
+        """
+        if not isinstance(expected_cov, np.ndarray):
+            raise ValueError(f'expected_cov has to be of type numpy.ndarray')
+        if expected_cov.shape != (self.asset_nb, self.asset_nb):
+            raise ValueError(f'expected_returns must be of shape {(self.asset_nb, self.asset_nb)}. '
+                             f'But received {expected_cov.shape}')
+        self._custom_expected_cov = expected_cov
+
     @property
     def returns(self):
         """
@@ -182,10 +207,6 @@ class Assets:
         return self._mu
 
     @property
-    def expected_returns(self):
-        return self.mu
-
-    @property
     def std(self):
         if self._std is None:
             self._std = np.std(self.returns, axis=1)
@@ -196,6 +217,18 @@ class Assets:
         if self._cov is None:
             self._cov = np.cov(self.returns)
         return self._cov
+
+    @property
+    def expected_returns(self):
+        if self._custom_expected_returns is not None:
+            return self._custom_expected_returns
+        return self.mu
+
+    @property
+    def expected_cov(self):
+        if self._custom_expected_cov is not None:
+            return self._custom_expected_cov
+        return self.cov
 
     @property
     def corr(self):
