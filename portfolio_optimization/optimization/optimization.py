@@ -198,8 +198,7 @@ class Optimization:
         elif self.investment_type == InvestmentType.MARKET_NEUTRAL:
             return 0
 
-    @staticmethod
-    def _validate_args(**kwargs):
+    def _validate_args(self, **kwargs):
         population_size = kwargs.get('population_size')
         targets_names = [k for k, v in kwargs.items() if k.startswith('target_')]
         not_none_targets_names = [k for k in targets_names if kwargs[k] is not None]
@@ -230,8 +229,11 @@ class Optimization:
                                  f'But received {type(target)}')
 
         for k, v in kwargs.items():
-            if k.endswith('coef') and v is not None and v < 0:
-                raise ValueError(f'{k} cannot be negative')
+            if k.endswith('coef') and v is not None:
+                if v < 0:
+                    raise ValueError(f'{k} cannot be negative')
+                elif v > 0 and np.all(np.array(self.weight_bounds) > 0):
+                    logger.warning(f'Positive {k} will have no impact with positive lower bounds')
 
     def mean_variance(self,
                       target_volatility: Optional[Union[float, list, np.ndarray]] = None,
@@ -278,7 +280,7 @@ class Optimization:
         target_variance_param = cp.Parameter(nonneg=True)
 
         # Objectives
-        objective = cp.Maximize(self._portfolio_returns(w=w))
+        objective = cp.Maximize(self._portfolio_returns(w=w, l1_coef=l1_coef, l2_coef=l2_coef))
 
         # Constraints
         portfolio_variance = cp.quad_form(w, self.assets.expected_cov)

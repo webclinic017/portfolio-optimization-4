@@ -7,11 +7,23 @@ from portfolio_optimization.population import *
 from portfolio_optimization.optimization import *
 from portfolio_optimization.loader import *
 from portfolio_optimization.bloomberg import *
+from portfolio_optimization.assets import *
+
+
+def get_assets() -> Assets:
+    prices = load_prices(file=EXAMPLE_PRICES_PATH)
+    prices = prices.iloc[:, :100].copy()
+    assets = load_assets(prices=prices,
+                         asset_missing_threshold=0.1,
+                         dates_missing_threshold=0.1,
+                         removal_correlation=0.99,
+                         verbose=False)
+
+    return assets
 
 
 def test_inverse_volatility():
-    prices = load_prices(file=EXAMPLE_PRICES_PATH)
-    assets = load_assets(prices=prices, verbose=False)
+    assets = get_assets()
     model = Optimization(assets=assets)
     weights = model.inverse_volatility()
 
@@ -22,8 +34,7 @@ def test_inverse_volatility():
 
 
 def test_equal_weighted():
-    prices = load_prices(file=EXAMPLE_PRICES_PATH)
-    assets = load_assets(prices=prices, verbose=False)
+    assets = get_assets()
     model = Optimization(assets=assets)
     weights = model.equal_weighted()
 
@@ -33,8 +44,7 @@ def test_equal_weighted():
 
 
 def test_random():
-    prices = load_prices(file=EXAMPLE_PRICES_PATH)
-    assets = load_assets(prices=prices, verbose=False)
+    assets = get_assets()
     model = Optimization(assets=assets)
     weights = model.random()
 
@@ -42,13 +52,7 @@ def test_random():
 
 
 def test_mean_variance():
-    prices = load_prices(file=EXAMPLE_PRICES_PATH)
-    prices = prices.iloc[:, :100].copy()
-    assets = load_assets(prices=prices,
-                         asset_missing_threshold=0.1,
-                         dates_missing_threshold=0.1,
-                         removal_correlation=0.99,
-                         verbose=False)
+    assets = get_assets()
 
     target_volatility = 0.02 / np.sqrt(255)
 
@@ -62,6 +66,7 @@ def test_mean_variance():
                               assets=assets,
                               name='ptf_ref')
     assert abs(portfolio_ref.std - target_volatility) < 1e-8
+
     # uniform costs for all assets and empty prev_weight --> no impact on weights
     model.update(costs=0.1,
                  prev_w=None,
@@ -135,50 +140,55 @@ def test_mean_variance():
     assert len(portfolios_weights) == 30
     assert portfolios_weights[0].shape == (assets.asset_nb,)
 
+
+def test_mean_variance_regularisation():
+    assets = get_assets()
+
+    target_volatility = 0.02 / np.sqrt(255)
+
+    # No short selling --> no impact of regularisation
+    model = Optimization(assets=assets,
+                         investment_type=InvestmentType.FULLY_INVESTED,
+                         weight_bounds=(0, None))
+    weights = model.mean_variance(target_volatility=target_volatility)
+    portfolio_ref = Portfolio(weights=weights,
+                              assets=assets,
+                              name='ptf_ref')
+
     # L1 coef
     weights = model.mean_variance(target_volatility=target_volatility,
                                   l1_coef=1)
     portfolio = Portfolio(weights=weights,
                           assets=assets)
     assert abs(portfolio.std - target_volatility) < 1e-8
-    assert abs(sum(portfolio.weights)-1) < 1e-10
-    assert len(portfolio.composition) < len(portfolio_ref.composition)
+    assert abs(sum(portfolio.weights) - 1) < 1e-10
+    assert sum(abs(portfolio_ref.weights - portfolio.weights)) < 1e-4
     try:
         model.mean_variance(target_volatility=target_volatility,
                             l1_coef=-1)
         raise
     except ValueError:
         pass
+
+    # Short Selling
+    model.update(weight_bounds=(None, None))
+    weights = model.mean_variance(target_volatility=target_volatility)
+    portfolio_ref = Portfolio(weights=weights,
+                              assets=assets,
+                              name='ptf_ref')
 
     # L1 coef
     weights = model.mean_variance(target_volatility=target_volatility,
-                                  l2_coef=1)
+                                  l1_coef=1)
     portfolio = Portfolio(weights=weights,
                           assets=assets)
     assert abs(portfolio.std - target_volatility) < 1e-8
-    assert abs(sum(portfolio.weights)-1) < 1e-10
+    assert abs(sum(portfolio.weights) - 1) < 1e-10
     assert len(portfolio.composition) < len(portfolio_ref.composition)
-    try:
-        model.mean_variance(target_volatility=target_volatility,
-                            l1_coef=-1)
-        raise
-    except ValueError:
-        pass
-
-
-
-
-
 
 
 def test_maximum_sharpe():
-    prices = load_prices(file=EXAMPLE_PRICES_PATH)
-    prices = prices.iloc[:, :100].copy()
-    assets = load_assets(prices=prices,
-                         asset_missing_threshold=0.1,
-                         dates_missing_threshold=0.1,
-                         removal_correlation=0.99,
-                         verbose=False)
+    assets = get_assets()
 
     model = Optimization(assets=assets,
                          investment_type=InvestmentType.FULLY_INVESTED,
@@ -204,14 +214,7 @@ def test_maximum_sharpe():
 
 
 def test_mean_semivariance():
-    prices = load_prices(file=EXAMPLE_PRICES_PATH)
-    prices = prices.iloc[:, :100].copy()
-
-    assets = load_assets(prices=prices,
-                         asset_missing_threshold=0.1,
-                         dates_missing_threshold=0.1,
-                         removal_correlation=0.99,
-                         verbose=False)
+    assets = get_assets()
 
     target_semideviation = 0.02 / np.sqrt(255)
 
@@ -300,14 +303,7 @@ def test_mean_semivariance():
 
 
 def test_mean_cvar():
-    prices = load_prices(file=EXAMPLE_PRICES_PATH)
-    prices = prices.iloc[:, :100].copy()
-
-    assets = load_assets(prices=prices,
-                         asset_missing_threshold=0.1,
-                         dates_missing_threshold=0.1,
-                         removal_correlation=0.99,
-                         verbose=False)
+    assets = get_assets()
 
     target_cvar = 0.01
 
@@ -396,14 +392,7 @@ def test_mean_cvar():
 
 
 def test_mean_cdar():
-    prices = load_prices(file=EXAMPLE_PRICES_PATH)
-    prices = prices.iloc[:, :100].copy()
-
-    assets = load_assets(prices=prices,
-                         asset_missing_threshold=0.1,
-                         dates_missing_threshold=0.1,
-                         removal_correlation=0.99,
-                         verbose=False)
+    assets = get_assets()
 
     target_cdar = 0.05
 
