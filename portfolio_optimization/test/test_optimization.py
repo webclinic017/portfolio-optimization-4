@@ -44,7 +44,6 @@ def test_random():
 def test_mean_variance():
     prices = load_prices(file=EXAMPLE_PRICES_PATH)
     prices = prices.iloc[:, :100].copy()
-
     assets = load_assets(prices=prices,
                          asset_missing_threshold=0.1,
                          dates_missing_threshold=0.1,
@@ -132,9 +131,44 @@ def test_mean_variance():
     assert abs(portfolio.weights - portfolio_ref.weights).sum() > 1e-3
 
     # Population size
-    portfolios_weights = model.mean_variance(population_size=30)
-    assert portfolios_weights.shape[0] <= 30
-    assert portfolios_weights.shape[1] == assets.asset_nb
+    portfolios_weights = model.mean_variance(population_size=30, ignore_none=False)
+    assert len(portfolios_weights) == 30
+    assert portfolios_weights[0].shape == (assets.asset_nb,)
+
+    # L1 coef
+    weights = model.mean_variance(target_volatility=target_volatility,
+                                  l1_coef=1)
+    portfolio = Portfolio(weights=weights,
+                          assets=assets)
+    assert abs(portfolio.std - target_volatility) < 1e-8
+    assert abs(sum(portfolio.weights)-1) < 1e-10
+    assert len(portfolio.composition) < len(portfolio_ref.composition)
+    try:
+        model.mean_variance(target_volatility=target_volatility,
+                            l1_coef=-1)
+        raise
+    except ValueError:
+        pass
+
+    # L1 coef
+    weights = model.mean_variance(target_volatility=target_volatility,
+                                  l2_coef=1)
+    portfolio = Portfolio(weights=weights,
+                          assets=assets)
+    assert abs(portfolio.std - target_volatility) < 1e-8
+    assert abs(sum(portfolio.weights)-1) < 1e-10
+    assert len(portfolio.composition) < len(portfolio_ref.composition)
+    try:
+        model.mean_variance(target_volatility=target_volatility,
+                            l1_coef=-1)
+        raise
+    except ValueError:
+        pass
+
+
+
+
+
 
 
 def test_maximum_sharpe():

@@ -108,8 +108,10 @@ class Optimization:
             if len(self.prev_w) != self.assets.asset_nb:
                 raise ValueError(f'prev_w should be of size {self.assets.asset_nb} but received {len(self.prev_w)}')
 
-    def _portfolio_returns(self, w: cp.Variable) -> cp.Expression:
-        portfolio_return = self.assets.expected_returns @ w
+    def _portfolio_returns(self,
+                           w: cp.Variable,
+                           l1_coef: Optional[float] = None,
+                           l2_coef: Optional[float] = None) -> cp.Expression:
         if self.costs is None or (np.isscalar(self.costs) and self.costs == 0):
             portfolio_cost = 0
         else:
@@ -123,9 +125,24 @@ class Optimization:
             else:
                 portfolio_cost = cp.norm(cp.multiply(daily_costs, (prev_w - w)), 1)
 
-        portfolio_return_with_costs = portfolio_return - portfolio_cost
+        # Norm L1
+        if l1_coef is None or l1_coef == 0:
+            l1_regularization = 0
+        else:
+            l1_regularization = l1_coef * cp.norm(w, 1)
 
-        return portfolio_return_with_costs
+        # Norm L2
+        if l2_coef is None or l2_coef == 0:
+            l2_regularization = 0
+        else:
+            l2_regularization = l2_coef * cp.sum_squares(w)
+
+        portfolio_return = (self.assets.expected_returns @ w
+                            - portfolio_cost
+                            - l1_regularization
+                            - l2_regularization)
+
+        return portfolio_return
 
     def _get_lower_and_upper_bounds(self) -> tuple[np.ndarray, np.ndarray]:
         # Upper and lower bounds
@@ -212,9 +229,15 @@ class Optimization:
                 raise ValueError(f'{target_name} should be a scalar, numpy.ndarray or list. '
                                  f'But received {type(target)}')
 
+        for k, v in kwargs.items():
+            if k.endswith('coef') and v is not None and v < 0:
+                raise ValueError(f'{k} cannot be negative')
+
     def mean_variance(self,
                       target_volatility: Optional[Union[float, list, np.ndarray]] = None,
                       population_size: Optional[int] = None,
+                      l1_coef: Optional[float] = None,
+                      l2_coef: Optional[float] = None,
                       ignore_none: bool = True) -> Union[list[np.ndarray], np.ndarray]:
         """
         Optimization along the mean-variance frontier (Markowitz optimization).
@@ -225,14 +248,22 @@ class Optimization:
         :param target_volatility: minimize return for the targeted daily volatility of the portfolio.
         :type target_volatility: float or list or numpy.ndarray optional
 
+        :param l1_coef: L1 regularisation coefficient. Increasing this coef will reduce the number of non-zero weights.
+                        It's like the L1 regularisation in Lasso.
+                        If both l1_coef and l2_coef are strictly positive, it's like the regularisation in Elastic-Net.
+        :type l1_coef: float, default to None
+
+        :param l2_coef: L2 regularisation coefficient. It's like the L2 regularisation in Ridge.
+                        If both l1_coef and l2_coef are strictly positive, it's like the regularisation in Elastic-Net.
+        :type l1_coef: float, default to None
+
         :param ignore_none: if True, None are removed from the list of weights results when the optimization failed
         :type ignore_none: bool, default True
 
         :return the portfolio weights that are in the efficient frontier.
         :rtype: list of numpy.ndarray or numpy.ndarray
         """
-        self._validate_args(population_size=population_size,
-                            target_volatility=target_volatility)
+        self._validate_args(**locals())
 
         min_volatility = np.sqrt(1 / np.sum(np.linalg.pinv(self.assets.expected_cov)))
 
