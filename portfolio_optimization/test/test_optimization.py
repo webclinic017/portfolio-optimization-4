@@ -51,15 +51,68 @@ def test_random():
     assert abs(sum(weights) - 1) < 1e-10
 
 
-def test_mean_variance():
+def test_mean_variance_population():
+    assets = get_assets()
+    model = Optimization(assets=assets,
+                         investment_type=InvestmentType.FULLY_INVESTED,
+                         weight_bounds=(0, None))
+    # Population size
+    portfolios_weights = model.mean_variance(population_size=30, ignore_none=False)
+    assert len(portfolios_weights) == 30
+    assert portfolios_weights[0].shape == (assets.asset_nb,)
+
+
+def test_mean_variance_investment_type():
     assets = get_assets()
 
+    # Fully invested and no short selling
+    model = Optimization(assets=assets,
+                         investment_type=InvestmentType.FULLY_INVESTED,
+                         weight_bounds=(0, None))
     target_volatility = 0.02 / np.sqrt(255)
+    weights = model.mean_variance(target_volatility=target_volatility)
+    assert abs(sum(weights) - 1) < 1e-10
+    assert np.all(weights >= 0)
 
+    # Fully invested and short selling
+    model.update(weight_bounds=(None, None))
+    weights = model.mean_variance(target_volatility=target_volatility)
+    assert abs(sum(weights) - 1) < 1e-10
+    assert not np.all(weights >= 0)
+
+    # Fully invested and short selling with weights between -20% and 30%
+    lower = -0.2
+    upper = 0.3
+    model.update(weight_bounds=(lower, upper))
+    weights = model.mean_variance(target_volatility=target_volatility)
+    assert abs(sum(weights) - 1) < 1e-10
+    assert np.all(weights >= lower) and np.all(weights <= upper)
+
+    # Market neutral with short selling
+    model.update(investment_type=InvestmentType.MARKET_NEUTRAL,
+                 weight_bounds=(None, None))
+    weights = model.mean_variance(target_volatility=target_volatility)
+    assert abs(sum(weights)) < 1e-10
+    assert sum(abs(weights)) > 1
+    assert not np.all(weights >= 0)
+
+    # Market neutral with no short selling
+    model.update(investment_type=InvestmentType.MARKET_NEUTRAL,
+                 weight_bounds=(0.1, None))
+    weights = model.mean_variance(target_volatility=target_volatility)
+    assert abs(sum(weights)) < 1e-10
+    assert sum(abs(weights)) > 1
+    assert not np.all(weights >= 0)
+
+
+
+def test_mean_variance_with_costs():
+    assets = get_assets()
     model = Optimization(assets=assets,
                          investment_type=InvestmentType.FULLY_INVESTED,
                          weight_bounds=(0, None))
 
+    target_volatility = 0.02 / np.sqrt(255)
     # Ref with no costs
     weights = model.mean_variance(target_volatility=target_volatility)
     portfolio_ref = Portfolio(weights=weights,
@@ -134,11 +187,6 @@ def test_mean_variance():
     assert portfolio.get_weight(asset_1) > portfolio_ref.get_weight(asset_1)
     assert portfolio.get_weight(asset_2) > portfolio_ref.get_weight(asset_2)
     assert abs(portfolio.weights - portfolio_ref.weights).sum() > 1e-3
-
-    # Population size
-    portfolios_weights = model.mean_variance(population_size=30, ignore_none=False)
-    assert len(portfolios_weights) == 30
-    assert portfolios_weights[0].shape == (assets.asset_nb,)
 
 
 def test_mean_variance_regularisation():

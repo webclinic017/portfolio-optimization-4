@@ -91,17 +91,37 @@ class Optimization:
         super().__setattr__(name, value)
 
     def _validation(self):
+
         if self.assets.asset_nb < 2:
             raise ValueError(f'assets should contains more than one asset')
+
         if not isinstance(self.weight_bounds, tuple) or len(self.weight_bounds) != 2:
             raise ValueError(f'weight_bounds should be a tuple of size 2')
+
         for i in [0, 1]:
             if isinstance(self.weight_bounds[i], np.ndarray) and len(self.weight_bounds[i]) != self.assets.asset_nb:
                 raise ValueError(f'the weight_bounds arrays should be of size {self.assets.asset_nb}, '
                                  f'but received {len(self.weight_bounds[i])}')
+
+        lower_bounds, upper_bounds = self._get_lower_and_upper_bounds()
+
+        if not np.all(lower_bounds <= upper_bounds):
+            raise ValueError(f'All elements of the lower bounds should be less or equal than all elements of the upper '
+                             f'bound')
+
+        investment_target = self._get_investment_target()
+        if investment_target is not None:
+            if sum(upper_bounds) < investment_target:
+                raise ValueError(f'When investment_type is {self.investment_type.value}, the sum of all upper bounds '
+                                 f'should be greater or equal to {investment_target}')
+            if sum(lower_bounds) > investment_target:
+                raise ValueError(f'When investment_type is {self.investment_type.value}, the sum of all lower bounds '
+                                 f'should be less or equal to {investment_target}')
+
         if self.costs is not None and not (np.isscalar(self.costs) and self.costs == 0):
             if self.investment_duration_in_days is None:
                 raise ValueError(f'investment_duration_in_days cannot be missing when costs is provided')
+
         if self.prev_w is not None:
             if not isinstance(self.prev_w, np.ndarray):
                 raise TypeError(f'prev_w should be of type numpy.ndarray')
@@ -148,9 +168,10 @@ class Optimization:
         # Upper and lower bounds
         lower_bounds, upper_bounds = self.weight_bounds
         if lower_bounds is None:
-            lower_bounds = -1
+            lower_bounds = -np.inf
         if upper_bounds is None:
-            upper_bounds = 1
+            upper_bounds = np.inf
+
         if np.isscalar(lower_bounds):
             lower_bounds = np.array([lower_bounds] * self.assets.asset_nb)
         if np.isscalar(upper_bounds):
@@ -187,6 +208,8 @@ class Optimization:
                 weights.append(weight)
 
         if np.isscalar(target):
+            if len(weights) == 0:
+                raise OptimizationError(f'Optimization did not converge')
             return weights[0]
 
         return weights
@@ -232,8 +255,8 @@ class Optimization:
             if k.endswith('coef') and v is not None:
                 if v < 0:
                     raise ValueError(f'{k} cannot be negative')
-                elif v > 0 and np.all(np.array(self.weight_bounds) > 0):
-                    logger.warning(f'Positive {k} will have no impact with positive lower bounds')
+                elif v > 0 and np.all(np.array(self.weight_bounds) >= 0):
+                    logger.warning(f'Positive {k} will have no impact with positive or null lower bounds')
 
     def mean_variance(self,
                       target_volatility: Optional[Union[float, list, np.ndarray]] = None,
@@ -265,7 +288,7 @@ class Optimization:
         :return the portfolio weights that are in the efficient frontier.
         :rtype: list of numpy.ndarray or numpy.ndarray
         """
-        self._validate_args(**locals())
+        self._validate_args(**{k: v for k, v in locals().items() if k != 'self'})
 
         min_volatility = np.sqrt(1 / np.sum(np.linalg.pinv(self.assets.expected_cov)))
 
