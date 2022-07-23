@@ -262,6 +262,55 @@ class Optimization:
                 elif v > 0 and np.all(lower_bounds >= 0):
                     logger.warning(f'Positive {k} will have no impact with positive or null lower bounds')
 
+    def maximum_sharpe(self) -> np.ndarray:
+        """
+        Maximize the sharpe ratio.
+
+        :return the portfolio weights that maximize the sharpe ratio of the portfolio.
+        :rtype: numpy.ndarray
+        """
+
+        if self.investment_type != InvestmentType.FULLY_INVESTED:
+            raise ValueError('maximum_sharpe() can be solved only for investment_type=InvestmentType.FULLY_INVESTED'
+                             '  --> you can find an approximation by computing the efficient frontier with '
+                             ' mean_variance(population=30) and finding the portfolio with the highest sharpe ratio.')
+
+        if self.costs is not None:
+            raise ValueError('maximum_sharpe() cannot be solved with costs '
+                             '  --> you can find an approximation by computing the efficient frontier with '
+                             ' mean_variance(population=30) and finding the portfolio with the highest sharpe ratio.')
+
+        # Variables
+        w = cp.Variable(self.assets.asset_nb)
+        k = cp.Variable()
+
+        # Objectives
+        objective = cp.Minimize(cp.quad_form(w, self.assets.expected_cov))
+
+        # Constraints
+        lower_bounds, upper_bounds = self._get_lower_and_upper_bounds()
+        constraints = [self._portfolio_returns(w=w) == 1,
+                       w >= lower_bounds * k,
+                       w <= upper_bounds * k,
+                       cp.sum(w) == k,
+                       k >= 0]
+
+        # Problem
+        problem = cp.Problem(objective, constraints)
+
+        try:
+            problem.solve(solver='ECOS')
+            if w.value is None or k.value is None:
+                logger.warning(f'None return')
+                raise OptimizationError
+            return np.array(w.value / k.value, dtype=float)
+        except SolverError as e:
+            logger.warning(f'SolverError for: {e}')
+            raise OptimizationError
+        except ArpackNoConvergence as e:
+            logger.warning(f'ArpackNoConvergence for: {e}')
+            raise OptimizationError
+
     def mean_variance(self,
                       target_volatility: Optional[Union[float, list, np.ndarray]] = None,
                       population_size: Optional[int] = None,
@@ -342,59 +391,12 @@ class Optimization:
 
         return weights
 
-    def maximum_sharpe(self) -> np.ndarray:
-        """
-        Maximize the sharpe ratio.
-
-        :return the portfolio weights that maximize the sharpe ratio of the portfolio.
-        :rtype: numpy.ndarray
-        """
-
-        if self.investment_type != InvestmentType.FULLY_INVESTED:
-            raise ValueError('maximum_sharpe() can be solved only for investment_type=InvestmentType.FULLY_INVESTED'
-                             '  --> you can find an approximation by computing the efficient frontier with '
-                             ' mean_variance(population=30) and finding the portfolio with the highest sharpe ratio.')
-
-        if self.costs is not None:
-            raise ValueError('maximum_sharpe() cannot be solved with costs '
-                             '  --> you can find an approximation by computing the efficient frontier with '
-                             ' mean_variance(population=30) and finding the portfolio with the highest sharpe ratio.')
-
-        # Variables
-        w = cp.Variable(self.assets.asset_nb)
-        k = cp.Variable()
-
-        # Objectives
-        objective = cp.Minimize(cp.quad_form(w, self.assets.expected_cov))
-
-        # Constraints
-        lower_bounds, upper_bounds = self._get_lower_and_upper_bounds()
-        constraints = [self._portfolio_returns(w=w) == 1,
-                       w >= lower_bounds * k,
-                       w <= upper_bounds * k,
-                       cp.sum(w) == k,
-                       k >= 0]
-
-        # Problem
-        problem = cp.Problem(objective, constraints)
-
-        try:
-            problem.solve(solver='ECOS')
-            if w.value is None or k.value is None:
-                logger.warning(f'None return')
-                raise OptimizationError
-            return np.array(w.value / k.value, dtype=float)
-        except SolverError as e:
-            logger.warning(f'SolverError for: {e}')
-            raise OptimizationError
-        except ArpackNoConvergence as e:
-            logger.warning(f'ArpackNoConvergence for: {e}')
-            raise OptimizationError
-
     def mean_semivariance(self,
                           returns_target: Optional[Union[float, np.ndarray]] = None,
                           target_semideviation: Optional[Union[float, list, np.ndarray]] = None,
                           population_size: Optional[int] = None,
+                          l1_coef: Optional[float] = None,
+                          l2_coef: Optional[float] = None,
                           ignore_none: bool = True) -> Union[list[np.ndarray], np.ndarray]:
         """
         Optimization along the mean-semivariance frontier.
@@ -408,14 +410,22 @@ class Optimization:
         :param population_size: number of pareto optimal portfolio weights to compute along the efficient frontier
         :type population_size: int
 
+         :param l1_coef: L1 regularisation coefficient. Increasing this coef will reduce the number of non-zero weights.
+                        It's like the L1 regularisation in Lasso.
+                        If both l1_coef and l2_coef are strictly positive, it's like the regularisation in Elastic-Net.
+        :type l1_coef: float, default to None
+
+        :param l2_coef: L2 regularisation coefficient. It's like the L2 regularisation in Ridge.
+                        If both l1_coef and l2_coef are strictly positive, it's like the regularisation in Elastic-Net.
+        :type l1_coef: float, default to None
+
         :param ignore_none: if True, None are removed from the list of weights results when the optimization failed
         :type ignore_none: bool, default True
 
         :return the portfolio weights that are in the efficient frontier
         :rtype: list of numpy.ndarray or numpy.ndarray
         """
-        self._validate_args(population_size=population_size,
-                            target_semideviation=target_semideviation)
+        self._validate_args(**{k: v for k, v in locals().items() if k != 'self'})
 
         if returns_target is None:
             returns_target = self.assets.expected_returns
@@ -434,7 +444,7 @@ class Optimization:
         target_semivariance_param = cp.Parameter(nonneg=True)
 
         # Objectives
-        objective = cp.Maximize(self._portfolio_returns(w=w))
+        objective = cp.Maximize(self._portfolio_returns(w=w, l1_coef=l1_coef, l2_coef=l2_coef))
 
         # Constraints
         portfolio_semivariance = cp.sum(cp.square(n))
@@ -477,6 +487,8 @@ class Optimization:
                   beta: float = 0.95,
                   target_cvar: Optional[Union[float, list, np.ndarray]] = None,
                   population_size: Optional[int] = None,
+                  l1_coef: Optional[float] = None,
+                  l2_coef: Optional[float] = None,
                   ignore_none: bool = True) -> Union[list[np.ndarray], np.ndarray]:
         """
         Optimization along the mean-CVaR frontier (Conditional Value-at-Risk or Expected Shortfall).
@@ -491,6 +503,16 @@ class Optimization:
         :param population_size: number of pareto optimal portfolio weights to compute along the efficient frontier
         :type population_size: int
 
+         :param l1_coef: L1 regularisation coefficient. Increasing this coef will reduce the number of non-zero weights.
+                        It's like the L1 regularisation in Lasso.
+                        If both l1_coef and l2_coef are strictly positive, it's like the regularisation in Elastic-Net.
+        :type l1_coef: float, default to None
+
+        :param l2_coef: L2 regularisation coefficient. It's like the L2 regularisation in Ridge.
+                        If both l1_coef and l2_coef are strictly positive, it's like the regularisation in Elastic-Net.
+        :type l1_coef: float, default to None
+
+
         :param ignore_none: if True, None are removed from the list of weights results when the optimization failed
         :type ignore_none: bool, default True
 
@@ -498,8 +520,7 @@ class Optimization:
         :rtype: list of numpy.ndarray or numpy.ndarray
         """
 
-        self._validate_args(population_size=population_size,
-                            target_cvar=target_cvar)
+        self._validate_args(**{k: v for k, v in locals().items() if k != 'self'})
 
         # Variables
         w = cp.Variable(self.assets.asset_nb)
@@ -510,7 +531,7 @@ class Optimization:
         target_cvar_param = cp.Parameter(nonneg=True)
 
         # Objectives
-        objective = cp.Maximize(self._portfolio_returns(w=w))
+        objective = cp.Maximize(self._portfolio_returns(w=w, l1_coef=l1_coef, l2_coef=l2_coef))
 
         # Constraints
         portfolio_cvar = alpha + 1.0 / (self.assets.date_nb * (1 - beta)) * cp.sum(u)
@@ -549,6 +570,8 @@ class Optimization:
                   beta: float = 0.95,
                   target_cdar: Optional[Union[float, list, np.ndarray]] = None,
                   population_size: Optional[int] = None,
+                  l1_coef: Optional[float] = None,
+                  l2_coef: Optional[float] = None,
                   ignore_none: bool = True) -> Union[list[np.ndarray], np.ndarray]:
         """
         Optimization along the mean-CDaR frontier (Conditional Drawdown-at-Risk).
@@ -563,6 +586,16 @@ class Optimization:
         :param population_size: number of pareto optimal portfolio weights to compute along the efficient frontier
         :type population_size: int
 
+         :param l1_coef: L1 regularisation coefficient. Increasing this coef will reduce the number of non-zero weights.
+                        It's like the L1 regularisation in Lasso.
+                        If both l1_coef and l2_coef are strictly positive, it's like the regularisation in Elastic-Net.
+        :type l1_coef: float, default to None
+
+        :param l2_coef: L2 regularisation coefficient. It's like the L2 regularisation in Ridge.
+                        If both l1_coef and l2_coef are strictly positive, it's like the regularisation in Elastic-Net.
+        :type l1_coef: float, default to None
+
+
         :param ignore_none: if True, None are removed from the list of weights results when the optimization failed
         :type ignore_none: bool, default True
 
@@ -571,8 +604,7 @@ class Optimization:
 
         """
 
-        self._validate_args(population_size=population_size,
-                            target_cdar=target_cdar)
+        self._validate_args(**{k: v for k, v in locals().items() if k != 'self'})
 
         # Variables
         w = cp.Variable(self.assets.asset_nb)
@@ -584,7 +616,7 @@ class Optimization:
         target_cdar_param = cp.Parameter(nonneg=True)
 
         # Objectives
-        objective = cp.Maximize(self._portfolio_returns(w=w))
+        objective = cp.Maximize(self._portfolio_returns(w=w, l1_coef=l1_coef, l2_coef=l2_coef))
 
         # Constraints
         portfolio_cdar = alpha + 1.0 / (self.assets.date_nb * (1 - beta)) * cp.sum(z)
