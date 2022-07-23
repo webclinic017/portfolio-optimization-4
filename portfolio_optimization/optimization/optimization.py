@@ -28,8 +28,11 @@ class Optimization:
         :param investment_type: investment type (fully invested, market neutral, unconstrained)
         :type investment_type: InvestmentType
 
-        :param weight_bounds: minimum and maximum weight of each asset OR single min/max pair if all identical.
-                            No short selling --> (0, None)
+        :param weight_bounds: Minimum and maximum weight of each asset OR single min/max pair if all identical.
+                              None lower bound is defaulted to -1.
+                              None upper bound is defaulted to 1.
+                              Default is (None, None) --> (-1, 1)
+                              For example, for no short selling --> (0, None)
         :type weight_bounds: tuple OR tuple list, optional
 
         :param costs: Transaction costs. Costs represent fixed costs charged on the notional amount invested.
@@ -168,9 +171,9 @@ class Optimization:
         # Upper and lower bounds
         lower_bounds, upper_bounds = self.weight_bounds
         if lower_bounds is None:
-            lower_bounds = -np.inf
+            lower_bounds = -1
         if upper_bounds is None:
-            upper_bounds = np.inf
+            upper_bounds = 1
 
         if np.isscalar(lower_bounds):
             lower_bounds = np.array([lower_bounds] * self.assets.asset_nb)
@@ -251,11 +254,12 @@ class Optimization:
                 raise ValueError(f'{target_name} should be a scalar, numpy.ndarray or list. '
                                  f'But received {type(target)}')
 
+        lower_bounds, upper_bounds = self._get_lower_and_upper_bounds()
         for k, v in kwargs.items():
             if k.endswith('coef') and v is not None:
                 if v < 0:
                     raise ValueError(f'{k} cannot be negative')
-                elif v > 0 and np.all(np.array(self.weight_bounds) >= 0):
+                elif v > 0 and np.all(lower_bounds >= 0):
                     logger.warning(f'Positive {k} will have no impact with positive or null lower bounds')
 
     def mean_variance(self,

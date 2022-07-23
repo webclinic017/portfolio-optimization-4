@@ -9,6 +9,27 @@ from portfolio_optimization.loader import *
 from portfolio_optimization.bloomberg import *
 from portfolio_optimization.assets import *
 
+PARAMS = [{'method_name': 'mean_variance',
+           'target_name': 'target_volatility',
+           'target': 0.02 / np.sqrt(255),
+           'portfolio_target_name': 'std',
+           'threshold': 1e-8},
+          {'method_name': 'mean_semivariance',
+           'target_name': 'target_semideviation',
+           'target': 0.02 / np.sqrt(255),
+           'portfolio_target_name': 'downside_std',
+           'threshold': 1e-4},
+          {'method_name': 'mean_cvar',
+           'target_name': 'target_cvar',
+           'target': 0.01,
+           'portfolio_target_name': 'cvar_95',
+           'threshold': 1e-4},
+          {'method_name': 'mean_cdar',
+           'target_name': 'target_cdar',
+           'target': 0.05,
+           'portfolio_target_name': 'cdar_95',
+           'threshold': 1e-2}]
+
 
 def get_assets() -> Assets:
     prices = load_prices(file=EXAMPLE_PRICES_PATH)
@@ -51,32 +72,36 @@ def test_random():
     assert abs(sum(weights) - 1) < 1e-10
 
 
-def test_mean_variance_population():
+def population_testing(method_name: str):
     assets = get_assets()
     model = Optimization(assets=assets,
                          investment_type=InvestmentType.FULLY_INVESTED,
                          weight_bounds=(0, None))
+    func = getattr(model, method_name)
     # Population size
-    portfolios_weights = model.mean_variance(population_size=30, ignore_none=False)
+    portfolios_weights = func(population_size=30, ignore_none=False)
     assert len(portfolios_weights) == 30
     assert portfolios_weights[0].shape == (assets.asset_nb,)
 
 
-def test_mean_variance_investment_type():
+def investment_type_testing(method_name: str,
+                            target_name: str,
+                            target: float,
+                            **kwargs):
     assets = get_assets()
 
     # Fully invested and no short selling
     model = Optimization(assets=assets,
                          investment_type=InvestmentType.FULLY_INVESTED,
-                         weight_bounds=(0, None))
-    target_volatility = 0.02 / np.sqrt(255)
-    weights = model.mean_variance(target_volatility=target_volatility)
+                         weight_bounds=(0, 10))
+    func = getattr(model, method_name)
+    weights = func(**{target_name: target})
     assert abs(sum(weights) - 1) < 1e-10
     assert np.all(weights >= 0)
 
     # Fully invested and short selling
     model.update(weight_bounds=(None, None))
-    weights = model.mean_variance(target_volatility=target_volatility)
+    weights = func(**{target_name: target})
     assert abs(sum(weights) - 1) < 1e-10
     assert not np.all(weights >= 0)
 
@@ -84,91 +109,100 @@ def test_mean_variance_investment_type():
     lower = -0.2
     upper = 0.3
     model.update(weight_bounds=(lower, upper))
-    weights = model.mean_variance(target_volatility=target_volatility)
+    weights = func(**{target_name: target})
     assert abs(sum(weights) - 1) < 1e-10
     assert np.all(weights >= lower) and np.all(weights <= upper)
 
     # Market neutral with short selling
     model.update(investment_type=InvestmentType.MARKET_NEUTRAL,
                  weight_bounds=(None, None))
-    weights = model.mean_variance(target_volatility=target_volatility)
+    weights = func(**{target_name: target})
     assert abs(sum(weights)) < 1e-10
     assert sum(abs(weights)) > 1
     assert not np.all(weights >= 0)
 
     # Market neutral with no short selling
-    model.update(investment_type=InvestmentType.MARKET_NEUTRAL,
-                 weight_bounds=(0.1, None))
-    weights = model.mean_variance(target_volatility=target_volatility)
-    assert abs(sum(weights)) < 1e-10
-    assert sum(abs(weights)) > 1
-    assert not np.all(weights >= 0)
+    try:
+        model.update(investment_type=InvestmentType.MARKET_NEUTRAL,
+                     weight_bounds=(0.1, None))
+        raise
+    except ValueError:
+        pass
+
+    # UNCONSTRAINED
+    model.update(investment_type=InvestmentType.UNCONSTRAINED,
+                 weight_bounds=(None, None))
+    weights = func(**{target_name: target})
+    assert abs(sum(weights) - 1) > 1e-5
+    assert abs(sum(weights)) > 1e-5
 
 
-
-def test_mean_variance_with_costs():
+def costs_testing(method_name: str,
+                  target_name: str,
+                  target: float,
+                  portfolio_target_name: 'str',
+                  threshold: float):
     assets = get_assets()
     model = Optimization(assets=assets,
                          investment_type=InvestmentType.FULLY_INVESTED,
                          weight_bounds=(0, None))
-
-    target_volatility = 0.02 / np.sqrt(255)
+    func = getattr(model, method_name)
     # Ref with no costs
-    weights = model.mean_variance(target_volatility=target_volatility)
+    weights = func(**{target_name: target})
     portfolio_ref = Portfolio(weights=weights,
                               assets=assets,
                               name='ptf_ref')
-    assert abs(portfolio_ref.std - target_volatility) < 1e-8
+    assert abs(getattr(portfolio_ref, portfolio_target_name) - target) < threshold
 
     # uniform costs for all assets and empty prev_weight --> no impact on weights
     model.update(costs=0.1,
                  prev_w=None,
                  investment_duration_in_days=255)
-    weights = model.mean_variance(target_volatility=target_volatility)
+    weights = func(**{target_name: target})
     portfolio = Portfolio(weights=weights,
                           assets=assets)
-    assert abs(portfolio.std - target_volatility) < 1e-8
-    assert abs(portfolio.weights - portfolio_ref.weights).sum() < 1e-3
+    assert abs(getattr(portfolio, portfolio_target_name) - target) < threshold
+    assert abs(portfolio.weights - portfolio_ref.weights).sum() < 5e-2
 
     # uniform costs for all assets and uniform prev_weight --> no impact on weights
     model.update(prev_w=np.ones(assets.asset_nb))
-    weights = model.mean_variance(target_volatility=target_volatility)
+    weights = func(**{target_name: target})
     portfolio = Portfolio(weights=weights,
                           assets=assets)
-    assert abs(portfolio.std - target_volatility) < 1e-8
-    assert abs(portfolio.weights - portfolio_ref.weights).sum() < 1e-3
+    assert abs(getattr(portfolio, portfolio_target_name) - target) < threshold
+    assert abs(portfolio.weights - portfolio_ref.weights).sum() < 5e-2
 
     # costs on top two invested assets and uniform prev_weight --> impact on the two invested assets weight
     asset_1 = portfolio_ref.composition.index[0]
     asset_2 = portfolio_ref.composition.index[1]
     costs = {asset_1: 0.2,
-             asset_2: 0.1}
+             asset_2: 0.5}
     model.update(costs=assets.dict_to_array(assets_dict=costs),
                  prev_w=None)
-    weights = model.mean_variance(target_volatility=target_volatility)
+    weights = func(**{target_name: target})
     portfolio = Portfolio(weights=weights,
                           assets=assets)
-    assert abs(portfolio.std - target_volatility) < 1e-8
+    assert abs(getattr(portfolio, portfolio_target_name) - target) < threshold
     assert asset_1 not in portfolio.composition.index
     assert asset_2 not in portfolio.composition.index
-    assert abs(portfolio.weights - portfolio_ref.weights).sum() > 1e-3
+    assert abs(portfolio.weights - portfolio_ref.weights).sum() > 5e-2
 
     # costs and identical prev_weight on top two invested assets --> the top two assets weights stay > 0
     asset_1 = portfolio_ref.composition.index[0]
     asset_2 = portfolio_ref.composition.index[1]
     costs = {asset_1: 0.2,
-             asset_2: 0.1}
+             asset_2: 0.5}
     prev_weights = {asset_1: portfolio_ref.get_weight(asset_name=asset_1),
                     asset_2: portfolio_ref.get_weight(asset_name=asset_2)}
     model.update(costs=assets.dict_to_array(assets_dict=costs),
                  prev_w=assets.dict_to_array(assets_dict=prev_weights))
-    weights = model.mean_variance(target_volatility=target_volatility)
+    weights = func(**{target_name: target})
     portfolio = Portfolio(weights=weights,
                           assets=assets)
-    assert abs(portfolio.std - target_volatility) < 1e-8
+    assert abs(getattr(portfolio, portfolio_target_name) - target) < threshold
     assert asset_1 in portfolio.composition.index
     assert asset_2 in portfolio.composition.index
-    assert abs(portfolio.weights - portfolio_ref.weights).sum() < 1e-3
+    assert abs(portfolio.weights - portfolio_ref.weights).sum() < 5e-2
 
     # identical costs on all assets and large prev_weight on top two invested assets
     # --> the top two assets weights become larger
@@ -178,10 +212,10 @@ def test_mean_variance_with_costs():
                     asset_2: 1}
     model.update(costs=0.1,
                  prev_w=assets.dict_to_array(assets_dict=prev_weights))
-    weights = model.mean_variance(target_volatility=target_volatility)
+    weights = func(**{target_name: target})
     portfolio = Portfolio(weights=weights,
                           assets=assets)
-    assert abs(portfolio.std - target_volatility) < 1e-8
+    assert abs(getattr(portfolio, portfolio_target_name) - target) < threshold
     assert asset_1 in portfolio.composition.index
     assert asset_2 in portfolio.composition.index
     assert portfolio.get_weight(asset_1) > portfolio_ref.get_weight(asset_1)
@@ -189,7 +223,19 @@ def test_mean_variance_with_costs():
     assert abs(portfolio.weights - portfolio_ref.weights).sum() > 1e-3
 
 
-def test_mean_variance_regularisation():
+def test_investment_type():
+    for param in PARAMS:
+        print(param)
+        investment_type_testing(**param)
+
+
+def test_costs():
+    for param in PARAMS:
+        print(param)
+        costs_testing(**param)
+
+
+def regularisation():
     assets = get_assets()
 
     target_volatility = 0.02 / np.sqrt(255)
