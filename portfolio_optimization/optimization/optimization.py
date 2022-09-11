@@ -4,7 +4,7 @@ import numpy as np
 import cvxpy as cp
 from cvxpy import SolverError
 from scipy.sparse.linalg import ArpackNoConvergence
-
+from enum import Enum, unique
 from portfolio_optimization.meta import *
 from portfolio_optimization.assets import *
 from portfolio_optimization.exception import *
@@ -13,6 +13,14 @@ from portfolio_optimization.utils.tools import *
 __all__ = ['Optimization']
 
 logger = logging.getLogger('portfolio_optimization.optimization')
+
+
+@unique
+class RiskMeasures(Enum):
+    VOLATILITY = 0
+    SEMI_VOLATILITY = 1
+    CVAR = 2
+    CDAR = 3
 
 
 class Optimization:
@@ -182,12 +190,39 @@ class Optimization:
 
         return lower_bounds, upper_bounds
 
+    def _get_target(self,
+                    risk_measure: RiskMeasures,
+                    target: Optional[Union[float, list, np.ndarray]] = None,
+                    population_size: Optional[int] = None) -> Union[float, np.ndarray]:
+
+        if target is not None:
+            if not np.isscalar(target):
+                target = np.array(target)
+            if risk_measure in [RiskMeasures.VOLATILITY, RiskMeasures.SEMI_VOLATILITY]:
+                # convert to variance
+                target = target ** 2
+
+        else:
+            if risk_measure in [RiskMeasures.VOLATILITY, RiskMeasures.SEMI_VOLATILITY]:
+                min_volatility = np.sqrt(1 / np.sum(np.linalg.pinv(self.assets.expected_cov)))
+                start = np.log10(min_volatility * 1.3)  # We start at min * 130% to increase proba of convergence
+                end = np.log10(0.3 / np.sqrt(255))  # We stop at 30% annualized volatility
+                target = np.logspace(start, end, num=population_size) ** 2
+
+            elif risk_measure in [RiskMeasures.CVAR, RiskMeasures.CDAR]:
+                target = np.logspace(-2, -0.5, num=population_size)
+
+            else:
+                raise ValueError(f'risk_measure {risk_measure} not recognized')
+
+        return target
+
     @staticmethod
     def _get_optimization_weights(problem: cp.Problem,
                                   w: cp.Variable,
                                   parameter: cp.Parameter,
-                                  target: Union[float, np.ndarray],
-                                  ignore_none: bool = True) -> list[Union[np.ndarray, None]]:
+                                  target: Union[float, np.ndarray]) -> np.ndarray:
+        empty_ptf_weights = np.empty(w.shape) * np.nan
 
         if np.isscalar(target):
             parameter_array = [target]
@@ -197,25 +232,19 @@ class Optimization:
         weights = []
         for value in parameter_array:
             parameter.value = value
-            weight = None
             try:
                 problem.solve(solver='ECOS')
                 if w.value is None:
-                    logger.warning(f'None return for {value}')
-                weight = w.value
-            except SolverError as e:
-                logger.warning(f'SolverError for {value}: {e}')
-            except ArpackNoConvergence as e:
-                logger.warning(f'ArpackNoConvergence for {value}: {e}')
-            if weight is not None or not ignore_none:
-                weights.append(weight)
+                    raise OptimizationError('None return')
+                weights.append(w.value)
+            except (OptimizationError, SolverError, ArpackNoConvergence) as e:
+                logger.warning(f'No solution found for {value:e}: {e}')
+                weights.append(empty_ptf_weights)
+                pass
 
         if np.isscalar(target):
-            if len(weights) == 0:
-                raise OptimizationError(f'Optimization did not converge')
             return weights[0]
-
-        return weights
+        return np.array(weights)
 
     def _get_investment_target(self) -> Optional[int]:
         # Sum of weights
@@ -316,7 +345,7 @@ class Optimization:
                       population_size: Optional[int] = None,
                       l1_coef: Optional[float] = None,
                       l2_coef: Optional[float] = None,
-                      ignore_none: bool = True) -> Union[list[np.ndarray], np.ndarray]:
+                      ignore_none: bool = True) -> np.ndarray:
         """
         Optimization along the mean-variance frontier (Markowitz optimization).
 
@@ -339,7 +368,8 @@ class Optimization:
         :type ignore_none: bool, default True
 
         :return the portfolio weights that are in the efficient frontier.
-        :rtype: list of numpy.ndarray or numpy.ndarray
+        :rtype: numpy.ndarray of shape (asset number,) if target_volatility is a scalar,
+                otherwise numpy.ndarray of shape (population size, asset number)
         """
         self._validate_args(**{k: v for k, v in locals().items() if k != 'self'})
 
@@ -371,23 +401,15 @@ class Optimization:
         # Problem
         problem = cp.Problem(objective, constraints)
 
-        if target_volatility is not None:
-            if np.isscalar(target_volatility):
-                target = target_volatility ** 2
-            else:
-                target = np.array(target_volatility) ** 2
-
-        else:
-            start = np.log10(min_volatility * 1.3)  # We start at min * 130% to increase proba of convergence
-            end = np.log10(0.3 / np.sqrt(255))  # We stop at 30% annualized volatility
-            volatilities = np.logspace(start, end, num=population_size)
-            target = volatilities ** 2
+        # Target
+        target = self._get_target(risk_measure=RiskMeasures.VOLATILITY,
+                                  target=target_volatility,
+                                  population_size=population_size)
 
         weights = self._get_optimization_weights(problem=problem,
                                                  w=w,
                                                  parameter=target_variance_param,
-                                                 target=target,
-                                                 ignore_none=ignore_none)
+                                                 target=target)
 
         return weights
 
@@ -397,7 +419,7 @@ class Optimization:
                           population_size: Optional[int] = None,
                           l1_coef: Optional[float] = None,
                           l2_coef: Optional[float] = None,
-                          ignore_none: bool = True) -> Union[list[np.ndarray], np.ndarray]:
+                          ignore_none: bool = True) -> np.ndarray:
         """
         Optimization along the mean-semivariance frontier.
 
@@ -423,7 +445,8 @@ class Optimization:
         :type ignore_none: bool, default True
 
         :return the portfolio weights that are in the efficient frontier
-        :rtype: list of numpy.ndarray or numpy.ndarray
+        :rtype: numpy.ndarray of shape (asset number,) if target_semideviation is a scalar,
+                otherwise numpy.ndarray of shape (population size, asset number)
         """
         self._validate_args(**{k: v for k, v in locals().items() if k != 'self'})
 
@@ -462,24 +485,15 @@ class Optimization:
         # Problem
         problem = cp.Problem(objective, constraints)
 
-        if target_semideviation is not None:
-            if np.isscalar(target_semideviation):
-                target = target_semideviation ** 2
-            else:
-                target = np.array(target_semideviation) ** 2
-        else:
-            # Solve for multiple semideviations
-            min_volatility = np.sqrt(1 / np.sum(np.linalg.pinv(self.assets.expected_cov)))
-            start = np.log10(min_volatility * 1.3)  # We start at min_volatility * 130% to increase proba of convergence
-            end = np.log10(0.3 / np.sqrt(255))  # We stop at 30% annualized semideviation
-            semideviations = np.logspace(start, end, num=population_size)
-            target = semideviations ** 2
+        # Target
+        target = self._get_target(risk_measure=RiskMeasures.SEMI_VOLATILITY,
+                                  target=target_semideviation,
+                                  population_size=population_size)
 
         weights = self._get_optimization_weights(problem=problem,
                                                  w=w,
                                                  parameter=target_semivariance_param,
-                                                 target=target,
-                                                 ignore_none=ignore_none)
+                                                 target=target)
 
         return weights
 
@@ -517,7 +531,8 @@ class Optimization:
         :type ignore_none: bool, default True
 
         :return the portfolio weights that are in the efficient frontier
-        :rtype: list of numpy.ndarray or numpy.ndarray
+        :rtype: numpy.ndarray of shape (asset number,) if target_cvar is a scalar,
+                otherwise numpy.ndarray of shape (population size, asset number)
         """
 
         self._validate_args(**{k: v for k, v in locals().items() if k != 'self'})
@@ -550,19 +565,15 @@ class Optimization:
         # Problem
         problem = cp.Problem(objective, constraints)
 
-        if target_cvar is not None:
-            if np.isscalar(target_cvar):
-                target = target_cvar
-            else:
-                target = np.array(target_cvar)
-        else:
-            target = np.logspace(-2, -0.5, num=population_size)
+        # Target
+        target = self._get_target(risk_measure=RiskMeasures.CVAR,
+                                  target=target_cvar,
+                                  population_size=population_size)
 
         weights = self._get_optimization_weights(problem=problem,
                                                  w=w,
                                                  parameter=target_cvar_param,
-                                                 target=target,
-                                                 ignore_none=ignore_none)
+                                                 target=target)
 
         return weights
 
@@ -600,8 +611,8 @@ class Optimization:
         :type ignore_none: bool, default True
 
         :return the portfolio weights that are in the efficient frontier
-        :rtype: list of numpy.ndarray or numpy.ndarray
-
+        :rtype: numpy.ndarray of shape (asset number,) if target_cdar is a scalar,
+                otherwise numpy.ndarray of shape (population size, asset number)
         """
 
         self._validate_args(**{k: v for k, v in locals().items() if k != 'self'})
@@ -638,20 +649,15 @@ class Optimization:
         # Problem
         problem = cp.Problem(objective, constraints)
 
-        if target_cdar is not None:
-            if np.isscalar(target_cdar):
-                target = target_cdar
-            else:
-                target = np.array(target_cdar)
-        else:
-            # Solve for multiple cdar
-            target = np.logspace(-2, -0.5, num=population_size)
+        # Target
+        target = self._get_target(risk_measure=RiskMeasures.CDAR,
+                                  target=target_cdar,
+                                  population_size=population_size)
 
         weights = self._get_optimization_weights(problem=problem,
                                                  w=w,
                                                  parameter=target_cdar_param,
-                                                 target=target,
-                                                 ignore_none=ignore_none)
+                                                 target=target)
 
         return weights
 
@@ -672,7 +678,7 @@ class Optimization:
 
     def random(self) -> np.ndarray:
         """
-        Random positive weights that sum to 1 and respects the bounds.
+        Random positive weig hts that sum to 1 and respects the bounds.
         """
         # Produces n random weights that sum to 1 with uniform distribution over the simplex
         weights = rand_weights_dirichlet(n=self.assets.asset_nb)

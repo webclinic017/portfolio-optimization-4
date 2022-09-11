@@ -102,6 +102,10 @@ class BasePortfolio:
         return self._std
 
     @property
+    def variance(self):
+        return self.std ** 2
+
+    @property
     def annualized_std(self):
         return self.std * np.sqrt(AVG_TRADING_DAYS_PER_YEAR)
 
@@ -110,6 +114,10 @@ class BasePortfolio:
         if self._downside_std is None:
             self._downside_std = downside_std(returns=self.returns)
         return self._downside_std
+
+    @property
+    def downside_variance(self):
+        return self.downside_std ** 2
 
     @property
     def annualized_downside_std(self):

@@ -315,23 +315,16 @@ def args_testing(method_name: str,
 
     # target is a list or numpy array
     for target in [[0.02, 0.05], np.array([0.02, 0.05])]:
-        weights = func(**{target_name: target, 'ignore_none': False})
-        assert isinstance(weights, list)
-        assert len(weights) == len(target)
-        for w in weights:
-            assert isinstance(w, np.ndarray)
-            assert w.shape == (assets.asset_nb,)
+        weights = func(**{target_name: target})
+        assert isinstance(weights, np.ndarray)
+        assert weights.shape == (len(target), assets.asset_nb)
 
-    # Ignore None
+    # None
     target = [1e10]
-    weights = func(**{target_name: target, 'ignore_none': False})
-    assert isinstance(weights, list)
-    assert len(weights) == len(target)
-    assert weights[0] is None
-    weights = func(**{target_name: target, 'ignore_none': True})
-    assert isinstance(weights, list)
-    assert len(weights) < len(target)
-
+    weights = func(**{target_name: target})
+    assert isinstance(weights, np.ndarray)
+    assert weights.shape == (1, assets.asset_nb)
+    assert np.isnan(weights[0]).all()
     # Target is 0 or neg
     target = [1, 0]
     try:
@@ -343,11 +336,8 @@ def args_testing(method_name: str,
     # Population
     population_size = 3
     weights = func(population_size=population_size, ignore_none=False)
-    assert isinstance(weights, list)
-    assert len(weights) == population_size
-    for w in weights:
-        assert isinstance(w, np.ndarray)
-        assert w.shape == (assets.asset_nb,)
+    assert isinstance(weights, np.ndarray)
+    assert weights.shape == (population_size, assets.asset_nb)
 
     # Both Population and Target is None
     try:
@@ -400,6 +390,8 @@ def test_maximum_sharpe():
                           assets=assets)
 
     portfolios_weights = model.mean_variance(population_size=30)
+    # Remove nan
+    portfolios_weights = portfolios_weights[~np.isnan(portfolios_weights).all(axis=1)]
     population = Population()
     for weights in portfolios_weights:
         population.add(Portfolio(weights=weights,

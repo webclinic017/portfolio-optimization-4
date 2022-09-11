@@ -19,7 +19,9 @@ class InvestmentType(Enum):
 class Metrics(Enum):
     MEAN = 'mean'
     STD = 'std'
+    VARIANCE = 'variance'
     DOWNSIDE_STD = 'downside_std'
+    DOWNSIDE_VARIANCE = 'downside_variance'
     ANNUALIZED_MEAN = 'annualized_mean'
     ANNUALIZED_STD = 'annualized_std'
     ANNUALIZED_DOWNSIDE_STD = 'annualized_downside_std'

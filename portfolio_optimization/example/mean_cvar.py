@@ -28,7 +28,6 @@ def mean_variance_vs_mean_cvar():
                          weight_bounds=(0, None))
 
     # Efficient Frontier -- Mean Variance
-
     portfolios_weights = model.mean_variance(population_size=30)
     for i, weights in enumerate(portfolios_weights):
         population.add(Portfolio(weights=weights,

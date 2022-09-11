@@ -113,6 +113,12 @@ class Population:
         if names is not None:
             if isinstance(names, str):
                 names = [names]
+            else:
+                # check for duplicates
+                unique, count = np.unique(names, return_counts=True)
+                duplicates = unique[count > 1]
+                if len(duplicates) > 0:
+                    raise ValueError(f'names contains duplicates {list(duplicates)}')
             return [self.get(name) for name in names]
         if tags is not None:
             if isinstance(tags, str):
