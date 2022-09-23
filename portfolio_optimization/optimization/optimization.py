@@ -17,8 +17,8 @@ logger = logging.getLogger('portfolio_optimization.optimization')
 
 @unique
 class RiskMeasures(Enum):
-    VOLATILITY = 0
-    SEMI_VOLATILITY = 1
+    VARIANCE = 0
+    SEMI_VARIANCE = 1
     CVAR = 2
     CDAR = 3
 
@@ -190,39 +190,25 @@ class Optimization:
 
         return lower_bounds, upper_bounds
 
-    def _get_target(self,
-                    risk_measure: RiskMeasures,
-                    target: Optional[Union[float, list, np.ndarray]] = None,
-                    population_size: Optional[int] = None) -> Union[float, np.ndarray]:
+    @staticmethod
+    def _solve_problem(problem: cp.Problem, w: cp.Variable) -> tuple[float, np.ndarray]:
 
-        if target is not None:
-            if not np.isscalar(target):
-                target = np.array(target)
-            if risk_measure in [RiskMeasures.VOLATILITY, RiskMeasures.SEMI_VOLATILITY]:
-                # convert to variance
-                target = target ** 2
+        try:
+            problem.solve(solver='ECOS')
+            if w.value is None:
+                raise OptimizationError('None return')
+            weights = w.value
+        except (OptimizationError, SolverError, ArpackNoConvergence) as e:
+            logger.warning(f'No solution found: {e}')
+            weights = np.empty(w.shape) * np.nan
 
-        else:
-            if risk_measure in [RiskMeasures.VOLATILITY, RiskMeasures.SEMI_VOLATILITY]:
-                min_volatility = np.sqrt(1 / np.sum(np.linalg.pinv(self.assets.expected_cov)))
-                start = np.log10(min_volatility * 1.3)  # We start at min * 130% to increase proba of convergence
-                end = np.log10(0.3 / np.sqrt(255))  # We stop at 30% annualized volatility
-                target = np.logspace(start, end, num=population_size) ** 2
-
-            elif risk_measure in [RiskMeasures.CVAR, RiskMeasures.CDAR]:
-                target = np.logspace(-2, -0.5, num=population_size)
-
-            else:
-                raise ValueError(f'risk_measure {risk_measure} not recognized')
-
-        return target
+        return problem.value, weights
 
     @staticmethod
     def _get_optimization_weights(problem: cp.Problem,
                                   w: cp.Variable,
                                   parameter: cp.Parameter,
                                   target: Union[float, np.ndarray]) -> np.ndarray:
-        empty_ptf_weights = np.empty(w.shape) * np.nan
 
         if np.isscalar(target):
             parameter_array = [target]
@@ -239,11 +225,11 @@ class Optimization:
                 weights.append(w.value)
             except (OptimizationError, SolverError, ArpackNoConvergence) as e:
                 logger.warning(f'No solution found for {value:e}: {e}')
-                weights.append(empty_ptf_weights)
-                pass
+                weights.append(np.empty(w.shape) * np.nan)
 
         if np.isscalar(target):
-            return weights[0]
+            weights = weights[0]
+
         return np.array(weights)
 
     def _get_investment_target(self) -> Optional[int]:
@@ -330,30 +316,177 @@ class Optimization:
         try:
             problem.solve(solver='ECOS')
             if w.value is None or k.value is None:
-                logger.warning(f'None return')
-                raise OptimizationError
-            return np.array(w.value / k.value, dtype=float)
-        except SolverError as e:
-            logger.warning(f'SolverError for: {e}')
-            raise OptimizationError
-        except ArpackNoConvergence as e:
-            logger.warning(f'ArpackNoConvergence for: {e}')
-            raise OptimizationError
+                raise OptimizationError('None return')
+            weights = np.array(w.value / k.value, dtype=float)
+        except (OptimizationError, SolverError, ArpackNoConvergence) as e:
+            logger.warning(f'No solution found: {e}')
+            weights = np.empty(w.shape) * np.nan
+
+        return weights
+
+    def minimum_variance(self) -> tuple[float, np.ndarray]:
+        """
+        Returns the tuple (minimum variance, weights of the minimum variance portfolio)
+        """
+        # Variables
+        w = cp.Variable(self.assets.asset_nb)
+
+        # Objectives
+        portfolio_variance = cp.quad_form(w, self.assets.expected_cov)
+        objective = cp.Minimize(portfolio_variance)
+
+        # Constraints
+        lower_bounds, upper_bounds = self._get_lower_and_upper_bounds()
+        constraints = [w >= lower_bounds,
+                       w <= upper_bounds]
+        investment_target = self._get_investment_target()
+        if investment_target is not None:
+            constraints.append(cp.sum(w) == investment_target)
+
+        # Problem
+        problem = cp.Problem(objective, constraints)
+
+        min_variance, weights = self._solve_problem(problem=problem, w=w)
+
+        return min_variance, weights
+
+    def minimum_semivariance(self,
+                             returns_target: Optional[Union[float, np.ndarray]] = None) -> tuple[float, np.ndarray]:
+        """
+        :param returns_target: the return target to distinguish "downside" and "upside".
+        :type returns_target: float or np.ndarray of shape(Number of Assets)
+
+        :return the tuple (minimum semivariance, weights of the minimum semivariance portfolio)
+        """
+        if returns_target is None:
+            returns_target = self.assets.expected_returns
+
+        # Additional matrix
+        if not np.isscalar(returns_target):
+            returns_target = returns_target[:, np.newaxis]
+        b = (self.assets.returns - returns_target) / np.sqrt(self.assets.date_nb)
+
+        # Variables
+        w = cp.Variable(self.assets.asset_nb)
+        p = cp.Variable(self.assets.date_nb, nonneg=True)
+        n = cp.Variable(self.assets.date_nb, nonneg=True)
+
+        # Objectives
+        portfolio_semivariance = cp.sum(cp.square(n))
+        objective = cp.Minimize(portfolio_semivariance)
+
+        # Constraints
+        lower_bounds, upper_bounds = self._get_lower_and_upper_bounds()
+        constraints = [b.T @ w - p + n == 0,
+                       w >= lower_bounds,
+                       w <= upper_bounds]
+
+        investment_target = self._get_investment_target()
+        if investment_target is not None:
+            constraints.append(cp.sum(w) == investment_target)
+
+        # Problem
+        problem = cp.Problem(objective, constraints)
+
+        min_semivariance, weights = self._solve_problem(problem=problem, w=w)
+
+        return min_semivariance, weights
+
+    def minimum_cvar(self, beta: float = 0.95) -> tuple[float, np.ndarray]:
+        """
+        Find the minimum CVaR portfolio (Conditional Value-at-Risk or Expected Shortfall).
+        CVaR is the average of the “extreme” losses beyond the VaR threshold.
+
+        :param beta: var confidence level (expected VaR on the worst (1-beta)% days)
+        :type beta: float
+
+        :return the tuple (minimum CVaR, weights of the minimum CVaR portfolio)
+        """
+
+        # Variables
+        w = cp.Variable(self.assets.asset_nb)
+        alpha = cp.Variable()
+        u = cp.Variable(self.assets.date_nb)
+
+        # Objectives
+        portfolio_cvar = alpha + 1.0 / (self.assets.date_nb * (1 - beta)) * cp.sum(u)
+        objective = cp.Minimize(portfolio_cvar)
+
+        # Constraints
+        lower_bounds, upper_bounds = self._get_lower_and_upper_bounds()
+
+        constraints = [self.assets.returns.T @ w + alpha + u >= 0,
+                       u >= 0,
+                       w >= lower_bounds,
+                       w <= upper_bounds]
+
+        investment_target = self._get_investment_target()
+        if investment_target is not None:
+            constraints.append(cp.sum(w) == investment_target)
+
+        # Problem
+        problem = cp.Problem(objective, constraints)
+
+        min_cvar, weights = self._solve_problem(problem=problem, w=w)
+
+        return min_cvar, weights
+
+    def minimum_cdar(self, beta: float = 0.95) -> tuple[float, np.ndarray]:
+        """
+        Find the minimum CDaR portfolio (Conditional Drawdown-at-Risk).
+        The Conditional Drawdown-at-Risk is the average drawdown for all the days that drawdown exceeds a threshold.
+
+        :param beta: drawdown confidence level (expected drawdown on the worst (1-beta)% days)
+        :type beta: float
+
+        :return the tuple (minimum CDaR, weights of the minimum CDaR portfolio)
+       """
+
+        # Variables
+        w = cp.Variable(self.assets.asset_nb)
+        alpha = cp.Variable()
+        u = cp.Variable(self.assets.date_nb + 1)
+        z = cp.Variable(self.assets.date_nb)
+
+        # Objectives
+        portfolio_cdar = alpha + 1.0 / (self.assets.date_nb * (1 - beta)) * cp.sum(z)
+        objective = cp.Minimize(portfolio_cdar)
+
+        # Constraints
+        lower_bounds, upper_bounds = self._get_lower_and_upper_bounds()
+
+        constraints = [z >= u[1:] - alpha,
+                       z >= 0,
+                       u[1:] >= u[:-1] - self.assets.returns.T @ w,
+                       u[0] == 0,
+                       u[1:] >= 0,
+                       w >= lower_bounds,
+                       w <= upper_bounds]
+
+        investment_target = self._get_investment_target()
+        if investment_target is not None:
+            constraints.append(cp.sum(w) == investment_target)
+
+        # Problem
+        problem = cp.Problem(objective, constraints)
+
+        min_cdar, weights = self._solve_problem(problem=problem, w=w)
+
+        return min_cdar, weights
 
     def mean_variance(self,
-                      target_volatility: Optional[Union[float, list, np.ndarray]] = None,
+                      target_variance: Optional[Union[float, list, np.ndarray]] = None,
                       population_size: Optional[int] = None,
                       l1_coef: Optional[float] = None,
-                      l2_coef: Optional[float] = None,
-                      ignore_none: bool = True) -> np.ndarray:
+                      l2_coef: Optional[float] = None) -> np.ndarray:
         """
         Optimization along the mean-variance frontier (Markowitz optimization).
 
         :param population_size: number of pareto optimal portfolio weights to compute along the efficient frontier
         :type population_size: int, optional
 
-        :param target_volatility: minimize return for the targeted daily volatility of the portfolio.
-        :type target_volatility: float or list or numpy.ndarray optional
+        :param target_variance: minimize return for the targeted daily variance of the portfolio.
+        :type target_variance: float or list or numpy.ndarray optional
 
         :param l1_coef: L1 regularisation coefficient. Increasing this coef will reduce the number of non-zero weights.
                         It's like the L1 regularisation in Lasso.
@@ -364,20 +497,11 @@ class Optimization:
                         If both l1_coef and l2_coef are strictly positive, it's like the regularisation in Elastic-Net.
         :type l1_coef: float, default to None
 
-        :param ignore_none: if True, None are removed from the list of weights results when the optimization failed
-        :type ignore_none: bool, default True
-
         :return the portfolio weights that are in the efficient frontier.
-        :rtype: numpy.ndarray of shape (asset number,) if target_volatility is a scalar,
+        :rtype: numpy.ndarray of shape (asset number,) if target_variance is a scalar,
                 otherwise numpy.ndarray of shape (population size, asset number)
         """
         self._validate_args(**{k: v for k, v in locals().items() if k != 'self'})
-
-        min_volatility = np.sqrt(1 / np.sum(np.linalg.pinv(self.assets.expected_cov)))
-
-        if np.isscalar(target_volatility) and target_volatility < min_volatility:
-            raise ValueError(f'The minimum volatility is {min_volatility:.3f}. '
-                             f'Please use a higher target_volatility')
 
         # Variables
         w = cp.Variable(self.assets.asset_nb)
@@ -402,32 +526,36 @@ class Optimization:
         problem = cp.Problem(objective, constraints)
 
         # Target
-        target = self._get_target(risk_measure=RiskMeasures.VOLATILITY,
-                                  target=target_volatility,
-                                  population_size=population_size)
+        if target_variance is not None:
+            if not np.isscalar(target_variance):
+                target_variance = np.array(target_variance)
+        else:
+            min_variance, _ = self.minimum_variance()
+            max_variance = max(0.4 ** 2 / 255, min_variance * 10)  # max(40% annualized volatility, 10 x min variance)
+            target_variance = np.logspace(np.log10(min_variance), np.log10(max_variance), num=population_size)
 
+        # weights
         weights = self._get_optimization_weights(problem=problem,
                                                  w=w,
                                                  parameter=target_variance_param,
-                                                 target=target)
+                                                 target=target_variance)
 
         return weights
 
     def mean_semivariance(self,
                           returns_target: Optional[Union[float, np.ndarray]] = None,
-                          target_semideviation: Optional[Union[float, list, np.ndarray]] = None,
+                          target_semivariance: Optional[Union[float, list, np.ndarray]] = None,
                           population_size: Optional[int] = None,
                           l1_coef: Optional[float] = None,
-                          l2_coef: Optional[float] = None,
-                          ignore_none: bool = True) -> np.ndarray:
+                          l2_coef: Optional[float] = None) -> np.ndarray:
         """
         Optimization along the mean-semivariance frontier.
 
         :param returns_target: the return target to distinguish "downside" and "upside".
         :type returns_target: float or np.ndarray of shape(Number of Assets)
 
-        :param target_semideviation: minimize return for the targeted semideviation of the portfolio.
-        :type target_semideviation: float or list or numpy.ndarray optional
+        :param target_semivariance: minimize return for the targeted semivariance of the portfolio.
+        :type target_semivariance: float or list or numpy.ndarray optional
 
         :param population_size: number of pareto optimal portfolio weights to compute along the efficient frontier
         :type population_size: int
@@ -440,9 +568,6 @@ class Optimization:
         :param l2_coef: L2 regularisation coefficient. It's like the L2 regularisation in Ridge.
                         If both l1_coef and l2_coef are strictly positive, it's like the regularisation in Elastic-Net.
         :type l1_coef: float, default to None
-
-        :param ignore_none: if True, None are removed from the list of weights results when the optimization failed
-        :type ignore_none: bool, default True
 
         :return the portfolio weights that are in the efficient frontier
         :rtype: numpy.ndarray of shape (asset number,) if target_semideviation is a scalar,
@@ -486,14 +611,21 @@ class Optimization:
         problem = cp.Problem(objective, constraints)
 
         # Target
-        target = self._get_target(risk_measure=RiskMeasures.SEMI_VOLATILITY,
-                                  target=target_semideviation,
-                                  population_size=population_size)
+        if target_semivariance is not None:
+            if not np.isscalar(target_semivariance):
+                target_semivariance = np.array(target_semivariance)
+        else:
+            min_semivariance, _ = self.minimum_semivariance(returns_target=returns_target)
+            max_semivariance = max(0.4 ** 2 / 255, min_semivariance * 10)  # 40% annualized semivolatility
+            target_semivariance = np.logspace(np.log10(min_semivariance),
+                                              np.log10(max_semivariance),
+                                              num=population_size)
 
+        # weights
         weights = self._get_optimization_weights(problem=problem,
                                                  w=w,
                                                  parameter=target_semivariance_param,
-                                                 target=target)
+                                                 target=target_semivariance)
 
         return weights
 
@@ -502,8 +634,7 @@ class Optimization:
                   target_cvar: Optional[Union[float, list, np.ndarray]] = None,
                   population_size: Optional[int] = None,
                   l1_coef: Optional[float] = None,
-                  l2_coef: Optional[float] = None,
-                  ignore_none: bool = True) -> Union[list[np.ndarray], np.ndarray]:
+                  l2_coef: Optional[float] = None) -> np.ndarray:
         """
         Optimization along the mean-CVaR frontier (Conditional Value-at-Risk or Expected Shortfall).
         CVaR is the average of the “extreme” losses beyond the VaR threshold.
@@ -525,10 +656,6 @@ class Optimization:
         :param l2_coef: L2 regularisation coefficient. It's like the L2 regularisation in Ridge.
                         If both l1_coef and l2_coef are strictly positive, it's like the regularisation in Elastic-Net.
         :type l1_coef: float, default to None
-
-
-        :param ignore_none: if True, None are removed from the list of weights results when the optimization failed
-        :type ignore_none: bool, default True
 
         :return the portfolio weights that are in the efficient frontier
         :rtype: numpy.ndarray of shape (asset number,) if target_cvar is a scalar,
@@ -566,14 +693,18 @@ class Optimization:
         problem = cp.Problem(objective, constraints)
 
         # Target
-        target = self._get_target(risk_measure=RiskMeasures.CVAR,
-                                  target=target_cvar,
-                                  population_size=population_size)
+        if target_cvar is not None:
+            if not np.isscalar(target_cvar):
+                target_cvar = np.array(target_cvar)
+        else:
+            min_cvar, _ = self.minimum_cvar(beta=beta)
+            max_cvar = max(0.3, min_cvar * 10)  # 30% CVaR
+            target_cvar = np.logspace(np.log10(min_cvar), np.log10(max_cvar), num=population_size)
 
         weights = self._get_optimization_weights(problem=problem,
                                                  w=w,
                                                  parameter=target_cvar_param,
-                                                 target=target)
+                                                 target=target_cvar)
 
         return weights
 
@@ -582,8 +713,7 @@ class Optimization:
                   target_cdar: Optional[Union[float, list, np.ndarray]] = None,
                   population_size: Optional[int] = None,
                   l1_coef: Optional[float] = None,
-                  l2_coef: Optional[float] = None,
-                  ignore_none: bool = True) -> Union[list[np.ndarray], np.ndarray]:
+                  l2_coef: Optional[float] = None) -> np.ndarray:
         """
         Optimization along the mean-CDaR frontier (Conditional Drawdown-at-Risk).
         The Conditional Drawdown-at-Risk is the average drawdown for all the days that drawdown exceeds a threshold.
@@ -606,9 +736,6 @@ class Optimization:
                         If both l1_coef and l2_coef are strictly positive, it's like the regularisation in Elastic-Net.
         :type l1_coef: float, default to None
 
-
-        :param ignore_none: if True, None are removed from the list of weights results when the optimization failed
-        :type ignore_none: bool, default True
 
         :return the portfolio weights that are in the efficient frontier
         :rtype: numpy.ndarray of shape (asset number,) if target_cdar is a scalar,
@@ -650,14 +777,18 @@ class Optimization:
         problem = cp.Problem(objective, constraints)
 
         # Target
-        target = self._get_target(risk_measure=RiskMeasures.CDAR,
-                                  target=target_cdar,
-                                  population_size=population_size)
+        if target_cdar is not None:
+            if not np.isscalar(target_cdar):
+                target_cdar = np.array(target_cdar)
+        else:
+            min_cdar, _ = self.minimum_cdar(beta=beta)
+            max_cdar = max(0.3, min_cdar * 10)  # 30% CDaR
+            target_cdar = np.logspace(np.log10(min_cdar), np.log10(max_cdar), num=population_size)
 
         weights = self._get_optimization_weights(problem=problem,
                                                  w=w,
                                                  parameter=target_cdar_param,
-                                                 target=target)
+                                                 target=target_cdar)
 
         return weights
 
