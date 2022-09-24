@@ -362,7 +362,7 @@ class Optimization:
             returns_target = self.assets.expected_returns
 
         # Additional matrix
-        if not np.isscalar(returns_target):
+        if not np.isscalar(returns_target) and returns_target.shape != (len(returns_target), 1):
             returns_target = returns_target[:, np.newaxis]
         b = (self.assets.returns - returns_target) / np.sqrt(self.assets.date_nb)
 
@@ -579,7 +579,7 @@ class Optimization:
             returns_target = self.assets.expected_returns
 
         # Additional matrix
-        if not np.isscalar(returns_target):
+        if not np.isscalar(returns_target) and returns_target.shape != (len(returns_target), 1):
             returns_target = returns_target[:, np.newaxis]
         b = (self.assets.returns - returns_target) / np.sqrt(self.assets.date_nb)
 

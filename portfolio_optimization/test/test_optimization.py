@@ -10,22 +10,18 @@ from portfolio_optimization.bloomberg import *
 from portfolio_optimization.assets import *
 
 PARAMS = [{'method_name': 'mean_variance',
-           'target_name': 'target_volatility',
-           'target': 0.02 / np.sqrt(255),
-           'portfolio_target_name': 'std',
-           'threshold': 1e-8},
+           'target': 0.02**2 / 255,
+           'portfolio_target_name': 'variance',
+           'threshold': 1e-10},
           {'method_name': 'mean_semivariance',
-           'target_name': 'target_semideviation',
-           'target': 0.02 / np.sqrt(255),
-           'portfolio_target_name': 'downside_std',
-           'threshold': 1e-4},
+           'target': 0.02**2 / 255,
+           'portfolio_target_name': 'downside_variance',
+           'threshold': 1e-6},
           {'method_name': 'mean_cvar',
-           'target_name': 'target_cvar',
            'target': 0.01,
            'portfolio_target_name': 'cvar_95',
            'threshold': 1e-4},
           {'method_name': 'mean_cdar',
-           'target_name': 'target_cdar',
            'target': 0.05,
            'portfolio_target_name': 'cdar_95',
            'threshold': 1e-2}]
@@ -72,22 +68,59 @@ def test_random():
     assert abs(sum(weights) - 1) < 1e-10
 
 
-def population_testing(method_name: str):
+def minimum_testing(method_name: str,
+                    portfolio_target_name: str,
+                    threshold: float,
+                    **kwargs):
+    minimum_method_name = method_name.replace('mean', 'minimum')
+    assets = get_assets()
+    model = Optimization(assets=assets,
+                         investment_type=InvestmentType.FULLY_INVESTED,
+                         weight_bounds=(0, None))
+    min_func = getattr(model, minimum_method_name)
+    # Population size
+    min_risk, weights = min_func()
+    assert isinstance(min_risk, float)
+    assert min_risk > 0
+    assert isinstance(weights, np.ndarray)
+    assert weights.shape == (assets.asset_nb,)
+    assert not np.isnan(weights).any()
+
+    portfolio = Portfolio(weights=weights,
+                          assets=assets)
+    assert abs(getattr(portfolio, portfolio_target_name) - min_risk) < threshold
+
+    mean_func = getattr(model, method_name)
+    target_name = method_name.replace('mean', 'target')
+    weights_2 = mean_func(**{target_name: min_risk})
+    portfolio_2 = Portfolio(weights=weights_2,
+                            assets=assets)
+    assert abs(getattr(portfolio_2, portfolio_target_name) - min_risk) < threshold
+
+    weights_3 = mean_func(**{target_name: min_risk / 2})
+    if not np.isnan(weights_3).all():
+        portfolio_3 = Portfolio(weights=weights_2,
+                                assets=assets)
+        assert abs(getattr(portfolio_3, portfolio_target_name) - min_risk) < threshold
+
+
+def population_testing(method_name: str, **kwrarg):
     assets = get_assets()
     model = Optimization(assets=assets,
                          investment_type=InvestmentType.FULLY_INVESTED,
                          weight_bounds=(0, None))
     func = getattr(model, method_name)
     # Population size
-    portfolios_weights = func(population_size=30, ignore_none=False)
-    assert len(portfolios_weights) == 30
-    assert portfolios_weights[0].shape == (assets.asset_nb,)
+    portfolios_weights = func(population_size=30)
+    assert isinstance(portfolios_weights, np.ndarray)
+    assert portfolios_weights.shape == (30, assets.asset_nb)
+    assert not np.isnan(portfolios_weights).any()
 
 
 def investment_type_testing(method_name: str,
-                            target_name: str,
                             target: float,
                             **kwargs):
+    target_name = method_name.replace('mean', 'target')
     assets = get_assets()
 
     # Fully invested and no short selling
@@ -138,10 +171,10 @@ def investment_type_testing(method_name: str,
 
 
 def costs_testing(method_name: str,
-                  target_name: str,
                   target: float,
                   portfolio_target_name: 'str',
                   threshold: float):
+    target_name = method_name.replace('mean', 'target')
     assets = get_assets()
     model = Optimization(assets=assets,
                          investment_type=InvestmentType.FULLY_INVESTED,
@@ -224,10 +257,10 @@ def costs_testing(method_name: str,
 
 
 def regularisation_testing(method_name: str,
-                           target_name: str,
                            target: float,
                            portfolio_target_name: 'str',
                            threshold: float):
+    target_name = method_name.replace('mean', 'target')
     assets = get_assets()
 
     params = {target_name: target}
@@ -291,8 +324,8 @@ def regularisation_testing(method_name: str,
 
 
 def args_testing(method_name: str,
-                 target_name: str,
                  **kwargs):
+    target_name = method_name.replace('mean', 'target')
     prices = load_prices(file=EXAMPLE_PRICES_PATH)
     prices = prices.iloc[:, :100].copy()
 
@@ -335,7 +368,7 @@ def args_testing(method_name: str,
 
     # Population
     population_size = 3
-    weights = func(population_size=population_size, ignore_none=False)
+    weights = func(population_size=population_size)
     assert isinstance(weights, np.ndarray)
     assert weights.shape == (population_size, assets.asset_nb)
 
@@ -352,6 +385,18 @@ def args_testing(method_name: str,
         raise
     except ValueError:
         pass
+
+
+def test_minimum():
+    for param in PARAMS:
+        print(param)
+        minimum_testing(**param)
+
+
+def test_population():
+    for param in PARAMS:
+        print(param)
+        population_testing(**param)
 
 
 def test_investment_type():
