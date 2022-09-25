@@ -33,24 +33,22 @@ class Optimization:
                  investment_duration_in_days: Optional[int] = None,
                  prev_w: Optional[np.ndarray] = None):
         """
+        Convex portfolio optimization
         :param investment_type: investment type (fully invested, market neutral, unconstrained)
         :type investment_type: InvestmentType
-
         :param weight_bounds: Minimum and maximum weight of each asset OR single min/max pair if all identical.
                               None lower bound is defaulted to -1.
                               None upper bound is defaulted to 1.
                               Default is (None, None) --> (-1, 1)
                               For example, for no short selling --> (0, None)
         :type weight_bounds: tuple OR tuple list, optional
-
         :param costs: Transaction costs. Costs represent fixed costs charged on the notional amount invested.
                       Example:
-                              * For a fixed entry cost of 1% based the nominal amount in the asset currency,
-                                then costs=0.01
-                              * For a fixed entry cost of 5 Ccy (asset currency), then that cost needs to be converted
-                                in a notional amount equivalent with costs = 5 * asset price
+                              * costs = 0.01: for a fixed entry cost of 1% based on the notional amount in the asset
+                              currency
+                              * costs = 5 * asset price: for a fixed entry cost of 5 Ccy (asset currency) (that cost
+                              needs to be converted in a notional amount equivalent)
         :type costs: float or np.ndarray of shape(Number of Assets)
-
         :param investment_duration_in_days: The expected investment duration in business days.
                   When costs are provided, they need to be converted to an average daily cost over
                   the expected investment duration. This is because the optimization problem has no notion of investment
@@ -67,8 +65,7 @@ class Optimization:
                         * expected return A ≈ 0.01% * 255 - 1% ≈ 1.5%
                         * expected return B ≈ 0.005% * 21 - 0% ≈ 1.3%
                  In order to take that into account, the costs provided are divided by the expected investment duration
-                 in days in the optimization problem.
-
+                 in days in the optimization problem
         :param prev_w: previous weights
         :type prev_w: np.ndarray of shape(Number of Assets), default None (equivalent to an array of zeros)
         """
@@ -82,6 +79,9 @@ class Optimization:
         self._validation()
 
     def update(self, **kwargs):
+        """
+        Update the class attributes then re-validate them
+        """
         self.loaded = False
         valid_kwargs = ['assets',
                         'investment_type',
@@ -102,7 +102,9 @@ class Optimization:
         super().__setattr__(name, value)
 
     def _validation(self):
-
+        """
+        Validate the class attributes
+        """
         if self.assets.asset_nb < 2:
             raise ValueError(f'assets should contains more than one asset')
 
@@ -139,107 +141,10 @@ class Optimization:
             if len(self.prev_w) != self.assets.asset_nb:
                 raise ValueError(f'prev_w should be of size {self.assets.asset_nb} but received {len(self.prev_w)}')
 
-    def _portfolio_returns(self,
-                           w: cp.Variable,
-                           l1_coef: Optional[float] = None,
-                           l2_coef: Optional[float] = None) -> cp.Expression:
-        if self.costs is None or (np.isscalar(self.costs) and self.costs == 0):
-            portfolio_cost = 0
-        else:
-            if self.prev_w is None:
-                prev_w = np.zeros(self.assets.asset_nb)
-            else:
-                prev_w = self.prev_w
-            daily_costs = self.costs / self.investment_duration_in_days
-            if np.isscalar(daily_costs):
-                portfolio_cost = daily_costs * cp.norm(prev_w - w, 1)
-            else:
-                portfolio_cost = cp.norm(cp.multiply(daily_costs, (prev_w - w)), 1)
-
-        # Norm L1
-        if l1_coef is None or l1_coef == 0:
-            l1_regularization = 0
-        else:
-            l1_regularization = l1_coef * cp.norm(w, 1)
-
-        # Norm L2
-        if l2_coef is None or l2_coef == 0:
-            l2_regularization = 0
-        else:
-            l2_regularization = l2_coef * cp.sum_squares(w)
-
-        portfolio_return = (self.assets.expected_returns @ w
-                            - portfolio_cost
-                            - l1_regularization
-                            - l2_regularization)
-
-        return portfolio_return
-
-    def _get_lower_and_upper_bounds(self) -> tuple[np.ndarray, np.ndarray]:
-        # Upper and lower bounds
-        lower_bounds, upper_bounds = self.weight_bounds
-        if lower_bounds is None:
-            lower_bounds = -1
-        if upper_bounds is None:
-            upper_bounds = 1
-
-        if np.isscalar(lower_bounds):
-            lower_bounds = np.array([lower_bounds] * self.assets.asset_nb)
-        if np.isscalar(upper_bounds):
-            upper_bounds = np.array([upper_bounds] * self.assets.asset_nb)
-
-        return lower_bounds, upper_bounds
-
-    @staticmethod
-    def _solve_problem(problem: cp.Problem, w: cp.Variable) -> tuple[float, np.ndarray]:
-
-        try:
-            problem.solve(solver='ECOS')
-            if w.value is None:
-                raise OptimizationError('None return')
-            weights = w.value
-        except (OptimizationError, SolverError, ArpackNoConvergence) as e:
-            logger.warning(f'No solution found: {e}')
-            weights = np.empty(w.shape) * np.nan
-
-        return problem.value, weights
-
-    @staticmethod
-    def _get_optimization_weights(problem: cp.Problem,
-                                  w: cp.Variable,
-                                  parameter: cp.Parameter,
-                                  target: Union[float, np.ndarray]) -> np.ndarray:
-
-        if np.isscalar(target):
-            parameter_array = [target]
-        else:
-            parameter_array = target
-
-        weights = []
-        for value in parameter_array:
-            parameter.value = value
-            try:
-                problem.solve(solver='ECOS')
-                if w.value is None:
-                    raise OptimizationError('None return')
-                weights.append(w.value)
-            except (OptimizationError, SolverError, ArpackNoConvergence) as e:
-                logger.warning(f'No solution found for {value:e}: {e}')
-                weights.append(np.empty(w.shape) * np.nan)
-
-        if np.isscalar(target):
-            weights = weights[0]
-
-        return np.array(weights)
-
-    def _get_investment_target(self) -> Optional[int]:
-        # Sum of weights
-        if self.investment_type == InvestmentType.FULLY_INVESTED:
-            return 1
-        elif self.investment_type == InvestmentType.MARKET_NEUTRAL:
-            return 0
-
     def _validate_args(self, **kwargs):
+        """
+        Validate function arguments
+        """
         population_size = kwargs.get('population_size')
         targets_names = [k for k, v in kwargs.items() if k.startswith('target_')]
         not_none_targets_names = [k for k in targets_names if kwargs[k] is not None]
@@ -277,12 +182,128 @@ class Optimization:
                 elif v > 0 and np.all(lower_bounds >= 0):
                     logger.warning(f'Positive {k} will have no impact with positive or null lower bounds')
 
+    def _portfolio_expected_return(self,
+                                   w: cp.Variable,
+                                   l1_coef: Optional[float] = None,
+                                   l2_coef: Optional[float] = None) -> cp.Expression:
+        """
+        CVXPY Expression of the portfolio expected return with l1 and l2 regularization.
+        """
+        if self.costs is None or (np.isscalar(self.costs) and self.costs == 0):
+            portfolio_cost = 0
+        else:
+            if self.prev_w is None:
+                prev_w = np.zeros(self.assets.asset_nb)
+            else:
+                prev_w = self.prev_w
+            daily_costs = self.costs / self.investment_duration_in_days
+            if np.isscalar(daily_costs):
+                portfolio_cost = daily_costs * cp.norm(prev_w - w, 1)
+            else:
+                portfolio_cost = cp.norm(cp.multiply(daily_costs, (prev_w - w)), 1)
+
+        # Norm L1
+        if l1_coef is None or l1_coef == 0:
+            l1_regularization = 0
+        else:
+            l1_regularization = l1_coef * cp.norm(w, 1)
+
+        # Norm L2
+        if l2_coef is None or l2_coef == 0:
+            l2_regularization = 0
+        else:
+            l2_regularization = l2_coef * cp.sum_squares(w)
+
+        portfolio_return = (self.assets.expected_returns @ w
+                            - portfolio_cost
+                            - l1_regularization
+                            - l2_regularization)
+
+        return portfolio_return
+
+    def _get_lower_and_upper_bounds(self) -> tuple[np.ndarray, np.ndarray]:
+        """
+        Format lower and upper bounds
+        """
+        # Upper and lower bounds
+        lower_bounds, upper_bounds = self.weight_bounds
+        if lower_bounds is None:
+            lower_bounds = -1
+        if upper_bounds is None:
+            upper_bounds = 1
+
+        if np.isscalar(lower_bounds):
+            lower_bounds = np.array([lower_bounds] * self.assets.asset_nb)
+        if np.isscalar(upper_bounds):
+            upper_bounds = np.array([upper_bounds] * self.assets.asset_nb)
+
+        return lower_bounds, upper_bounds
+
+    @staticmethod
+    def _solve_problem(problem: cp.Problem, w: cp.Variable) -> tuple[float, np.ndarray]:
+        """
+        Solve CVXPY Problem without variables
+        """
+        try:
+            problem.solve(solver='ECOS')
+            if w.value is None:
+                raise OptimizationError('None return')
+            weights = w.value
+        except (OptimizationError, SolverError, ArpackNoConvergence) as e:
+            logger.warning(f'No solution found: {e}')
+            weights = np.empty(w.shape) * np.nan
+
+        return problem.value, weights
+
+    @staticmethod
+    def _get_optimization_weights(problem: cp.Problem,
+                                  w: cp.Variable,
+                                  parameter: cp.Parameter,
+                                  target: Union[float, np.ndarray]) -> np.ndarray:
+        """
+        Solve CVXPY Problem with variables
+        :param problem: CVXPY Problem
+        :param w: CVXPY Variable representing the weights
+        :param parameter: CVXPY Parameter
+        :param target: parameter's value(s)
+        :returns: weights array
+        """
+        if np.isscalar(target):
+            parameter_array = [target]
+        else:
+            parameter_array = target
+
+        weights = []
+        for value in parameter_array:
+            parameter.value = value
+            try:
+                problem.solve(solver='ECOS')
+                if w.value is None:
+                    raise OptimizationError('None return')
+                weights.append(w.value)
+            except (OptimizationError, SolverError, ArpackNoConvergence) as e:
+                logger.warning(f'No solution found for {value:e}: {e}')
+                weights.append(np.empty(w.shape) * np.nan)
+
+        if np.isscalar(target):
+            weights = weights[0]
+
+        return np.array(weights)
+
+    def _get_investment_target(self) -> Optional[int]:
+        """
+        Convert the investment target into 0, 1 or None
+        """
+        # Sum of weights
+        if self.investment_type == InvestmentType.FULLY_INVESTED:
+            return 1
+        elif self.investment_type == InvestmentType.MARKET_NEUTRAL:
+            return 0
+
     def maximum_sharpe(self) -> np.ndarray:
         """
-        Maximize the sharpe ratio.
-
-        :return the portfolio weights that maximize the sharpe ratio of the portfolio.
-        :rtype: numpy.ndarray
+        Find the asset weights that maximize the portfolio sharpe ratio
+        :returns: the asset weights that maximize the portfolio sharpe ratio.
         """
 
         if self.investment_type != InvestmentType.FULLY_INVESTED:
@@ -304,7 +325,7 @@ class Optimization:
 
         # Constraints
         lower_bounds, upper_bounds = self._get_lower_and_upper_bounds()
-        constraints = [self._portfolio_returns(w=w) == 1,
+        constraints = [self._portfolio_expected_return(w=w) == 1,
                        w >= lower_bounds * k,
                        w <= upper_bounds * k,
                        cp.sum(w) == k,
@@ -326,7 +347,9 @@ class Optimization:
 
     def minimum_variance(self) -> tuple[float, np.ndarray]:
         """
-        Returns the tuple (minimum variance, weights of the minimum variance portfolio)
+        Find the asset weights that minimize the portfolio variance and the value of the minimum
+        variance.
+        :returns: the tuple (minimum variance, weights of the minimum variance portfolio)
         """
         # Variables
         w = cp.Variable(self.assets.asset_nb)
@@ -353,10 +376,11 @@ class Optimization:
     def minimum_semivariance(self,
                              returns_target: Optional[Union[float, np.ndarray]] = None) -> tuple[float, np.ndarray]:
         """
-        :param returns_target: the return target to distinguish "downside" and "upside".
+        Find the asset weights that minimize the portfolio semivariance (downside variance) and the value of the minimum
+        semivariance
+        :param returns_target: the target(s) to distinguish "downside" and "upside" returns
         :type returns_target: float or np.ndarray of shape(Number of Assets)
-
-        :return the tuple (minimum semivariance, weights of the minimum semivariance portfolio)
+        :returns: the tuple (minimum semivariance, weights of the minimum semivariance portfolio)
         """
         if returns_target is None:
             returns_target = self.assets.expected_returns
@@ -394,13 +418,12 @@ class Optimization:
 
     def minimum_cvar(self, beta: float = 0.95) -> tuple[float, np.ndarray]:
         """
-        Find the minimum CVaR portfolio (Conditional Value-at-Risk or Expected Shortfall).
-        CVaR is the average of the “extreme” losses beyond the VaR threshold.
-
-        :param beta: var confidence level (expected VaR on the worst (1-beta)% days)
+        Find the asset weights that minimize the portfolio CVaR (Conditional Value-at-Risk or Expected Shortfall)
+        and the value of the minimum CVaR.
+        The CVaR is the average of the “extreme” losses beyond the VaR threshold
+        :param beta: VaR confidence level (expected VaR on the worst (1-beta)% days)
         :type beta: float
-
-        :return the tuple (minimum CVaR, weights of the minimum CVaR portfolio)
+        :returns: the tuple (minimum CVaR, weights of the minimum CVaR portfolio)
         """
 
         # Variables
@@ -433,13 +456,12 @@ class Optimization:
 
     def minimum_cdar(self, beta: float = 0.95) -> tuple[float, np.ndarray]:
         """
-        Find the minimum CDaR portfolio (Conditional Drawdown-at-Risk).
-        The Conditional Drawdown-at-Risk is the average drawdown for all the days that drawdown exceeds a threshold.
-
+        Find the asset weights that minimize the portfolio CDaR (Conditional Drawdown-at-Risk)
+        and the value of the minimum CDaR.
+        The CDaR is the average drawdown for all the days that drawdown exceeds a threshold
         :param beta: drawdown confidence level (expected drawdown on the worst (1-beta)% days)
         :type beta: float
-
-        :return the tuple (minimum CDaR, weights of the minimum CDaR portfolio)
+        :returns: the tuple (minimum CDaR, weights of the minimum CDaR portfolio)
        """
 
         # Variables
@@ -480,26 +502,24 @@ class Optimization:
                       l1_coef: Optional[float] = None,
                       l2_coef: Optional[float] = None) -> np.ndarray:
         """
-        Optimization along the mean-variance frontier (Markowitz optimization).
-
+        Optimization along the mean-variance frontier (Markowitz optimization)
+        :param target_variance: the targeted daily variance of the portfolio: the portfolio expected return is maximized
+        under this target constraint
+        :type target_variance: float or list or numpy.ndarray optional
         :param population_size: number of pareto optimal portfolio weights to compute along the efficient frontier
         :type population_size: int, optional
-
-        :param target_variance: minimize return for the targeted daily variance of the portfolio.
-        :type target_variance: float or list or numpy.ndarray optional
-
         :param l1_coef: L1 regularisation coefficient. Increasing this coef will reduce the number of non-zero weights.
-                        It's like the L1 regularisation in Lasso.
-                        If both l1_coef and l2_coef are strictly positive, it's like the regularisation in Elastic-Net.
+                        It is similar to the L1 regularisation in Lasso.
+                        If both l1_coef and l2_coef are strictly positive, it is similar to the regularisation
+                        in Elastic-Net
         :type l1_coef: float, default to None
-
-        :param l2_coef: L2 regularisation coefficient. It's like the L2 regularisation in Ridge.
-                        If both l1_coef and l2_coef are strictly positive, it's like the regularisation in Elastic-Net.
+        :param l2_coef: L2 regularisation coefficient. It is similar to the L2 regularisation in Ridge.
+                        If both l1_coef and l2_coef are strictly positive, it is similar to the regularisation in
+                        Elastic-Net
         :type l1_coef: float, default to None
-
-        :return the portfolio weights that are in the efficient frontier.
-        :rtype: numpy.ndarray of shape (asset number,) if target_variance is a scalar,
-                otherwise numpy.ndarray of shape (population size, asset number)
+        :returns: the portfolio weights that are in the efficient frontier.
+        :rtype: numpy.ndarray of shape (asset number,) if target is a scalar,
+                otherwise numpy.ndarray of shape (population size, asset number) or (len(target_variance), asset number)
         """
         self._validate_args(**{k: v for k, v in locals().items() if k != 'self'})
 
@@ -510,7 +530,7 @@ class Optimization:
         target_variance_param = cp.Parameter(nonneg=True)
 
         # Objectives
-        objective = cp.Maximize(self._portfolio_returns(w=w, l1_coef=l1_coef, l2_coef=l2_coef))
+        objective = cp.Maximize(self._portfolio_expected_return(w=w, l1_coef=l1_coef, l2_coef=l2_coef))
 
         # Constraints
         portfolio_variance = cp.quad_form(w, self.assets.expected_cov)
@@ -549,29 +569,26 @@ class Optimization:
                           l1_coef: Optional[float] = None,
                           l2_coef: Optional[float] = None) -> np.ndarray:
         """
-        Optimization along the mean-semivariance frontier.
-
-        :param returns_target: the return target to distinguish "downside" and "upside".
+         Optimization along the mean-semivariance frontier
+        :param returns_target: the target(s) to distinguish "downside" and "upside" returns
         :type returns_target: float or np.ndarray of shape(Number of Assets)
-
-        :param target_semivariance: minimize return for the targeted semivariance of the portfolio.
+        :param target_semivariance: the targeted daily semivariance (downside variance) of the portfolio:
+        the portfolio expected return is maximized under this target constraint
         :type target_semivariance: float or list or numpy.ndarray optional
-
         :param population_size: number of pareto optimal portfolio weights to compute along the efficient frontier
-        :type population_size: int
-
-         :param l1_coef: L1 regularisation coefficient. Increasing this coef will reduce the number of non-zero weights.
-                        It's like the L1 regularisation in Lasso.
-                        If both l1_coef and l2_coef are strictly positive, it's like the regularisation in Elastic-Net.
+        :type population_size: int, optional
+        :param l1_coef: L1 regularisation coefficient. Increasing this coef will reduce the number of non-zero weights.
+                        It is similar to the L1 regularisation in Lasso.
+                        If both l1_coef and l2_coef are strictly positive, it is similar to the regularisation
+                        in Elastic-Net
         :type l1_coef: float, default to None
-
-        :param l2_coef: L2 regularisation coefficient. It's like the L2 regularisation in Ridge.
-                        If both l1_coef and l2_coef are strictly positive, it's like the regularisation in Elastic-Net.
+        :param l2_coef: L2 regularisation coefficient. It is similar to the L2 regularisation in Ridge.
+                        If both l1_coef and l2_coef are strictly positive, it is similar to the regularisation in
+                        Elastic-Net
         :type l1_coef: float, default to None
-
-        :return the portfolio weights that are in the efficient frontier
-        :rtype: numpy.ndarray of shape (asset number,) if target_semideviation is a scalar,
-                otherwise numpy.ndarray of shape (population size, asset number)
+        :returns: the portfolio weights that are in the efficient frontier.
+        :rtype: numpy.ndarray of shape (asset number,) if the target is a scalar, otherwise numpy.ndarray of
+        shape (population size, asset number) or (len(target_semivariance), asset number)
         """
         self._validate_args(**{k: v for k, v in locals().items() if k != 'self'})
 
@@ -592,7 +609,7 @@ class Optimization:
         target_semivariance_param = cp.Parameter(nonneg=True)
 
         # Objectives
-        objective = cp.Maximize(self._portfolio_returns(w=w, l1_coef=l1_coef, l2_coef=l2_coef))
+        objective = cp.Maximize(self._portfolio_expected_return(w=w, l1_coef=l1_coef, l2_coef=l2_coef))
 
         # Constraints
         portfolio_semivariance = cp.sum(cp.square(n))
@@ -637,29 +654,26 @@ class Optimization:
                   l2_coef: Optional[float] = None) -> np.ndarray:
         """
         Optimization along the mean-CVaR frontier (Conditional Value-at-Risk or Expected Shortfall).
-        CVaR is the average of the “extreme” losses beyond the VaR threshold.
-
-        :param beta: var confidence level (expected VaR on the worst (1-beta)% days)
+        The CVaR is the average of the “extreme” losses beyond the VaR threshold
+        :param beta: VaR confidence level (expected VaR on the worst (1-beta)% days)
         :type beta: float
-
-        :param target_cvar: minimize return for the targeted cvar.
+        :param target_cvar: the targeted CVaR of the portfolio: the portfolio expected return is maximized under this
+        target constraint
         :type target_cvar: float or list or numpy.ndarray optional
-
         :param population_size: number of pareto optimal portfolio weights to compute along the efficient frontier
-        :type population_size: int
-
-         :param l1_coef: L1 regularisation coefficient. Increasing this coef will reduce the number of non-zero weights.
-                        It's like the L1 regularisation in Lasso.
-                        If both l1_coef and l2_coef are strictly positive, it's like the regularisation in Elastic-Net.
+        :type population_size: int, optional
+        :param l1_coef: L1 regularisation coefficient. Increasing this coef will reduce the number of non-zero weights.
+                        It is similar to the L1 regularisation in Lasso.
+                        If both l1_coef and l2_coef are strictly positive, it is similar to the regularisation
+                        in Elastic-Net
         :type l1_coef: float, default to None
-
-        :param l2_coef: L2 regularisation coefficient. It's like the L2 regularisation in Ridge.
-                        If both l1_coef and l2_coef are strictly positive, it's like the regularisation in Elastic-Net.
+        :param l2_coef: L2 regularisation coefficient. It is similar to the L2 regularisation in Ridge.
+                        If both l1_coef and l2_coef are strictly positive, it is similar to the regularisation in
+                        Elastic-Net
         :type l1_coef: float, default to None
-
-        :return the portfolio weights that are in the efficient frontier
-        :rtype: numpy.ndarray of shape (asset number,) if target_cvar is a scalar,
-                otherwise numpy.ndarray of shape (population size, asset number)
+        :returns: the portfolio weights that are in the efficient frontier
+        :rtype: numpy.ndarray of shape (asset number,) if the target is a scalar, otherwise numpy.ndarray of
+        shape (population size, asset number) or (len(target_cvar), asset number)
         """
 
         self._validate_args(**{k: v for k, v in locals().items() if k != 'self'})
@@ -673,7 +687,7 @@ class Optimization:
         target_cvar_param = cp.Parameter(nonneg=True)
 
         # Objectives
-        objective = cp.Maximize(self._portfolio_returns(w=w, l1_coef=l1_coef, l2_coef=l2_coef))
+        objective = cp.Maximize(self._portfolio_expected_return(w=w, l1_coef=l1_coef, l2_coef=l2_coef))
 
         # Constraints
         portfolio_cvar = alpha + 1.0 / (self.assets.date_nb * (1 - beta)) * cp.sum(u)
@@ -716,30 +730,26 @@ class Optimization:
                   l2_coef: Optional[float] = None) -> np.ndarray:
         """
         Optimization along the mean-CDaR frontier (Conditional Drawdown-at-Risk).
-        The Conditional Drawdown-at-Risk is the average drawdown for all the days that drawdown exceeds a threshold.
-
+        The CDaR is the average drawdown for all the days that drawdown exceeds a threshold
         :param beta: drawdown confidence level (expected drawdown on the worst (1-beta)% days)
         :type beta: float
-
-        :param target_cdar: minimize return for the targeted cdar.
+        :param target_cdar: the targeted CDaR of the portfolio: the portfolio expected return is maximized under this
+        target constraint
         :type target_cdar: float or list or numpy.ndarray optional
-
         :param population_size: number of pareto optimal portfolio weights to compute along the efficient frontier
-        :type population_size: int
-
-         :param l1_coef: L1 regularisation coefficient. Increasing this coef will reduce the number of non-zero weights.
-                        It's like the L1 regularisation in Lasso.
-                        If both l1_coef and l2_coef are strictly positive, it's like the regularisation in Elastic-Net.
+        :type population_size: int, optional
+        :param l1_coef: L1 regularisation coefficient. Increasing this coef will reduce the number of non-zero weights.
+                        It is similar to the L1 regularisation in Lasso.
+                        If both l1_coef and l2_coef are strictly positive, it is similar to the regularisation
+                        in Elastic-Net
         :type l1_coef: float, default to None
-
-        :param l2_coef: L2 regularisation coefficient. It's like the L2 regularisation in Ridge.
-                        If both l1_coef and l2_coef are strictly positive, it's like the regularisation in Elastic-Net.
+        :param l2_coef: L2 regularisation coefficient. It is similar to the L2 regularisation in Ridge.
+                        If both l1_coef and l2_coef are strictly positive, it is similar to the regularisation in
+                        Elastic-Net
         :type l1_coef: float, default to None
-
-
-        :return the portfolio weights that are in the efficient frontier
-        :rtype: numpy.ndarray of shape (asset number,) if target_cdar is a scalar,
-                otherwise numpy.ndarray of shape (population size, asset number)
+        :returns: the portfolio weights that are in the efficient frontier
+        :rtype: numpy.ndarray of shape (asset number,) if the target is a scalar, otherwise numpy.ndarray of
+        shape (population size, asset number) or (len(target_cdar), asset number)
         """
 
         self._validate_args(**{k: v for k, v in locals().items() if k != 'self'})
@@ -754,7 +764,7 @@ class Optimization:
         target_cdar_param = cp.Parameter(nonneg=True)
 
         # Objectives
-        objective = cp.Maximize(self._portfolio_returns(w=w, l1_coef=l1_coef, l2_coef=l2_coef))
+        objective = cp.Maximize(self._portfolio_expected_return(w=w, l1_coef=l1_coef, l2_coef=l2_coef))
 
         # Constraints
         portfolio_cdar = alpha + 1.0 / (self.assets.date_nb * (1 - beta)) * cp.sum(z)
@@ -794,7 +804,8 @@ class Optimization:
 
     def inverse_volatility(self) -> np.ndarray:
         """
-        Asset Weights are proportional to 1 / asset volatility and sums to 1
+        Inverse volatility portfolio
+        :returns: assets weights of the inverse volatility portfolio, summing to 1
         """
         weights = 1 / self.assets.std
         weights = weights / sum(weights)
@@ -802,14 +813,16 @@ class Optimization:
 
     def equal_weighted(self) -> np.ndarray:
         """
-        Equal Weighted, summing to 1
+        Equally weighted portfolio
+        :returns: assets weights of the equally weighted portfolio, summing to 1
         """
         weights = np.ones(self.assets.asset_nb) / self.assets.asset_nb
         return weights
 
     def random(self) -> np.ndarray:
         """
-        Random positive weig hts that sum to 1 and respects the bounds.
+        Randomly weighted portfolio
+        :returns:  Random positive weights summing to 1 that respect the bounds constraints
         """
         # Produces n random weights that sum to 1 with uniform distribution over the simplex
         weights = rand_weights_dirichlet(n=self.assets.asset_nb)
