@@ -352,14 +352,8 @@ def args_testing(method_name: str,
         assert isinstance(weights, np.ndarray)
         assert weights.shape == (len(target), assets.asset_nb)
 
-    # None
-    target = [1e10]
-    weights = func(**{target_name: target})
-    assert isinstance(weights, np.ndarray)
-    assert weights.shape == (1, assets.asset_nb)
-    assert np.isnan(weights[0]).all()
     # Target is 0 or neg
-    target = [1, 0]
+    target = [1, -1]
     try:
         func(**{target_name: target})
         raise

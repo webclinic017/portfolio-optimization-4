@@ -260,11 +260,11 @@ class Optimization:
         if target_name is not None:
             target = kwargs[target_name]
             if np.isscalar(target):
-                if target <= 0:
-                    raise ValueError(f'{target_name} should be strictly positive')
+                if target < 0:
+                    raise ValueError(f'{target_name} should be positive')
             elif isinstance(target, np.ndarray) or isinstance(target, list):
-                if np.any(np.array(target) <= 0):
-                    raise ValueError(f'All values of {target_name} should be strictly positive')
+                if np.any(np.array(target) < 0):
+                    raise ValueError(f'All values of {target_name} should be positive')
             else:
                 raise ValueError(f'{target_name} should be a scalar, numpy.ndarray or list. '
                                  f'But received {type(target)}')
