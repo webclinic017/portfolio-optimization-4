@@ -249,11 +249,13 @@ class Optimization:
             if w.value is None:
                 raise OptimizationError('None return')
             weights = w.value
+            result = problem.value
         except (OptimizationError, SolverError, ArpackNoConvergence) as e:
             logger.warning(f'No solution found: {e}')
             weights = np.empty(w.shape) * np.nan
+            result = np.nan
 
-        return problem.value, weights
+        return result, weights
 
     @staticmethod
     def _get_optimization_weights(problem: cp.Problem,
@@ -551,6 +553,9 @@ class Optimization:
                 target_variance = np.array(target_variance)
         else:
             min_variance, _ = self.minimum_variance()
+            if np.isnan(min_variance):
+                raise OptimizationError(f'Unable to find the minimum variance portfolio used as the starting point '
+                                        f'of the pareto frontier --> you can input your own target_variance array')
             max_variance = max(0.4 ** 2 / 255, min_variance * 10)  # max(40% annualized volatility, 10 x min variance)
             target_variance = np.logspace(np.log10(min_variance), np.log10(max_variance), num=population_size)
 
@@ -633,6 +638,9 @@ class Optimization:
                 target_semivariance = np.array(target_semivariance)
         else:
             min_semivariance, _ = self.minimum_semivariance(returns_target=returns_target)
+            if np.isnan(min_semivariance):
+                raise OptimizationError(f'Unable to find the minimum semivariance portfolio used as the starting point '
+                                        f'of the pareto frontier --> you can input your own target_semivariance array')
             max_semivariance = max(0.4 ** 2 / 255, min_semivariance * 10)  # 40% annualized semivolatility
             target_semivariance = np.logspace(np.log10(min_semivariance),
                                               np.log10(max_semivariance),
@@ -712,6 +720,9 @@ class Optimization:
                 target_cvar = np.array(target_cvar)
         else:
             min_cvar, _ = self.minimum_cvar(beta=beta)
+            if np.isnan(min_cvar):
+                raise OptimizationError(f'Unable to find the minimum CVaR portfolio used as the starting point '
+                                        f'of the pareto frontier --> you can input your own target_cvar array')
             max_cvar = max(0.3, min_cvar * 10)  # 30% CVaR
             target_cvar = np.logspace(np.log10(min_cvar), np.log10(max_cvar), num=population_size)
 
@@ -792,6 +803,9 @@ class Optimization:
                 target_cdar = np.array(target_cdar)
         else:
             min_cdar, _ = self.minimum_cdar(beta=beta)
+            if np.isnan(min_cdar):
+                raise OptimizationError(f'Unable to find the minimum CDaR portfolio used as the starting point '
+                                        f'of the pareto frontier --> you can input your own target_cdar array')
             max_cdar = max(0.3, min_cdar * 10)  # 30% CDaR
             target_cdar = np.logspace(np.log10(min_cdar), np.log10(max_cdar), num=population_size)
 

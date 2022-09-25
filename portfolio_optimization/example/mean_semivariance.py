@@ -1,15 +1,10 @@
 import datetime as dt
 
-from portfolio_optimization.meta import *
-from portfolio_optimization.paths import *
-from portfolio_optimization.portfolio import *
-from portfolio_optimization.population import *
-from portfolio_optimization.optimization import *
-from portfolio_optimization.loader import *
-from portfolio_optimization.bloomberg.loader import *
+import pandas as pd
 
+from portfolio_optimization import *
 
-def mean_variance_vs_mean_semivariance():
+if __name__ == '__main__':
     """
     Compare the Efficient Frontier of the mean-variance against the mean-semivariance optimization
     """
@@ -19,7 +14,7 @@ def mean_variance_vs_mean_semivariance():
                          start_date=dt.date(2018, 1, 1),
                          end_date=dt.date(2019, 1, 1),
                          random_selection=200,
-                         pre_selection_number=100,
+                         pre_selection_number=50,
                          pre_selection_correlation=0)
 
     population = Population()
@@ -54,15 +49,16 @@ def mean_variance_vs_mean_semivariance():
                             hover_metrics=[Metrics.SHARPE_RATIO])
 
     # Metrics
-    max_sharpe = population.max(metric=Metrics.SHARPE_RATIO)
-    print(max_sharpe.sharpe_ratio)
+    max_sharpe_ptf = population.max(metric=Metrics.SHARPE_RATIO)
+    print(max_sharpe_ptf.sharpe_ratio)
 
-    max_sortino = population.max(metric=Metrics.SORTINO_RATIO)
-    print(max_sortino.sortino_ratio)
+
+    max_sortino_ptf = population.max(metric=Metrics.SORTINO_RATIO)
+    print(max_sortino_ptf.sortino_ratio)
 
     # Composition
-    population.plot_composition(names=[max_sharpe.name, max_sortino.name])
+    population.plot_composition(names=[max_sharpe_ptf.name, max_sortino_ptf.name])
 
     # Prices
-    population.plot_cumulative_returns(names=[max_sharpe.name, max_sortino.name])
+    population.plot_cumulative_returns(names=[max_sharpe_ptf.name, max_sortino_ptf.name])
 

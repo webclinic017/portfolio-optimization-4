@@ -1,19 +1,13 @@
 import datetime as dt
 import numpy as np
 
-from portfolio_optimization.meta import *
-from portfolio_optimization.paths import *
-from portfolio_optimization.portfolio import *
-from portfolio_optimization.population import *
-from portfolio_optimization.optimization import *
-from portfolio_optimization.loader import *
-from portfolio_optimization.bloomberg.loader import *
+from portfolio_optimization import *
 
 if __name__ == '__main__':
 
     """
-    Compare the efficient frontier of the mean-variance optimization against portfolios of single asset and
-    random portfolios
+    Compare the efficient frontier of the mean-variance optimization against random, equally weighted,
+    inverse vol and single asset portfolios.
     """
     prices = load_prices(file=EXAMPLE_PRICES_PATH)
 
@@ -51,15 +45,13 @@ if __name__ == '__main__':
     weights = model.inverse_volatility()
     population.add(Portfolio(weights=weights,
                              assets=assets,
-                             name=f'inverse_volatility',
-                             tag='inverse_volatility'))
+                             name='inverse_volatility'))
 
     # Equal Weighted
     weights = model.equal_weighted()
     population.add(Portfolio(weights=weights,
                              assets=assets,
-                             name=f'equal_weighted',
-                             tag='equal_weighted'))
+                             name='equal_weighted'))
 
     # Efficient Frontier -- Mean Variance
     portfolios_weights = model.mean_variance(population_size=30)
@@ -75,20 +67,28 @@ if __name__ == '__main__':
                             hover_metrics=[Metrics.MAX_DRAWDOWN, Metrics.SORTINO_RATIO])
 
     # Metrics
-    max_sharpe_ratio = population.max(metric=Metrics.SHARPE_RATIO)
-    print(max_sharpe_ratio.cdar_95_ratio)
+    max_sharpe_ptf = population.max(metric=Metrics.SHARPE_RATIO)
+    print(max_sharpe_ptf.sharpe_ratio)
+    print(max_sharpe_ptf.annualized_mean)
+    print(max_sharpe_ptf.annualized_std)
+    print(max_sharpe_ptf.cdar_95)
+    print(max_sharpe_ptf.cdar_95_ratio)
 
-    max_cdar_95_ratio = population.max(metric=Metrics.CDAR_95_RATIO)
-    print(max_cdar_95_ratio.cdar_95_ratio)
+    max_cdar_95_ptf = population.max(metric=Metrics.CDAR_95_RATIO)
+    print(max_cdar_95_ptf.sharpe_ratio)
+    print(max_cdar_95_ptf.annualized_mean)
+    print(max_cdar_95_ptf.annualized_std)
+    print(max_cdar_95_ptf.cdar_95)
+    print(max_cdar_95_ptf.cdar_95_ratio)
 
     # Composition
-    population.plot_composition(names=[max_sharpe_ratio.name,
-                                       max_cdar_95_ratio.name,
+    population.plot_composition(names=[max_sharpe_ptf.name,
+                                       max_cdar_95_ptf.name,
                                        'equal_weighted',
                                        'inverse_volatility'])
 
     # Prices
-    population.plot_cumulative_returns(names=[max_sharpe_ratio.name,
-                                              max_cdar_95_ratio.name,
-                                  'equal_weighted',
-                                  'inverse_volatility'])
+    population.plot_cumulative_returns(names=[max_sharpe_ptf.name,
+                                              max_cdar_95_ptf.name,
+                                              'equal_weighted',
+                                              'inverse_volatility'])

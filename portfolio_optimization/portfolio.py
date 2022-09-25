@@ -19,26 +19,22 @@ class BasePortfolio:
                  returns: np.array,
                  dates: np.array,
                  name: Optional[str] = None,
-                 tag: str = 'portfolio',
+                 tag: Optional[str] = None,
                  fitness_type: FitnessType = FitnessType.MEAN_STD):
-
         self.returns = returns
         self.dates = dates
         self.fitness_type = fitness_type
         self._validation()
-
-        # Ids
         if name is None:
             self.name = str(uuid.uuid4())
         else:
             self.name = name
-        self.tag = tag
-
-        # Prices
+        if tag is None:
+            self.tag = self.name
+        else:
+            self.tag = tag
         self._cumulative_returns = None
         self._cumulative_returns_uncompounded = None
-
-        # Metrics
         self._mean = None
         self._std = None
         self._downside_std = None
@@ -167,6 +163,33 @@ class BasePortfolio:
     def cvar_95_ratio(self):
         return self.annualized_mean / self.cvar_95
 
+    def summary(self, formatted: bool = True) -> pd.Series:
+        summary_fmt = {
+            'Mean (Expected Return)': (self.mean, '0.3%'),
+            'Annualized Mean': (self.annualized_mean, '0.2%'),
+            'Std (Volatility)': (self.std, '0.3%'),
+            'Annualized Std': (self.annualized_std, '0.2%'),
+            'Downside Std': (self.downside_std, '0.3%'),
+            'Annualized Downside Std': (self.annualized_downside_std, '0.2%'),
+            'Max Drawdown': (self.max_drawdown, '0.2%'),
+            'CDaR at 95%': (self.cdar_95, '0.2%'),
+            'CVaR at 95%': (self.cvar_95, '0.2%'),
+            'Variance': (self.variance, '0.6%'),
+            'Downside Variance': (self.downside_variance, '0.6%'),
+            'Sharpe Ratio': (self.sharpe_ratio, '0.2f'),
+            'Sortino Ratio': (self.sortino_ratio, '0.2f'),
+            'Calmar Ratio': (self.calmar_ratio, '0.2f'),
+            'Cdar at 95% Ratio': (self.cdar_95_ratio, '0.2f'),
+            'Cvar at 95% Ratio': (self.cvar_95_ratio, '0.2f'),
+        }
+
+        if formatted:
+            summary = {name: value for name, (value, fmt) in summary_fmt.items()}
+        else:
+            summary = {name: '{value:{fmt}}'.format(value=value, fmt=fmt) for name, (value, fmt) in summary_fmt.items()}
+
+        return pd.Series(summary)
+
     @property
     def fitness(self):
         """
@@ -293,7 +316,7 @@ class Portfolio(BasePortfolio):
                  weights: np.ndarray,
                  assets: Assets,
                  name: Optional[str] = None,
-                 tag: str = 'ptf',
+                 tag: Optional[str] = None,
                  fitness_type: FitnessType = FitnessType.MEAN_STD):
 
         self.assets = assets
@@ -378,7 +401,7 @@ class MultiPeriodPortfolio(BasePortfolio):
     def __init__(self,
                  portfolios: Optional[list[Portfolio]] = None,
                  name: Optional[str] = None,
-                 tag: str = 'multi-period-portfolio',
+                 tag: Optional[str] = None,
                  fitness_type: FitnessType = FitnessType.MEAN_STD):
         super().__init__(returns=np.array([]),
                          dates=np.array([]),
