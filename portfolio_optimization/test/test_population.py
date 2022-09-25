@@ -1,4 +1,5 @@
 import datetime as dt
+import pandas as pd
 
 from portfolio_optimization.meta import *
 from portfolio_optimization.utils.tools import *
@@ -41,10 +42,11 @@ def test_population():
         assert dominates
 
     # test plots
-    population.plot_metrics(x=Metrics.ANNUALIZED_DOWNSIDE_STD,
+    assert population.plot_metrics(x=Metrics.ANNUALIZED_DOWNSIDE_STD,
                             y=Metrics.ANNUALIZED_MEAN,
                             z=Metrics.MAX_DRAWDOWN,
-                            fronts=True)
+                            fronts=True,
+                            show=False)
 
     # Create a population of portfolios with 2 objectives
     population = Population()
@@ -96,5 +98,5 @@ def test_population():
     assert population.get(name='portfolio_2') == population.iloc(2)
 
     # composition
-    assert population.composition()
+    assert isinstance(population.composition(), pd.DataFrame)
     assert population.plot_composition(show=False)

@@ -1,5 +1,6 @@
 import numpy as np
 import datetime as dt
+import pandas as pd
 
 from portfolio_optimization.meta import *
 from portfolio_optimization.utils.metrics import *
@@ -61,7 +62,7 @@ def test_multi_period_portfolio():
     assert mpp.plot_returns(show=False)
     assert mpp.plot_cumulative_returns(show=False)
     assert mpp.plot_cumulative_returns_uncompounded(show=False)
-    assert mpp.plot_rolling_sharpe(days=20)
-    assert mpp.composition
+    assert mpp.plot_rolling_sharpe(days=20, show=False)
+    assert isinstance(mpp.composition, pd.DataFrame)
     assert mpp.plot_composition(show=False)
 

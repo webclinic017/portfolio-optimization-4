@@ -255,7 +255,7 @@ class BasePortfolio:
         rolling = s.rolling(window=days)
         rolling_sharpe = np.sqrt(AVG_TRADING_DAYS_PER_YEAR) * rolling.mean() / rolling.std(ddof=1)
         rolling_sharpe.name = f'Sharpe {days} days'
-        fig = rolling_sharpe.plot_cumulative_returns()
+        fig = rolling_sharpe.plot()
         fig.add_hline(y=self.sharpe_ratio, line_width=1, line_dash='dash', line_color='blue')
         fig.add_hrect(y0=0, y1=rolling_sharpe.max() * 1.3, line_width=0, fillcolor='green', opacity=0.1)
         fig.add_hrect(y0=rolling_sharpe.min() * 1.3, y1=0, line_width=0, fillcolor='red', opacity=0.1)

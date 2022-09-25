@@ -7,7 +7,7 @@ from portfolio_optimization.paths import *
 from portfolio_optimization.bloomberg import *
 
 
-def test_assets():
+def test_pre_selection():
     prices = load_prices(file=TEST_PRICES_PATH)
 
     start_date = dt.date(2017, 1, 1)
