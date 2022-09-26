@@ -184,9 +184,9 @@ class BasePortfolio:
         }
 
         if formatted:
-            summary = {name: value for name, (value, fmt) in summary_fmt.items()}
-        else:
             summary = {name: '{value:{fmt}}'.format(value=value, fmt=fmt) for name, (value, fmt) in summary_fmt.items()}
+        else:
+            summary = {name: value for name, (value, fmt) in summary_fmt.items()}
 
         return pd.Series(summary)
 
@@ -383,6 +383,14 @@ class Portfolio(BasePortfolio):
     def length(self):
         return np.count_nonzero(abs(self.weights) > ZERO_THRESHOLD)
 
+    def summary(self, formatted: bool = True) -> pd.Series:
+        df = super().summary(formatted=formatted)
+        assets_number = self.length
+        if formatted:
+            assets_number = str(int(assets_number))
+        df['assets number'] = assets_number
+        return df
+
     def get_weight(self, asset_name: str):
         try:
             return self.weights[np.where(self.assets.names == asset_name)[0][0]]
@@ -445,6 +453,18 @@ class MultiPeriodPortfolio(BasePortfolio):
     @property
     def length(self):
         return [portfolio.length for portfolio in self.portfolios]
+
+    def summary(self, formatted: bool = True) -> pd.Series:
+        df = super().summary(formatted=formatted)
+        portfolios_number = len(self.portfolios)
+        avg_assets_per_portfolio = np.mean(self.length)
+        if formatted:
+            portfolios_number = str(int(portfolios_number))
+            avg_assets_per_portfolio = f'{avg_assets_per_portfolio:0.1f}'
+
+        df['portfolios number'] = portfolios_number
+        df['avg nb of assets per portfolio'] = avg_assets_per_portfolio
+        return df
 
     def __str__(self):
         return f'MultiPeriodPortfolio < {self.name} >'

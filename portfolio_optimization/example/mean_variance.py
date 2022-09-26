@@ -69,17 +69,11 @@ if __name__ == '__main__':
     # Metrics
     max_sharpe_ptf = population.max(metric=Metrics.SHARPE_RATIO)
     print(max_sharpe_ptf.sharpe_ratio)
-    print(max_sharpe_ptf.annualized_mean)
-    print(max_sharpe_ptf.annualized_std)
-    print(max_sharpe_ptf.cdar_95)
-    print(max_sharpe_ptf.cdar_95_ratio)
+    print(max_sharpe_ptf.summary())
 
     max_cdar_95_ptf = population.max(metric=Metrics.CDAR_95_RATIO)
     print(max_cdar_95_ptf.sharpe_ratio)
-    print(max_cdar_95_ptf.annualized_mean)
-    print(max_cdar_95_ptf.annualized_std)
-    print(max_cdar_95_ptf.cdar_95)
-    print(max_cdar_95_ptf.cdar_95_ratio)
+    print(max_cdar_95_ptf.summary())
 
     # Composition
     population.plot_composition(names=[max_sharpe_ptf.name,

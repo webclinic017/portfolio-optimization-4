@@ -1,7 +1,5 @@
 import datetime as dt
 
-import pandas as pd
-
 from portfolio_optimization import *
 
 if __name__ == '__main__':
@@ -51,10 +49,11 @@ if __name__ == '__main__':
     # Metrics
     max_sharpe_ptf = population.max(metric=Metrics.SHARPE_RATIO)
     print(max_sharpe_ptf.sharpe_ratio)
-
+    print(max_sharpe_ptf.summary())
 
     max_sortino_ptf = population.max(metric=Metrics.SORTINO_RATIO)
     print(max_sortino_ptf.sortino_ratio)
+    print(max_sharpe_ptf.summary())
 
     # Composition
     population.plot_composition(names=[max_sharpe_ptf.name, max_sortino_ptf.name])
