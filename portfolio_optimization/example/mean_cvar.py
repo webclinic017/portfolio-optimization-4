@@ -8,8 +8,7 @@ from portfolio_optimization.optimization import *
 from portfolio_optimization.loader import *
 from portfolio_optimization.bloomberg.loader import *
 
-
-def mean_variance_vs_mean_cvar():
+if __name__ == '__main__':
     """
     Compare the Efficient Frontier of the mean-variance against the mean-cvar optimization
     """
@@ -18,8 +17,7 @@ def mean_variance_vs_mean_cvar():
     assets = load_assets(prices=prices,
                          start_date=dt.date(2018, 1, 1),
                          end_date=dt.date(2019, 1, 1),
-                         random_selection=200,
-                         pre_selection_number=100,
+                         pre_selection_number=50,
                          pre_selection_correlation=0)
 
     population = Population()
@@ -53,14 +51,25 @@ def mean_variance_vs_mean_cvar():
                             color_scale=Metrics.CVAR_95_RATIO)
 
     # Metrics
-    max_sharpe = population.max(metric=Metrics.SHARPE_RATIO)
-    print(max_sharpe.sharpe_ratio)
+    max_sharpe_ptf = population.max(metric=Metrics.SHARPE_RATIO)
+    print(max_sharpe_ptf.sharpe_ratio)
+    print(max_sharpe_ptf.summary())
 
-    max_cvar_95_ratio = population.max(metric=Metrics.CVAR_95_RATIO)
-    print(max_cvar_95_ratio.cvar_95_ratio)
+    max_cvar_ratio_ptf = population.max(metric=Metrics.CVAR_95_RATIO)
+    print(max_cvar_ratio_ptf.cvar_95_ratio)
 
+    portfolio_names = [max_sharpe_ptf.name, max_cvar_ratio_ptf.name]
     # Composition
-    population.plot_composition(names=[max_sharpe.name, max_cvar_95_ratio.name])
+    population.plot_composition(names=portfolio_names)
+    print(max_cvar_ratio_ptf.assets_names)
 
-    # Prices
-    population.plot_cumulative_returns(names=[max_sharpe.name, max_cvar_95_ratio.name])
+    # Cumulative returns
+    population.plot_cumulative_returns(names=portfolio_names)
+
+    # Summary
+    print(population.summary(names=portfolio_names))
+    print(population.summary())
+
+    # Plot compo assets
+    assets.plot_cumulative_returns(names=max_cvar_ratio_ptf.assets_names)
+

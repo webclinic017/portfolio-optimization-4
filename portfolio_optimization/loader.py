@@ -15,6 +15,7 @@ __all__ = ['pre_selection',
 
 logger = logging.getLogger('portfolio_optimization.loader')
 
+
 def pre_selection(assets: Assets,
                   k: int,
                   correlation_threshold: float = 0) -> list[str]:
@@ -85,8 +86,6 @@ def pre_selection(assets: Assets,
     new_assets_names = list(assets.prices.columns[list(new_assets_idx)])
 
     return new_assets_names
-
-
 
 
 def load_assets(prices: pd.DataFrame,

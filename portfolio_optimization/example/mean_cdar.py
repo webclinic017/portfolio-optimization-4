@@ -9,7 +9,7 @@ from portfolio_optimization.loader import load_assets
 from portfolio_optimization.bloomberg.loader import load_prices
 
 
-def mean_variance_vs_mean_cdar():
+if __name__ == '__main__':
     """
     Compare the Efficient Frontier of the mean-variance against the mean-cdar optimization
     """

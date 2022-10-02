@@ -52,6 +52,7 @@ def test_portfolio_metrics():
     names_2.sort()
     names_1.sort()
     assert np.array_equal(names_1, names_2)
+    portfolio.summary()
     portfolio.reset_metrics()
     assert portfolio.__dict__.get('mean') is None
     assert portfolio.__dict__.get('std') is None
@@ -62,6 +63,7 @@ def test_portfolio_metrics():
     assert isinstance(portfolio.composition, pd.DataFrame)
     assert portfolio.plot_composition(show=False)
     assert isinstance(portfolio.summary(), pd.core.series.Series)
+    assert isinstance(portfolio.summary(formatted=False), pd.core.series.Series)
 
 
 def test_portfolio_dominate():

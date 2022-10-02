@@ -103,6 +103,14 @@ class Population:
             tags: Union[str, list[str]] = None) -> Union[Portfolio, MultiPeriodPortfolio]:
         return self.sort(metric=metric, reverse=True, names=names, tags=tags)[0]
 
+    def summary(self,
+                names: Union[str, list[str]] = None,
+                tags: Union[str, list[str]] = None,
+                formatted: bool = True) -> pd.DataFrame:
+        portfolios = self.get_portfolios(names=names, tags=tags)
+        return pd.concat([p.summary(formatted=formatted) for p in portfolios], keys=[p.name for p in portfolios],
+                         axis=1)
+
     def composition(self,
                     names: Union[str, list[str]] = None,
                     tags: Union[str, list[str]] = None) -> pd.DataFrame:
@@ -128,9 +136,9 @@ class Population:
         df = pd.concat([p.cumulative_returns_df for p in portfolios], axis=1).iloc[:, idx]
         df.columns = [p.name for p in portfolios]
         fig = df.plot()
-        fig.update_layout(title='Prices',
+        fig.update_layout(title='Cumulative Returns',
                           xaxis_title='Dates',
-                          yaxis_title='Prices',
+                          yaxis_title='Cumulative Returns (%)',
                           legend_title_text='Portfolios')
         if show:
             fig.show()

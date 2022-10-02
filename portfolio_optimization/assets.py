@@ -255,8 +255,15 @@ class Assets:
 
         return np.array([assets_dict.get(name, 0) for name in self.names])
 
-    def plot_cumulative_returns(self, idx=slice(None), show: bool = True):
-        fig = self.cumulative_returns.iloc[:, idx].plot()
+    def plot_cumulative_returns(self,
+                                names: Optional[list[str]] = None,
+                                idx: slice = slice(None),
+                                show: bool = True):
+        if names is not None:
+            fig = self.cumulative_returns[names].plot()
+        else:
+            fig = self.cumulative_returns.iloc[:, idx].plot()
+
         fig.update_layout(title='Compounded Cumulative Returns',
                           xaxis_title='Dates',
                           yaxis_title='Cumulative Returns',
