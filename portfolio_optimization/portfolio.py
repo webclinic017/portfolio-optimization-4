@@ -3,6 +3,7 @@ import uuid
 import pandas as pd
 from typing import Optional
 import plotly.express as px
+from functools import cached_property
 
 from portfolio_optimization.meta import *
 from portfolio_optimization.assets import *
@@ -14,7 +15,6 @@ __all__ = ['Portfolio',
 
 
 class BasePortfolio:
-
     def __init__(self,
                  returns: np.array,
                  dates: np.array,
@@ -35,15 +35,6 @@ class BasePortfolio:
             self.tag = self.name
         else:
             self.tag = tag
-        self._cumulative_returns = None
-        self._cumulative_returns_uncompounded = None
-        self._mean = None
-        self._std = None
-        self._downside_std = None
-        self._max_drawdown = None
-        self._cdar_95 = None
-        self._cvar_95 = None
-        self._fitness = None
 
     def _validation(self):
         if len(self.returns) != len(self.dates):
@@ -53,51 +44,44 @@ class BasePortfolio:
         if np.any(np.isnan(self.returns)):
             raise TypeError('returns should not contain nan')
 
-    @property
+    @cached_property
     def cumulative_returns(self):
-        if self._cumulative_returns is None:
-            cumulative_returns = (self.returns + 1).cumprod()
-            self._cumulative_returns = np.insert(cumulative_returns, 0, 1)
-        return self._cumulative_returns
+        cumulative_returns = (self.returns + 1).cumprod()
+        cumulative_returns = np.insert(cumulative_returns, 0, 1)
+        return cumulative_returns
 
-    @property
+    @cached_property
     def cumulative_returns_uncompounded(self):
-        if self._cumulative_returns_uncompounded is None:
-            returns = np.insert(self.returns, 0, 1)
-            self._cumulative_returns_uncompounded = np.cumsum(returns)
-        return self._cumulative_returns_uncompounded
+        returns = np.insert(self.returns, 0, 1)
+        return np.cumsum(returns)
 
-    @property
+    @cached_property
     def returns_df(self):
         return pd.Series(index=self.dates, data=self.returns, name='returns')
 
-    @property
+    @cached_property
     def cumulative_returns_df(self):
         init_date = self.dates[0] - (self.dates[1] - self.dates[0])
         index = np.insert(self.dates, 0, init_date)
         return pd.Series(index=index, data=self.cumulative_returns, name='prices_compounded')
 
-    @property
+    @cached_property
     def cumulative_returns_uncompounded_df(self):
         init_date = self.dates[0] - (self.dates[1] - self.dates[0])
         index = np.insert(self.dates, 0, init_date)
         return pd.Series(index=index, data=self.cumulative_returns_uncompounded, name='prices_uncompounded')
 
-    @property
+    @cached_property
     def mean(self):
-        if self._mean is None:
-            self._mean = self.returns.mean()
-        return self._mean
+        return self.returns.mean()
 
     @property
     def annualized_mean(self):
         return self.mean * AVG_TRADING_DAYS_PER_YEAR
 
-    @property
+    @cached_property
     def std(self):
-        if self._std is None:
-            self._std = self.returns.std(ddof=1)
-        return self._std
+        return self.returns.std(ddof=1)
 
     @property
     def variance(self):
@@ -107,11 +91,9 @@ class BasePortfolio:
     def annualized_std(self):
         return self.std * np.sqrt(AVG_TRADING_DAYS_PER_YEAR)
 
-    @property
+    @cached_property
     def downside_std(self):
-        if self._downside_std is None:
-            self._downside_std = downside_std(returns=self.returns)
-        return self._downside_std
+        return downside_std(returns=self.returns)
 
     @property
     def downside_variance(self):
@@ -121,29 +103,23 @@ class BasePortfolio:
     def annualized_downside_std(self):
         return self.downside_std * np.sqrt(AVG_TRADING_DAYS_PER_YEAR)
 
-    @property
+    @cached_property
     def max_drawdown(self):
-        if self._max_drawdown is None:
-            self._max_drawdown = max_drawdown(prices=self.cumulative_returns)
-        return self._max_drawdown
+        return max_drawdown(prices=self.cumulative_returns)
 
-    @property
+    @cached_property
     def cdar_95(self):
         """
         Conditional Drawdown at Risk (CDaR) with a confidence level at 95%
         """
-        if self._cdar_95 is None:
-            self._cdar_95 = cdar(prices=self.cumulative_returns_uncompounded, beta=0.95)
-        return self._cdar_95
+        return cdar(prices=self.cumulative_returns_uncompounded, beta=0.95)
 
-    @property
+    @cached_property
     def cvar_95(self):
         """
         Conditional historical Value at Risk (CVaR) with a confidence level at 95%
         """
-        if self._cvar_95 is None:
-            self._cvar_95 = cvar(returns=self.returns, beta=0.95)
-        return self._cvar_95
+        return cvar(returns=self.returns, beta=0.95)
 
     @property
     def sharpe_ratio(self):
@@ -192,21 +168,18 @@ class BasePortfolio:
 
         return pd.Series(summary)
 
-    @property
+    @cached_property
     def fitness(self):
         """
         Fitness of the portfolio that contains the objectives to maximise and/or minimize .
 =        """
-        if self._fitness is None:
-            if self.fitness_type == FitnessType.MEAN_STD:
-                self._fitness = np.array([self.mean, -self.std])
-            elif self.fitness_type == FitnessType.MEAN_DOWNSIDE_STD:
-                self._fitness = np.array([self.mean, -self.downside_std])
-            elif self.fitness_type == FitnessType.MEAN_DOWNSIDE_STD_MAX_DRAWDOWN:
-                self._fitness = np.array([self.mean, -self.downside_std, -self.max_drawdown])
-            else:
-                raise ValueError(f'fitness_type {self.fitness_type} should be of type {FitnessType}')
-        return self._fitness
+        if self.fitness_type == FitnessType.MEAN_STD:
+            return np.array([self.mean, -self.std])
+        if self.fitness_type == FitnessType.MEAN_DOWNSIDE_STD:
+            return np.array([self.mean, -self.downside_std])
+        if self.fitness_type == FitnessType.MEAN_DOWNSIDE_STD_MAX_DRAWDOWN:
+            return np.array([self.mean, -self.downside_std, -self.max_drawdown])
+        raise ValueError(f'fitness_type {self.fitness_type} should be of type {FitnessType}')
 
     def dominates(self, other, obj=slice(None)):
         """
@@ -221,12 +194,16 @@ class BasePortfolio:
         return dominate(self.fitness[obj], other.fitness[obj])
 
     def reset_metrics(self):
-        for attr in self.__dict__.keys():
+        attrs = list(self.__dict__.keys())
+        for attr in attrs:
             if attr[0] == '_':
                 self.__setattr__(attr, None)
+            elif attr not in ['returns', 'dates', 'name', 'tag', 'validate', 'fitness_type', 'weights', 'assets',
+                              'portfolios']:
+                self.__dict__.pop(attr, None)
 
     def reset_fitness(self, fitness_type: FitnessType):
-        self._fitness = None
+        self.__dict__.pop('fitness', None)
         self.fitness_type = fitness_type
 
     def metrics(self):
@@ -296,8 +273,7 @@ class BasePortfolio:
 
     @property
     def composition(self) -> pd.DataFrame:
-        """Implemented in Portfolio and MultiPeriodPortfolio"""
-        return pd.DataFrame()
+        raise NotImplementedError
 
     def plot_composition(self, show: bool = True):
         df = self.composition.T
@@ -342,17 +318,13 @@ class Portfolio(BasePortfolio):
         if self.assets.asset_nb != len(self.weights):
             raise ValueError(f'weights should be of size {self.assets.asset_nb}')
 
-    @property
+    @cached_property
     def mean(self):
-        if self._mean is None:
-            self._mean = self.weights @ self.assets.mu
-        return self._mean
+        return self.weights @ self.assets.mu
 
-    @property
+    @cached_property
     def std(self):
-        if self._std is None:
-            self._std = np.sqrt(self.weights @ self.assets.cov @ self.weights)
-        return self._std
+        return np.sqrt(self.weights @ self.assets.cov @ self.weights)
 
     @property
     def sric(self):
@@ -363,11 +335,11 @@ class Portfolio(BasePortfolio):
         """
         return self.sharpe_ratio - self.assets.asset_nb / (self.assets.date_nb * self.sharpe_ratio)
 
-    @property
+    @cached_property
     def assets_index(self):
         return np.flatnonzero(abs(self.weights) > ZERO_THRESHOLD)
 
-    @property
+    @cached_property
     def assets_names(self):
         return self.assets.names[self.assets_index]
 
@@ -380,7 +352,7 @@ class Portfolio(BasePortfolio):
         df.set_index('asset', inplace=True)
         return df
 
-    @property
+    @cached_property
     def length(self):
         return np.count_nonzero(abs(self.weights) > ZERO_THRESHOLD)
 
@@ -400,9 +372,6 @@ class Portfolio(BasePortfolio):
 
     def __str__(self):
         return f'Portfolio < {self.name} >'
-
-    def __repr__(self):
-        return str(self)
 
 
 class MultiPeriodPortfolio(BasePortfolio):

@@ -2,7 +2,7 @@ from typing import Union, Optional
 import pandas as pd
 import plotly.express as px
 import numpy as np
-from numba import jit
+from functools import cached_property
 
 from portfolio_optimization.meta import *
 from portfolio_optimization.portfolio import *
@@ -17,7 +17,6 @@ class Population:
             portfolios = []
         self.portfolios = portfolios
         self.hashmap = {p.name: p for p in self.portfolios}
-        self._fronts = None
 
     def non_denominated_sort(self, first_front_only: bool = False) -> list[list[int]]:
         """ Fast non-dominated sorting.
@@ -31,11 +30,9 @@ class Population:
         fronts = non_denominated_sort(n=n, fitnesses=fitnesses, first_front_only=first_front_only)
         return fronts
 
-    @property
+    @cached_property
     def fronts(self) -> list[list[int]]:
-        if self._fronts is None:
-            self._fronts = self.non_denominated_sort()
-        return self._fronts
+        return self.non_denominated_sort()
 
     @property
     def length(self) -> int:
@@ -229,6 +226,3 @@ class Population:
 
     def __str__(self):
         return f'Population <{len(self.portfolios)} portfolios>'
-
-    def __repr__(self):
-        return str(self)

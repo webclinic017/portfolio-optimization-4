@@ -5,6 +5,7 @@ import pandas as pd
 from portfolio_optimization.meta import *
 from portfolio_optimization.utils.metrics import *
 from portfolio_optimization.utils.tools import *
+from portfolio_optimization.utils.sorting import *
 from portfolio_optimization.assets import *
 from portfolio_optimization.portfolio import *
 from portfolio_optimization.paths import *
@@ -52,8 +53,8 @@ def test_portfolio_metrics():
     names_1.sort()
     assert np.array_equal(names_1, names_2)
     portfolio.reset_metrics()
-    assert portfolio._mean is None
-    assert portfolio._std is None
+    assert portfolio.__dict__.get('mean') is None
+    assert portfolio.__dict__.get('std') is None
     assert portfolio.plot_returns(show=False)
     assert portfolio.plot_cumulative_returns(show=False)
     assert portfolio.plot_cumulative_returns_uncompounded(show=False)

@@ -146,10 +146,12 @@ class Assets:
         self.remove_assets(assets_to_remove=list(self.names[~np.isin(self.names, assets_to_keep)]))
 
     def reset(self):
-        for attr in ['_custom_expected_returns', '_custom_expected_cov']:
-            self.__setattr__(attr, None)
-        for attr in ['returns', 'cumulative_returns', 'mu', 'std', 'cov', 'corr', 'dates', 'names']:
-            self.__dict__.pop(attr, None)
+        attrs = list(self.__dict__.keys())
+        for attr in attrs:
+            if attr[0] == '_':
+                self.__setattr__(attr, None)
+            elif attr not in ['verbose', 'name', 'start_date', 'end_date', 'prices']:
+                self.__dict__.pop(attr, None)
 
     def set_expected_returns(self, expected_returns: np.ndarray):
         """

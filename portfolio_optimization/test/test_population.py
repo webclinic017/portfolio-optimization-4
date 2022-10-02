@@ -60,9 +60,9 @@ def test_population():
         population.add(portfolio)
 
     # Add the multi period portfolio
-    periods = [(dt.date(2018, 1, 1), dt.date(2018, 3, 1)),
-               (dt.date(2018, 3, 15), dt.date(2018, 5, 1)),
-               (dt.date(2018, 5, 1), dt.date(2018, 8, 1))]
+    periods = [(dt.date(2017, 1, 1), dt.date(2017, 3, 1)),
+               (dt.date(2017, 3, 15), dt.date(2017, 5, 1)),
+               (dt.date(2017, 5, 1), dt.date(2017, 8, 1))]
 
     mpp = MultiPeriodPortfolio(name='mmp')
     for i, period in enumerate(periods):
