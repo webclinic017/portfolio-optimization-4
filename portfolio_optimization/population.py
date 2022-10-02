@@ -2,9 +2,11 @@ from typing import Union, Optional
 import pandas as pd
 import plotly.express as px
 import numpy as np
+from numba import jit
 
 from portfolio_optimization.meta import *
 from portfolio_optimization.portfolio import *
+from portfolio_optimization.utils.tools import *
 
 __all__ = ['Population']
 
@@ -64,12 +66,9 @@ class Population:
 
         # while not all solutions are assigned to a pareto front
         while n_ranked < n:
-
             next_front = []
-
             # for each portfolio in the current front
             for i in current_front:
-
                 # all solutions that are dominated by this portfolio
                 for j in is_dominating[i]:
                     n_dominated[j] -= 1
@@ -83,10 +82,30 @@ class Population:
 
         return fronts
 
+    def non_denominated_sort_numba(self, first_front_only: bool = False) -> list[list[int]]:
+        """ Fast non-dominated sorting.
+        Sort the portfolios into different non-domination levels.
+        Complexity O(MN^2) where M is the number of objectives and N the number of portfolios.
+        :param first_front_only: If :obj:`True` sort only the first front and exit.
+        :returns: A list of Pareto fronts (lists), the first list includes non-dominated portfolios.
+        """
+        n = len(self.portfolios)
+
+        fitnesses = np.array([self.portfolios[i].fitness for i in range(n)])
+
+        fronts = non_denominated_sort(n=n, fitnesses=fitnesses, first_front_only=first_front_only)
+        return fronts
+
     @property
     def fronts(self) -> list[list[int]]:
         if self._fronts is None:
             self._fronts = self.non_denominated_sort()
+        return self._fronts
+
+    @property
+    def fronts_numba(self) -> list[list[int]]:
+        if self._fronts is None:
+            self._fronts = self.non_denominated_sort_numba()
         return self._fronts
 
     @property

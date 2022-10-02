@@ -65,4 +65,4 @@ def test_multi_period_portfolio():
     assert mpp.plot_rolling_sharpe(days=20, show=False)
     assert isinstance(mpp.composition, pd.DataFrame)
     assert mpp.plot_composition(show=False)
-
+    assert isinstance(mpp.summary(), pd.core.series.Series)

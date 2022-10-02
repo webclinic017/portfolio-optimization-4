@@ -15,7 +15,6 @@ __all__ = ['pre_selection',
 
 logger = logging.getLogger('portfolio_optimization.loader')
 
-
 def pre_selection(assets: Assets,
                   k: int,
                   correlation_threshold: float = 0) -> list[str]:
@@ -31,20 +30,19 @@ def pre_selection(assets: Assets,
     Considering only the risk and return of individual asset is insufficient because a pair of negatively correlated
     assets has the potential to reduce the risk. Therefore, negatively correlated pairs of assets are also considered.
 
-    We find the portfolio with minimum variance obtained by the pair negatively correlated assets
-    and includes it in the nondomination sorting process.
+    We find the portfolio with minimum variance obtained by the pair of negatively correlated assets. We then includes
+    it in the nondomination sorting process.
 
     ptf_variance = 𝜎1^2 𝑤1^2 + 𝜎2^2 𝑤2^2 + 2 𝜎12 𝑤1 𝑤2 (1)
     with 𝑤1 + 𝑤2 = 1
 
-    To find the minimum we substitute 𝑤2 = 1 - 𝑤1 in (1) and different with respect to 𝑤1 and set to zero.
+    To find the minimum we substitute 𝑤2 = 1 - 𝑤1 in (1) and differentiate with respect to 𝑤1 and set to zero.
     By solving the obtained equation, we get:
     𝑤1 = (𝜎2^2 - 𝜎12) / (𝜎1^2 + 𝜎2^2 - 2 𝜎12)
     𝑤2 = 1 - 𝑤1
-
     :param assets: Assets class from which we will perform the pre-selection process
     :param k: minimum number of assets to pre-select. If k is reached before the end of the current front, we will
-           the remaining assets of the current front. We do that because all assets in the same front have same rank.
+           the remaining assets of the current front. We do that because all assets in the same front have same rank
     :param correlation_threshold: asset pair with a correlation below correlation_threshold are included in the
            nondomination sorting, default is 0
     """
@@ -73,7 +71,7 @@ def pre_selection(assets: Assets,
                 weights = np.zeros(assets.asset_nb)
                 weights[i] = (var2 - cov) / (var1 + var2 - 2 * cov)
                 weights[j] = 1 - weights[i]
-                portfolio = Portfolio(weights=weights, fitness_type=FitnessType.MEAN_STD, assets=assets)
+                portfolio = Portfolio(weights=weights, assets=assets)
                 population.add(portfolio)
 
     new_assets_idx = set()
@@ -85,7 +83,16 @@ def pre_selection(assets: Assets,
         i += 1
 
     new_assets_names = list(assets.prices.columns[list(new_assets_idx)])
+
+    import time
+    s=time.time()
+    population.non_denominated_sort_numba()
+    e=time.time()
+    print(e-s)
+
     return new_assets_names
+
+
 
 
 def load_assets(prices: pd.DataFrame,

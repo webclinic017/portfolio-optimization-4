@@ -89,3 +89,26 @@ def test_load_train_test_assets():
     assert set(train_assets.names) == set(test_assets.names)
     assert (train_assets.start_date, train_assets.end_date) == train_period
     assert (test_assets.start_date, test_assets.end_date) == test_period
+
+
+def test_load_assets_speed():
+    prices = load_prices(file=TEST_PRICES_PATH)
+    import time
+
+    correlation_threshold = 0.99
+    random_selection = 200
+    pre_selection_number = 10
+
+    s = time.time()
+    assets = load_assets(prices=prices,
+                         start_date=dt.date(2018, 1, 1),
+                         end_date=dt.date(2019, 1, 1),
+                         random_selection=random_selection,
+                         removal_correlation=correlation_threshold,
+                         pre_selection_number=pre_selection_number,
+                         pre_selection_correlation=0,
+                         verbose=False)
+    e = time.time()
+    print((e - s) * 1000)
+
+    # 6531-4092

@@ -60,6 +60,7 @@ def test_portfolio_metrics():
     assert portfolio.plot_rolling_sharpe(days=20, show=False)
     assert isinstance(portfolio.composition, pd.DataFrame)
     assert portfolio.plot_composition(show=False)
+    assert isinstance(portfolio.summary(), pd.core.series.Series)
 
 
 def test_portfolio_dominate():

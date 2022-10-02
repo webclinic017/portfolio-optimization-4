@@ -23,3 +23,20 @@ def test_pre_selection():
     new_assets_names = pre_selection(assets=assets, k=k)
     assert len(new_assets_names) >= k
     assert len(new_assets_names) < assets.asset_nb
+
+def test_pre_selection_dumba():
+    prices = load_prices(file=TEST_PRICES_PATH)
+    start_date = dt.date(2017, 1, 1)
+    assets = Assets(prices=prices,
+                    start_date=start_date,
+                    random_selection=400,
+                    verbose=False)
+
+
+    import time
+
+    s = time.time()
+    new_assets_names = pre_selection(assets=assets, k=50, correlation_threshold=0)
+    e = time.time()
+    print((e - s) * 1000)
+
