@@ -84,12 +84,6 @@ def pre_selection(assets: Assets,
 
     new_assets_names = list(assets.prices.columns[list(new_assets_idx)])
 
-    import time
-    s=time.time()
-    population.non_denominated_sort_numba()
-    e=time.time()
-    print(e-s)
-
     return new_assets_names
 
 

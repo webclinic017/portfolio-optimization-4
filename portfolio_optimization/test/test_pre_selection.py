@@ -1,11 +1,11 @@
 import datetime as dt
 import numpy as np
+import time
 
 from portfolio_optimization.assets import *
 from portfolio_optimization.loader import *
 from portfolio_optimization.paths import *
 from portfolio_optimization.bloomberg import *
-
 
 def test_pre_selection():
     prices = load_prices(file=TEST_PRICES_PATH)
@@ -24,19 +24,16 @@ def test_pre_selection():
     assert len(new_assets_names) >= k
     assert len(new_assets_names) < assets.asset_nb
 
+
 def test_pre_selection_dumba():
-    prices = load_prices(file=TEST_PRICES_PATH)
+    prices = load_prices(file=EXAMPLE_PRICES_PATH)
     start_date = dt.date(2017, 1, 1)
     assets = Assets(prices=prices,
                     start_date=start_date,
                     random_selection=400,
                     verbose=False)
 
-
-    import time
-
     s = time.time()
-    new_assets_names = pre_selection(assets=assets, k=50, correlation_threshold=0)
+    new_assets_names = pre_selection(assets=assets, k=100, correlation_threshold=0)
     e = time.time()
-    print((e - s) * 1000)
-
+    print((e - s))

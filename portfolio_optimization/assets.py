@@ -3,6 +3,7 @@ from typing import Optional
 import datetime as dt
 import pandas as pd
 import numpy as np
+from functools import cached_property, cache
 
 pd.options.plotting.backend = "plotly"
 
@@ -189,6 +190,13 @@ class Assets:
             self._returns = self.prices.pct_change()[1:].to_numpy().T
         return self._returns
 
+    @cache
+    def validate_returns(self):
+        if not isinstance(self.returns, np.ndarray):
+            raise TypeError(f'asset returns should be of type numpy.ndarray')
+        if np.any(np.isnan(self.returns)):
+            raise TypeError(f'returns should not contain nan')
+
     @property
     def cumulative_returns(self):
         """
@@ -236,7 +244,7 @@ class Assets:
             self._corr = np.corrcoef(self.returns)
         return self._corr
 
-    @property
+    @cached_property
     def dates(self) -> np.array:
         return np.array([date.date() for date in self.prices.index])
 

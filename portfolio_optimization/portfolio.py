@@ -20,11 +20,13 @@ class BasePortfolio:
                  dates: np.array,
                  name: Optional[str] = None,
                  tag: Optional[str] = None,
-                 fitness_type: FitnessType = FitnessType.MEAN_STD):
+                 fitness_type: FitnessType = FitnessType.MEAN_STD,
+                 validate: bool = True):
         self.returns = returns
         self.dates = dates
         self.fitness_type = fitness_type
-        self._validation()
+        if validate:
+            self._validation()
         if name is None:
             self.name = str(uuid.uuid4())
         else:
@@ -328,16 +330,15 @@ class Portfolio(BasePortfolio):
                          dates=assets.dates[1:],
                          name=name,
                          tag=tag,
-                         fitness_type=fitness_type)
+                         fitness_type=fitness_type,
+                         validate=False)
 
     def _validation(self):
-        for name, value in [('weights', self.weights),
-                            ('assets.returns', self.assets.returns)]:
-            if not isinstance(value, np.ndarray):
-                raise TypeError(f'{name} should be of type numpy.ndarray')
-            if np.any(np.isnan(value)):
-                raise TypeError(f'{name} should not contain nan')
-
+        self.assets.validate_returns()
+        if not isinstance(self.weights, np.ndarray):
+            raise TypeError(f'weights should be of type numpy.ndarray')
+        if np.any(np.isnan(self.weights)):
+            raise TypeError(f'weights should not contain nan')
         if self.assets.asset_nb != len(self.weights):
             raise ValueError(f'weights should be of size {self.assets.asset_nb}')
 
@@ -415,7 +416,8 @@ class MultiPeriodPortfolio(BasePortfolio):
                          dates=np.array([]),
                          name=name,
                          tag=tag,
-                         fitness_type=fitness_type)
+                         fitness_type=fitness_type,
+                         validate=False)
 
         # Ensure that Portfolios dates do not overlap
         self.portfolios = []
