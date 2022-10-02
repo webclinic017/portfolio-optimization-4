@@ -6,7 +6,7 @@ import plotly.express as px
 
 from portfolio_optimization.meta import *
 from portfolio_optimization.assets import *
-from portfolio_optimization.utils.tools import *
+from portfolio_optimization.utils.sorting import *
 from portfolio_optimization.utils.metrics import *
 
 __all__ = ['Portfolio',

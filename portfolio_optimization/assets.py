@@ -38,20 +38,13 @@ class Assets:
         :param name: name of the Assets class
         :param verbose: True to print logging info
         """
-        self._returns = None
-        self._cumulative_returns = None
-        self._mu = None
-        self._std = None
-        self._cov = None
-        self._corr = None
-        self._custom_expected_returns = None
-        self._custom_expected_cov = None
-
         self.verbose = verbose
         self.name = name
         self.start_date = start_date
         self.end_date = end_date
         self.prices = prices.loc[start_date:end_date].copy()
+        self._custom_expected_returns = None
+        self._custom_expected_cov = None
 
         self._info(f'Loading Assets from {start_date} to {end_date}')
 
@@ -153,11 +146,12 @@ class Assets:
         self.remove_assets(assets_to_remove=list(self.names[~np.isin(self.names, assets_to_keep)]))
 
     def reset(self):
-        for attr in self.__dict__.keys():
-            if attr[0] == '_':
-                self.__setattr__(attr, None)
+        for attr in ['_custom_expected_returns', '_custom_expected_cov']:
+            self.__setattr__(attr, None)
+        for attr in ['returns', 'cumulative_returns', 'mu', 'std', 'cov', 'corr', 'dates', 'names']:
+            self.__dict__.pop(attr, None)
 
-    def custom_expected_returns(self, expected_returns: np.ndarray):
+    def set_expected_returns(self, expected_returns: np.ndarray):
         """
         Asset.expected_returns will return this custom expected return instead of the historical mean (Asset.mu)
         """
@@ -168,7 +162,7 @@ class Assets:
                              f'But received {expected_returns.shape}')
         self._custom_expected_returns = expected_returns
 
-    def custom_expected_cov(self, expected_cov: np.ndarray):
+    def set_expected_cov(self, expected_cov: np.ndarray):
         """
         Asset.expected_cov will return this custom expected covariance instead of the historical covariance (Asset.cov)
         """
@@ -179,16 +173,14 @@ class Assets:
                              f'But received {expected_cov.shape}')
         self._custom_expected_cov = expected_cov
 
-    @property
+    @cached_property
     def returns(self):
         """
         Compute simple returns from prices (R1 = S1/S0 - 1)
             --> simple returns leads to a better estimate of the efficient frontier than log returns
         And convert to numpy array of shape (assets, dates)
         """
-        if self._returns is None:
-            self._returns = self.prices.pct_change()[1:].to_numpy().T
-        return self._returns
+        return self.prices.pct_change()[1:].to_numpy().T
 
     @cache
     def validate_returns(self):
@@ -197,34 +189,26 @@ class Assets:
         if np.any(np.isnan(self.returns)):
             raise TypeError(f'returns should not contain nan')
 
-    @property
+    @cached_property
     def cumulative_returns(self):
         """
         Compute the compounded cumulative returns (1+R1)*(1+R2)*(1+R3)...  = S1/S0 - 1)
         It's equivalent to rebasing prices to 1
         """
-        if self._cumulative_returns is None:
-            df_returns = self.prices.pct_change()[1:]
-            self._cumulative_returns = (df_returns + 1).cumprod()
-        return self._cumulative_returns
+        df_returns = self.prices.pct_change()[1:]
+        return (df_returns + 1).cumprod()
 
-    @property
+    @cached_property
     def mu(self):
-        if self._mu is None:
-            self._mu = np.mean(self.returns, axis=1)
-        return self._mu
+        return np.mean(self.returns, axis=1)
 
-    @property
+    @cached_property
     def std(self):
-        if self._std is None:
-            self._std = np.std(self.returns, axis=1)
-        return self._std
+        return np.std(self.returns, axis=1)
 
-    @property
+    @cached_property
     def cov(self):
-        if self._cov is None:
-            self._cov = np.cov(self.returns)
-        return self._cov
+        return np.cov(self.returns)
 
     @property
     def expected_returns(self):
@@ -238,15 +222,17 @@ class Assets:
             return self._custom_expected_cov
         return self.cov
 
-    @property
+    @cached_property
     def corr(self):
-        if self._corr is None:
-            self._corr = np.corrcoef(self.returns)
-        return self._corr
+        return np.corrcoef(self.returns)
 
     @cached_property
     def dates(self) -> np.array:
         return np.array([date.date() for date in self.prices.index])
+
+    @cached_property
+    def names(self):
+        return np.array(self.prices.columns)
 
     @property
     def asset_nb(self):
@@ -255,10 +241,6 @@ class Assets:
     @property
     def date_nb(self):
         return self.returns.shape[1]
-
-    @property
-    def names(self):
-        return np.array(self.prices.columns)
 
     def dict_to_array(self, assets_dict: dict[str, float]) -> np.ndarray:
         """
@@ -287,7 +269,4 @@ class Assets:
             logger.info(msg)
 
     def __str__(self):
-        return f'Assets <{self.name}  - {self.asset_nb} assets - {self.date_nb} dates>'
-
-    def __repr__(self):
-        return str(self)
+        return f'Assets <{self.name}>'

@@ -1,5 +1,6 @@
 import datetime as dt
 import numpy as np
+import time
 
 from portfolio_optimization import (Assets,
                                     load_prices,
@@ -75,8 +76,8 @@ def test_load_assets():
 def test_load_train_test_assets():
     prices = load_prices(file=TEST_PRICES_PATH)
 
-    train_period = (dt.date(2018, 1, 1), dt.date(2019, 1, 1))
-    test_period = (dt.date(2019, 1, 1), dt.date(2020, 1, 1))
+    train_period = (dt.date(2016, 1, 1), dt.date(2017, 1, 1))
+    test_period = (dt.date(2017, 1, 1), dt.date(2018, 1, 1))
 
     train_assets, test_assets = load_train_test_assets(prices=prices,
                                                        train_period=train_period,
@@ -93,22 +94,19 @@ def test_load_train_test_assets():
 
 def test_load_assets_speed():
     prices = load_prices(file=TEST_PRICES_PATH)
-    import time
 
     correlation_threshold = 0.99
-    random_selection = 200
     pre_selection_number = 10
 
     s = time.time()
     assets = load_assets(prices=prices,
-                         start_date=dt.date(2018, 1, 1),
-                         end_date=dt.date(2019, 1, 1),
-                         random_selection=random_selection,
+                         start_date=dt.date(2017, 1, 1),
+                         end_date=dt.date(2018, 1, 1),
                          removal_correlation=correlation_threshold,
                          pre_selection_number=pre_selection_number,
                          pre_selection_correlation=0,
                          verbose=False)
     e = time.time()
-    print((e - s) * 1000)
-
-    # 6531-4092
+    t = (e - s) * 1000
+    assert t < 20
+    assert assets.asset_nb >= pre_selection_number
