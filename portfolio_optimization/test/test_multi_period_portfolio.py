@@ -15,9 +15,9 @@ def test_multi_period_portfolio():
     prices = load_prices(file=TEST_PRICES_PATH)
 
     n = 10
-    periods = [(dt.date(2018, 1, 1), dt.date(2018, 3, 1)),
-               (dt.date(2018, 3, 15), dt.date(2018, 5, 1)),
-               (dt.date(2018, 5, 1), dt.date(2018, 8, 1))]
+    periods = [(dt.date(2017, 1, 1), dt.date(2017, 3, 1)),
+               (dt.date(2017, 3, 15), dt.date(2017, 5, 1)),
+               (dt.date(2017, 5, 1), dt.date(2017, 8, 1))]
 
     mpp = MultiPeriodPortfolio()
     returns = np.array([])
@@ -57,8 +57,8 @@ def test_multi_period_portfolio():
     assert len(mpp.assets_names) == len(periods)
     assert mpp.composition.shape[1] == len(periods)
     mpp.reset_metrics()
-    assert mpp._mean is None
-    assert mpp._std is None
+    assert mpp.__dict__.get('mean') is None
+    assert mpp.__dict__.get('str') is None
     assert mpp.plot_returns(show=False)
     assert mpp.plot_cumulative_returns(show=False)
     assert mpp.plot_cumulative_returns_uncompounded(show=False)
