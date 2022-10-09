@@ -1,16 +1,17 @@
 import numpy as np
-import uuid
 import pandas as pd
 from typing import Optional
 import plotly.express as px
 from functools import cached_property
+import numbers
 
 from portfolio_optimization.meta import *
 from portfolio_optimization.assets import *
 from portfolio_optimization.utils.sorting import *
 from portfolio_optimization.utils.metrics import *
 
-__all__ = ['Portfolio',
+__all__ = ['BasePortfolio',
+           'Portfolio',
            'MultiPeriodPortfolio']
 
 
@@ -28,7 +29,7 @@ class BasePortfolio:
         if validate:
             self._validation()
         if name is None:
-            self.name = str(uuid.uuid4())
+            self.name = str(id(self))
         else:
             self.name = name
         if tag is None:
@@ -43,6 +44,23 @@ class BasePortfolio:
             raise TypeError('returns should be of type numpy.ndarray')
         if np.any(np.isnan(self.returns)):
             raise TypeError('returns should not contain nan')
+
+    def __hash__(self):
+        return hash(self.name)
+
+    def __eq__(self, other):
+        return (isinstance(other, (BasePortfolio, Portfolio, MultiPeriodPortfolio))
+                and np.array_equal(self.fitness, other.fitness))
+
+    def __gt__(self, other):
+        if not isinstance(other, (BasePortfolio, Portfolio, MultiPeriodPortfolio)):
+            raise TypeError(f">' not supported between instances of 'Portfolio' and '{type(other)}'")
+        return self.dominates(other)
+
+    def __ge__(self, other):
+        if not isinstance(other, (BasePortfolio, Portfolio, MultiPeriodPortfolio)):
+            raise TypeError(f">=' not supported between instances of 'Portfolio' and '{type(other)}'")
+        return self.__eq__(other) or self.__gt__(other)
 
     @cached_property
     def cumulative_returns(self):
@@ -317,6 +335,52 @@ class Portfolio(BasePortfolio):
             raise TypeError(f'weights should not contain nan')
         if self.assets.asset_nb != len(self.weights):
             raise ValueError(f'weights should be of size {self.assets.asset_nb}')
+
+    def __neg__(self):
+        return Portfolio(weights=-self.weights, assets=self.assets)
+
+    def __abs__(self):
+        return Portfolio(weights=np.abs(self.weights), assets=self.assets)
+
+    def __round__(self, n: int):
+        return Portfolio(weights=np.round(self.weights, n), assets=self.assets)
+
+    def __floor__(self):
+        return Portfolio(weights=np.floor(self.weights), assets=self.assets)
+
+    def __trunc__(self):
+        return Portfolio(weights=np.trunc(self.weights), assets=self.assets)
+
+    def __add__(self, other):
+        if not isinstance(other, Portfolio):
+            raise TypeError(f'Cannot add a Portfolio with an object of type {type(other)}')
+        if self.assets != other.assets:
+            raise ValueError(f'To add two Portfolios, there Assets should be the same object')
+        return Portfolio(weights=self.weights + other.weights, assets=self.assets)
+
+    def __sub__(self, other):
+        if not isinstance(other, Portfolio):
+            raise TypeError(f'Cannot subtract a Portfolio with an object of type {type(other)}')
+        if self.assets != other.assets:
+            raise ValueError(f'To subtract two Portfolios, there Assets should be the same object')
+        return Portfolio(weights=self.weights - other.weights, assets=self.assets)
+
+    def __mul__(self, other: numbers.Number):
+        if not isinstance(other, numbers.Number):
+            raise TypeError(f'Portfolio can only be multiplied by a number, but received a {type(other)}')
+        return Portfolio(weights=other * self.weights, assets=self.assets)
+
+    __rmul__ = __mul__
+
+    def __floordiv__(self, other: numbers.Number):
+        if not isinstance(other, numbers.Number):
+            raise TypeError(f'Portfolio can only be floor divided by a number, but received a {type(other)}')
+        return Portfolio(weights=np.floor_divide(self.weights, other), assets=self.assets)
+
+    def __truediv__(self, other: numbers.Number):
+        if not isinstance(other, numbers.Number):
+            raise TypeError(f'Portfolio can only be divided by a number, but received a {type(other)}')
+        return Portfolio(weights=self.weights / other, assets=self.assets)
 
     @cached_property
     def mean(self):
