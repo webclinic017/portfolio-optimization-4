@@ -24,10 +24,10 @@ if __name__ == '__main__':
     for i in range(assets.asset_nb):
         weights = np.zeros(assets.asset_nb)
         weights[i] = 1
-        population.add(Portfolio(weights=weights,
-                                 assets=assets,
-                                 name=f'single_asset_{i}',
-                                 tag='single_asset'))
+        population.append(Portfolio(weights=weights,
+                                    assets=assets,
+                                    name=f'single_asset_{i}',
+                                    tag='single_asset'))
 
     model = Optimization(assets=assets,
                          investment_type=InvestmentType.FULLY_INVESTED,
@@ -36,30 +36,30 @@ if __name__ == '__main__':
     # Random portfolios
     for i in range(10):
         weights = model.random()
-        population.add(Portfolio(weights=weights,
-                                 assets=assets,
-                                 name=f'random_{i}',
-                                 tag='random'))
+        population.append(Portfolio(weights=weights,
+                                    assets=assets,
+                                    name=f'random_{i}',
+                                    tag='random'))
 
     # Inverse Volatility
     weights = model.inverse_volatility()
-    population.add(Portfolio(weights=weights,
-                             assets=assets,
-                             name='inverse_volatility'))
+    population.append(Portfolio(weights=weights,
+                                assets=assets,
+                                name='inverse_volatility'))
 
     # Equal Weighted
     weights = model.equal_weighted()
-    population.add(Portfolio(weights=weights,
-                             assets=assets,
-                             name='equal_weighted'))
+    population.append(Portfolio(weights=weights,
+                                assets=assets,
+                                name='equal_weighted'))
 
     # Efficient Frontier -- Mean Variance
     portfolios_weights = model.mean_variance(population_size=30)
     for i, weights in enumerate(portfolios_weights):
-        population.add(Portfolio(weights=weights,
-                                 assets=assets,
-                                 name=f'mean_variance_{i}',
-                                 tag='mean_variance'))
+        population.append(Portfolio(weights=weights,
+                                    assets=assets,
+                                    name=f'mean_variance_{i}',
+                                    tag='mean_variance'))
 
     population.plot_metrics(x=Metrics.ANNUALIZED_STD,
                             y=Metrics.ANNUALIZED_MEAN,

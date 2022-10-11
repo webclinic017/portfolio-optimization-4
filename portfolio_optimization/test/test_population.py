@@ -25,7 +25,7 @@ def test_population():
                               fitness_type=FitnessType.MEAN_DOWNSIDE_STD_MAX_DRAWDOWN,
                               assets=assets,
                               name=f'portfolio_{i}')
-        population.add(portfolio)
+        population.append(portfolio)
 
     # test non-dominated sorting into fronts
     assert sorted([i for j in population.fronts for i in j]) == list(range(population.length))
@@ -57,7 +57,7 @@ def test_population():
                               assets=assets,
                               name=f'portfolio_{i}',
                               tag='random')
-        population.add(portfolio)
+        population.append(portfolio)
 
     # Add the multi period portfolio
     periods = [(dt.date(2017, 1, 1), dt.date(2017, 3, 1)),
@@ -75,9 +75,9 @@ def test_population():
                               assets=assets,
                               name=f'portfolio_period_{i}',
                               tag='mpp')
-        population.add(portfolio)
+        population.append(portfolio)
         mpp.add(portfolio)
-    population.add(mpp)
+    population.append(mpp)
 
     assert population.plot_metrics(x=Metrics.ANNUALIZED_STD,
                                    y=Metrics.ANNUALIZED_MEAN,

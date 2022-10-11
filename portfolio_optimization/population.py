@@ -1,4 +1,6 @@
-from typing import Union, Optional
+import logging
+from typing import Union, Optional, Dict
+from itertools import islice
 import pandas as pd
 import plotly.express as px
 import numpy as np
@@ -10,13 +12,58 @@ from portfolio_optimization.utils.sorting import *
 
 __all__ = ['Population']
 
+logger = logging.getLogger('portfolio_optimization.population')
+
 
 class Population:
-    def __init__(self, portfolios: list[Union[Portfolio, MultiPeriodPortfolio]] = None):
-        if portfolios is None:
-            portfolios = []
-        self.portfolios = portfolios
-        self.hashmap = {p.name: p for p in self.portfolios}
+    def __init__(self, portfolios: Optional[list[Union[BasePortfolio]]] = None):
+        self.hashmap = self._hashmap(portfolios=portfolios)
+
+    @staticmethod
+    def _hashmap(portfolios: Optional[list[Union[BasePortfolio]]]) -> Dict[str, Union[BasePortfolio]]:
+        hashmap = {}
+        if portfolios is not None:
+            for p in portfolios:
+                if p.name in hashmap:
+                    raise KeyError(f'portfolio {p.name} is in duplicate')
+                hashmap[p.name] = p
+        return hashmap
+
+    @property
+    def portfolios(self):
+        return list(self.hashmap.values())
+
+    @portfolios.setter
+    def portfolios(self, value: Optional[list[Union[BasePortfolio]]] = None):
+        self.hashmap = self._hashmap(portfolios=value)
+
+    def __len__(self):
+        return len(self.hashmap)
+
+    def __getitem__(self, key):
+        if isinstance(key, slice) or key < 0:
+            return list(self.hashmap.values())[key]
+        return self.hashmap[next(islice(self.hashmap, key, None))]
+
+    def __delitem__(self, key):
+        del self.hashmap[next(islice(self.hashmap, key, None))]
+
+    def __iter__(self):
+        return iter(self.hashmap.values())
+
+    def __contains__(self, portfolio):
+        return portfolio.name in self.hashmap
+
+    def append(self, portfolio: Union[Portfolio, MultiPeriodPortfolio]):
+        if portfolio.name in self.hashmap:
+            raise KeyError(f'portfolio {portfolio.name} is already in the population')
+        self.hashmap[portfolio.name] = portfolio
+
+    def get(self, name: str) -> Union[BasePortfolio]:
+        return self.hashmap[name]
+
+    def iloc(self, i: int) -> Union[BasePortfolio]:
+        return self.__getitem__(i)
 
     def non_denominated_sort(self, first_front_only: bool = False) -> list[list[int]]:
         """ Fast non-dominated sorting.
@@ -25,8 +72,8 @@ class Population:
         :param first_front_only: If :obj:`True` sort only the first front and exit.
         :returns: A list of Pareto fronts (lists), the first list includes non-dominated portfolios.
         """
-        n = len(self.portfolios)
-        fitnesses = np.array([self.portfolios[i].fitness for i in range(n)])
+        n = len(self)
+        fitnesses = np.array([portfolio.fitness for portfolio in self])
         fronts = non_denominated_sort(n=n, fitnesses=fitnesses, first_front_only=first_front_only)
         return fronts
 
@@ -34,25 +81,9 @@ class Population:
     def fronts(self) -> list[list[int]]:
         return self.non_denominated_sort()
 
-    @property
-    def length(self) -> int:
-        return len(self.portfolios)
-
-    def add(self, portfolio: Union[Portfolio, MultiPeriodPortfolio]):
-        if portfolio.name in self.hashmap.keys():
-            raise KeyError(f'portfolio id {portfolio.name} is already in the population')
-        self.portfolios.append(portfolio)
-        self.hashmap[portfolio.name] = portfolio
-
-    def get(self, name: str) -> Union[Portfolio, MultiPeriodPortfolio]:
-        return self.hashmap[name]
-
-    def iloc(self, i: int) -> Union[Portfolio, MultiPeriodPortfolio]:
-        return self.portfolios[i]
-
     def get_portfolios(self,
                        names: Optional[Union[str, list[str]]] = None,
-                       tags: Optional[Union[str, list[str]]] = None) -> list[Union[Portfolio, MultiPeriodPortfolio]]:
+                       tags: Optional[Union[str, list[str]]] = None) -> list[Union[BasePortfolio]]:
         if tags is None and names is None:
             return self.portfolios
         if names is not None:
@@ -68,39 +99,39 @@ class Population:
         if tags is not None:
             if isinstance(tags, str):
                 tags = [tags]
-            return [portfolio for portfolio in self.portfolios if portfolio.tag in tags]
+            return [portfolio for portfolio in self if portfolio.tag in tags]
 
     def sort(self,
              metric: Metrics,
              reverse: bool = False,
              names: Union[str, list[str]] = None,
-             tags: Union[str, list[str]] = None) -> list[Union[Portfolio, MultiPeriodPortfolio]]:
+             tags: Union[str, list[str]] = None) -> list[Union[BasePortfolio]]:
         portfolios = self.get_portfolios(names=names, tags=tags)
         return sorted(portfolios, key=lambda x: x.__getattribute__(metric.value), reverse=reverse)
 
     def k_min(self, metric: Metrics,
               k: int,
               names: Union[str, list[str]] = None,
-              tags: Union[str, list[str]] = None) -> list[Union[Portfolio, MultiPeriodPortfolio]]:
+              tags: Union[str, list[str]] = None) -> list[Union[BasePortfolio]]:
         return self.sort(metric=metric, reverse=False, names=names, tags=tags)[:k]
 
     def k_max(self,
               metric: Metrics,
               k: int,
               names: Union[str, list[str]] = None,
-              tags: Union[str, list[str]] = None) -> list[Union[Portfolio, MultiPeriodPortfolio]]:
+              tags: Union[str, list[str]] = None) -> list[Union[BasePortfolio]]:
         return self.sort(metric=metric, reverse=True, names=names, tags=tags)[:k]
 
     def min(self,
             metric: Metrics,
             names: Union[str, list[str]] = None,
-            tags: Union[str, list[str]] = None) -> Union[Portfolio, MultiPeriodPortfolio]:
+            tags: Union[str, list[str]] = None) -> Union[BasePortfolio]:
         return self.sort(metric=metric, reverse=False, names=names, tags=tags)[0]
 
     def max(self,
             metric: Metrics,
             names: Union[str, list[str]] = None,
-            tags: Union[str, list[str]] = None) -> Union[Portfolio, MultiPeriodPortfolio]:
+            tags: Union[str, list[str]] = None) -> Union[BasePortfolio]:
         return self.sort(metric=metric, reverse=True, names=names, tags=tags)[0]
 
     def summary(self,
@@ -231,6 +262,3 @@ class Population:
             fig.show()
         else:
             return fig
-
-    def __str__(self):
-        return f'Population <{len(self.portfolios)} portfolios>'

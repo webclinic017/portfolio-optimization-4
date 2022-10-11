@@ -433,8 +433,8 @@ def test_maximum_sharpe():
     portfolios_weights = portfolios_weights[~np.isnan(portfolios_weights).all(axis=1)]
     population = Population()
     for weights in portfolios_weights:
-        population.add(Portfolio(weights=weights,
-                                 assets=assets))
+        population.append(Portfolio(weights=weights,
+                                    assets=assets))
 
     max_sharpe_ptf = population.max(metric=Metrics.SHARPE_RATIO)
 

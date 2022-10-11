@@ -23,18 +23,18 @@ if __name__ == '__main__':
     # Efficient Frontier -- Mean Variance
     portfolios_weights = model.mean_variance(population_size=30)
     for i, weights in enumerate(portfolios_weights):
-        population.add(Portfolio(weights=weights,
-                                 assets=assets,
-                                 name=f'mean_variance_{i}',
-                                 tag='mean_variance'))
+        population.append(Portfolio(weights=weights,
+                                    assets=assets,
+                                    name=f'mean_variance_{i}',
+                                    tag='mean_variance'))
 
     # Efficient Frontier -- Mean Semivariance
     portfolios_weights = model.mean_semivariance(population_size=30)
     for i, weights in enumerate(portfolios_weights):
-        population.add(Portfolio(weights=weights,
-                                 assets=assets,
-                                 name=f'mean_semivariance_{i}',
-                                 tag='mean_semivariance'))
+        population.append(Portfolio(weights=weights,
+                                    assets=assets,
+                                    name=f'mean_semivariance_{i}',
+                                    tag='mean_semivariance'))
 
     # Plot
     population.plot_metrics(x=Metrics.ANNUALIZED_STD,

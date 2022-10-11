@@ -42,10 +42,10 @@ if __name__ == '__main__':
                                   name=f'portfolio_{assets.name}',
                                   tag=tag)
 
-            population.add(portfolio)
+            population.append(portfolio)
             if tag == 'test':
                 mpp.add(portfolio)
-    population.add(mpp)
+    population.append(mpp)
 
     population.plot_metrics(x=Metrics.ANNUALIZED_STD, y=Metrics.ANNUALIZED_MEAN)
     print(population.composition(tags=['train']))

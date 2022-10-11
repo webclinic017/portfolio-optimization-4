@@ -24,19 +24,19 @@ if __name__ == '__main__':
                              weight_bounds=(0, None))
         portfolios_weights = model.mean_variance(population_size=30)
         for i, weights in enumerate(portfolios_weights):
-            population.add(Portfolio(weights=weights,
-                                     fitness_type=FitnessType.MEAN_STD,
-                                     assets=assets,
-                                     name=f'train_{assets.name}_{i}',
-                                     tag=f'train_{assets.name}'))
+            population.append(Portfolio(weights=weights,
+                                        fitness_type=FitnessType.MEAN_STD,
+                                        assets=assets,
+                                        name=f'train_{assets.name}_{i}',
+                                        tag=f'train_{assets.name}'))
 
     # Test the portfolios on the test period
     for portfolio in population.get_portfolios(tags=f'train_{assets_train.name}'):
-        population.add(Portfolio(weights=portfolio.weights,
-                                 fitness_type=FitnessType.MEAN_STD,
-                                 assets=assets_test,
-                                 name=f'test_{assets.name}_{portfolio.name}',
-                                 tag=f'test_{assets_test.name}'))
+        population.append(Portfolio(weights=portfolio.weights,
+                                    fitness_type=FitnessType.MEAN_STD,
+                                    assets=assets_test,
+                                    name=f'test_{assets.name}_{portfolio.name}',
+                                    tag=f'test_{assets_test.name}'))
 
     # Plot
     population.plot_metrics(x=Metrics.ANNUALIZED_STD,

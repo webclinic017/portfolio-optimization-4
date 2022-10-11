@@ -66,6 +66,53 @@ def test_portfolio_metrics():
     assert isinstance(portfolio.summary(formatted=False), pd.core.series.Series)
 
 
+def test_portfolio_magic_methods():
+    prices = load_prices(file=TEST_PRICES_PATH)
+
+    start_date = dt.date(2017, 1, 1)
+    assets = Assets(prices=prices,
+                    start_date=start_date,
+                    verbose=False)
+    ptf_1 = Portfolio(weights=rand_weights(n=assets.asset_nb),
+                      assets=assets)
+
+    ptf_2 = Portfolio(weights=rand_weights(n=assets.asset_nb),
+                      assets=assets)
+
+    ptf = ptf_1 + ptf_2
+    assert np.array_equal(ptf.weights, ptf_1.weights + ptf_2.weights)
+    ptf = ptf_1 - ptf_2
+    assert np.array_equal(ptf.weights, ptf_1.weights - ptf_2.weights)
+    ptf = -ptf_1
+    assert np.array_equal(ptf.weights, -ptf_1.weights)
+    ptf = ptf_1 * 2.3
+    assert np.array_equal(ptf.weights, 2.3 * ptf_1.weights)
+    ptf = 2.3 * ptf_1
+    assert np.array_equal(ptf.weights, 2.3 * ptf_1.weights)
+    ptf = ptf_1 / 2.3
+    assert np.array_equal(ptf.weights, ptf_1.weights / 2.3)
+    ptf = abs(ptf_1)
+    assert np.array_equal(ptf.weights, abs(ptf_1.weights))
+    ptf = round(ptf_1, 2)
+    assert np.array_equal(ptf.weights, np.round(ptf_1.weights, 2))
+    ptf = np.floor(ptf_1)
+    assert np.array_equal(ptf.weights, np.floor(ptf_1.weights))
+    ptf = np.trunc(ptf_1)
+    assert np.array_equal(ptf.weights, np.trunc(ptf_1.weights))
+    ptf = ptf_1 // 2
+    assert np.array_equal(ptf.weights, ptf_1.weights // 2)
+
+    assert hash(ptf_1) != hash(ptf_2)
+    assert ptf_1 == ptf_1
+    assert ptf_1 != ptf_2
+    assert (ptf_1 > ptf_2) is ptf_1.dominates(ptf_2)
+    assert (ptf_1 < ptf_2) is not ptf_1.dominates(ptf_2)
+    assert (ptf_1 > ptf_2) is (ptf_2 < ptf_1)
+    assert (ptf_1 < ptf_2) is (ptf_2 > ptf_1)
+    assert (ptf_1 >= ptf_2) is (ptf_1 > ptf_2)
+    assert (ptf_1 <= ptf_2) is (ptf_1 < ptf_2)
+
+
 def test_portfolio_dominate():
     prices = load_prices(file=TEST_PRICES_PATH)
 
