@@ -3,8 +3,10 @@ from typing import Union, Optional, Dict
 from itertools import islice
 import pandas as pd
 import plotly.express as px
+import plotly.graph_objects as go
 import numpy as np
 from functools import cached_property
+from collections.abc import Iterator
 
 from portfolio_optimization.meta import *
 from portfolio_optimization.portfolio import *
@@ -16,54 +18,74 @@ logger = logging.getLogger('portfolio_optimization.population')
 
 
 class Population:
-    def __init__(self, portfolios: Optional[list[Union[BasePortfolio]]] = None):
+    def __init__(self, portfolios: Optional[list[BasePortfolio]] = None):
         self.hashmap = self._hashmap(portfolios=portfolios)
 
     @staticmethod
-    def _hashmap(portfolios: Optional[list[Union[BasePortfolio]]]) -> Dict[str, Union[BasePortfolio]]:
+    def _hashmap(portfolios: Optional[list[BasePortfolio]]) -> Dict[str, BasePortfolio]:
         hashmap = {}
         if portfolios is not None:
             for p in portfolios:
+                if not isinstance(p, BasePortfolio):
+                    raise TypeError(f'Portfolio has wrong type {type(p)}')
                 if p.name in hashmap:
                     raise KeyError(f'portfolio {p.name} is in duplicate')
                 hashmap[p.name] = p
         return hashmap
 
     @property
-    def portfolios(self):
+    def portfolios(self) -> list[BasePortfolio]:
         return list(self.hashmap.values())
 
     @portfolios.setter
-    def portfolios(self, value: Optional[list[Union[BasePortfolio]]] = None):
+    def portfolios(self, value: Optional[list[BasePortfolio]] = None):
         self.hashmap = self._hashmap(portfolios=value)
 
-    def __len__(self):
+    def __len__(self) -> int:
         return len(self.hashmap)
 
-    def __getitem__(self, key):
+    def __getitem__(self, key: Union[int, slice]) -> Union[BasePortfolio, list[BasePortfolio]]:
         if isinstance(key, slice) or key < 0:
             return list(self.hashmap.values())[key]
         return self.hashmap[next(islice(self.hashmap, key, None))]
 
-    def __delitem__(self, key):
+    def __setitem__(self, key: int, value: BasePortfolio) -> None:
+        if not isinstance(value, BasePortfolio):
+            raise TypeError(f'Cannot set a value with type {type(value)}')
+        new_name = value.name
+        old_name = list(self.hashmap.keys())[key]
+        if new_name == old_name:
+            self.hashmap[old_name] = value
+        else:
+            if new_name in self.hashmap:
+                raise KeyError(f'portfolio {new_name} is already in the population')
+            # Create a new dict to preserve the order
+            self.hashmap[old_name] = value
+            self.hashmap = {k if k != old_name else new_name: v for k, v in self.hashmap.items()}
+
+    def __delitem__(self, key: int) -> None:
         del self.hashmap[next(islice(self.hashmap, key, None))]
 
-    def __iter__(self):
+    def __iter__(self) -> Iterator[BasePortfolio]:
         return iter(self.hashmap.values())
 
-    def __contains__(self, portfolio):
-        return portfolio.name in self.hashmap
+    def __contains__(self, value: BasePortfolio) -> bool:
+        if not isinstance(value, BasePortfolio):
+            raise False
+        return value.name in self.hashmap
 
-    def append(self, portfolio: Union[Portfolio, MultiPeriodPortfolio]):
-        if portfolio.name in self.hashmap:
-            raise KeyError(f'portfolio {portfolio.name} is already in the population')
-        self.hashmap[portfolio.name] = portfolio
+    def append(self, value: BasePortfolio) -> None:
+        if not isinstance(value, BasePortfolio):
+            raise TypeError(f'Cannot append a value with type {type(value)}')
+        if value.name in self.hashmap:
+            raise KeyError(f'portfolio {value.name} is already in the population')
+        self.hashmap[value.name] = value
 
-    def get(self, name: str) -> Union[BasePortfolio]:
-        return self.hashmap[name]
-
-    def iloc(self, i: int) -> Union[BasePortfolio]:
-        return self.__getitem__(i)
+    def get(self, name: str) -> BasePortfolio:
+        try:
+            return self.hashmap[name]
+        except KeyError:
+            raise KeyError(f'No portfolio found with name {name}')
 
     def non_denominated_sort(self, first_front_only: bool = False) -> list[list[int]]:
         """ Fast non-dominated sorting.
@@ -83,7 +105,7 @@ class Population:
 
     def get_portfolios(self,
                        names: Optional[Union[str, list[str]]] = None,
-                       tags: Optional[Union[str, list[str]]] = None) -> list[Union[BasePortfolio]]:
+                       tags: Optional[Union[str, list[str]]] = None) -> list[BasePortfolio]:
         if tags is None and names is None:
             return self.portfolios
         if names is not None:
@@ -105,33 +127,33 @@ class Population:
              metric: Metrics,
              reverse: bool = False,
              names: Union[str, list[str]] = None,
-             tags: Union[str, list[str]] = None) -> list[Union[BasePortfolio]]:
+             tags: Union[str, list[str]] = None) -> list[BasePortfolio]:
         portfolios = self.get_portfolios(names=names, tags=tags)
         return sorted(portfolios, key=lambda x: x.__getattribute__(metric.value), reverse=reverse)
 
     def k_min(self, metric: Metrics,
               k: int,
               names: Union[str, list[str]] = None,
-              tags: Union[str, list[str]] = None) -> list[Union[BasePortfolio]]:
+              tags: Union[str, list[str]] = None) -> list[BasePortfolio]:
         return self.sort(metric=metric, reverse=False, names=names, tags=tags)[:k]
 
     def k_max(self,
               metric: Metrics,
               k: int,
               names: Union[str, list[str]] = None,
-              tags: Union[str, list[str]] = None) -> list[Union[BasePortfolio]]:
+              tags: Union[str, list[str]] = None) -> list[BasePortfolio]:
         return self.sort(metric=metric, reverse=True, names=names, tags=tags)[:k]
 
     def min(self,
             metric: Metrics,
             names: Union[str, list[str]] = None,
-            tags: Union[str, list[str]] = None) -> Union[BasePortfolio]:
+            tags: Union[str, list[str]] = None) -> BasePortfolio:
         return self.sort(metric=metric, reverse=False, names=names, tags=tags)[0]
 
     def max(self,
             metric: Metrics,
             names: Union[str, list[str]] = None,
-            tags: Union[str, list[str]] = None) -> Union[BasePortfolio]:
+            tags: Union[str, list[str]] = None) -> BasePortfolio:
         return self.sort(metric=metric, reverse=True, names=names, tags=tags)[0]
 
     def summary(self,
@@ -162,7 +184,7 @@ class Population:
     def plot_cumulative_returns(self, idx=slice(None),
                                 names: Union[str, list[str]] = None,
                                 tags: Union[str, list[str]] = None,
-                                show: bool = True):
+                                show: bool = True) -> Optional[go.Figure]:
         portfolios = self.get_portfolios(names=names, tags=tags)
         df = pd.concat([p.cumulative_returns_df for p in portfolios], axis=1).iloc[:, idx]
         df.columns = [p.name for p in portfolios]
@@ -179,7 +201,7 @@ class Population:
     def plot_composition(self,
                          names: Union[str, list[str]] = None,
                          tags: Union[str, list[str]] = None,
-                         show: bool = True):
+                         show: bool = True) -> Optional[go.Figure]:
         df = self.composition(names=names, tags=tags).T
         fig = px.bar(df, x=df.index, y=df.columns, title='Portfolios Composition')
         if show:
@@ -197,7 +219,7 @@ class Population:
                      names: Union[str, list[str]] = None,
                      tags: Union[str, list[str]] = None,
                      title='Portfolios',
-                     show: bool = True):
+                     show: bool = True) -> Optional[go.Figure]:
         portfolios = self.get_portfolios(names=names, tags=tags)
         num_fmt = ':.3f'
         hover_data = {x.value: num_fmt,

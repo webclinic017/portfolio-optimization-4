@@ -10,9 +10,8 @@ from portfolio_optimization.paths import *
 from portfolio_optimization.bloomberg import *
 
 
-def test_population():
+def load_population() -> Population:
     prices = load_prices(file=TEST_PRICES_PATH)
-
     start_date = dt.date(2017, 1, 1)
     assets = Assets(prices=prices,
                     start_date=start_date,
@@ -24,11 +23,66 @@ def test_population():
         portfolio = Portfolio(weights=weights,
                               fitness_type=FitnessType.MEAN_DOWNSIDE_STD_MAX_DRAWDOWN,
                               assets=assets,
-                              name=f'portfolio_{i}')
+                              name=str(i))
         population.append(portfolio)
 
-    # test non-dominated sorting into fronts
-    assert sorted([i for j in population.fronts for i in j]) == list(range(population.length))
+    return population
+
+
+def test_magic_methods():
+    population = load_population()
+    assert population.portfolios == list(population)
+    assert len(population) == 100
+    assert population[0].name == '0'
+    assert population[-1].name == '99'
+    assert len(population[1:3]) == 2
+    for i, ptf in enumerate(population):
+        assert ptf.name == str(i)
+    ptf = population[5]
+    assert ptf in population
+    assert population.get(name='5') == ptf
+    del population[5]
+    assert len(population) == 99
+    assert ptf not in population
+    population.append(ptf)
+    assert len(population) == 100
+    assert ptf in population
+    try:
+        population.append(ptf)
+        raise
+    except KeyError:
+        pass
+    assert len(population) == 100
+    ptfs = list(population).copy()
+    population.portfolios = ptfs
+    assert list(population) == ptfs
+    ptfs.append(ptf)
+    try:
+        population.portfolios = ptfs
+        raise
+    except KeyError:
+        pass
+    assert len(population) == 100
+    ptf = population[10]
+    population[10] = ptf
+    assert len(population) == 100
+    try:
+        population[10] = population[11]
+        raise
+    except KeyError:
+        pass
+    assert len(population) == 100
+    new_ptf = population[11]
+    new_ptf.name = 'new_name'
+    population[10] = new_ptf
+    assert len(population) == 100
+    assert population[10] == new_ptf
+
+
+def test_non_dominated_sorting():
+    population = load_population()
+
+    assert sorted([i for j in population.fronts for i in j]) == list(range(len(population)))
     for i, front in enumerate(population.fronts):
         dominates = False
         if i == len(population.fronts) - 1:
@@ -36,17 +90,19 @@ def test_population():
         for idx_1 in front:
             for j in range(i + 1, len(population.fronts)):
                 for idx_2 in population.fronts[j]:
-                    assert not population.portfolios[idx_2].dominates(population.portfolios[idx_1])
-                    if population.portfolios[idx_1].dominates(population.portfolios[idx_2]):
+                    assert not population[idx_2].dominates(population[idx_1])
+                    if population[idx_1].dominates(population[idx_2]):
                         dominates = True
         assert dominates
 
-    # test plots
+def test_plot():
+    population = load_population()
+
     assert population.plot_metrics(x=Metrics.ANNUALIZED_DOWNSIDE_STD,
-                            y=Metrics.ANNUALIZED_MEAN,
-                            z=Metrics.MAX_DRAWDOWN,
-                            fronts=True,
-                            show=False)
+                                   y=Metrics.ANNUALIZED_MEAN,
+                                   z=Metrics.MAX_DRAWDOWN,
+                                   fronts=True,
+                                   show=False)
 
     # Create a population of portfolios with 2 objectives
     population = Population()
@@ -94,8 +150,6 @@ def test_population():
     assert (population.min(metric=Metrics.ANNUALIZED_MEAN).annualized_mean
             <= population.max(metric=Metrics.ANNUALIZED_MEAN).annualized_mean)
 
-    # get
-    assert population.get(name='portfolio_2') == population.iloc(2)
 
     # composition
     assert isinstance(population.composition(), pd.DataFrame)
