@@ -44,7 +44,7 @@ if __name__ == '__main__':
 
             population.append(portfolio)
             if tag == 'test':
-                mpp.add(portfolio)
+                mpp.append(portfolio)
     population.append(mpp)
 
     population.plot_metrics(x=Metrics.ANNUALIZED_STD, y=Metrics.ANNUALIZED_MEAN)

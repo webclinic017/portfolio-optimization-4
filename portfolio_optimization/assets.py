@@ -233,7 +233,7 @@ class Assets:
         return np.array([date.date() for date in self.prices.index])
 
     @cached_property
-    def names(self):
+    def names(self)-> np.ndarray:
         return np.array(self.prices.columns)
 
     @property

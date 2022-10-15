@@ -30,7 +30,7 @@ def test_multi_period_portfolio():
         portfolio = Portfolio(weights=weights,
                               assets=assets,
                               name=f'portfolio_{i}')
-        mpp.add(portfolio)
+        mpp.append(portfolio)
         returns = np.concatenate([returns, portfolio_returns(assets.returns, weights)])
 
     assert np.all((returns - mpp.returns) < 1e-10)
