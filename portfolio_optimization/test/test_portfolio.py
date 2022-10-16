@@ -26,7 +26,7 @@ def test_portfolio_metrics():
                           name='portfolio_1')
 
     returns = portfolio_returns(assets.returns, weights)
-
+    assert len(portfolio) == 10
     assert np.all((returns - portfolio.returns) < 1e-10)
     assert abs(returns.mean() - portfolio.mean) < 1e-10
     assert abs(returns.std(ddof=1) - portfolio.std) < 1e-10
@@ -53,7 +53,7 @@ def test_portfolio_metrics():
     names_1.sort()
     assert np.array_equal(names_1, names_2)
     portfolio.summary()
-    portfolio.reset_metrics()
+    portfolio.reset()
     assert portfolio.__dict__.get('mean') is None
     assert portfolio.__dict__.get('std') is None
     assert portfolio.plot_returns(show=False)
@@ -64,6 +64,7 @@ def test_portfolio_metrics():
     assert portfolio.plot_composition(show=False)
     assert isinstance(portfolio.summary(), pd.core.series.Series)
     assert isinstance(portfolio.summary(formatted=False), pd.core.series.Series)
+    assert portfolio.get_weight(asset_name=portfolio.assets_names[5])
 
 
 def test_portfolio_magic_methods():
@@ -75,10 +76,9 @@ def test_portfolio_magic_methods():
                     verbose=False)
     ptf_1 = Portfolio(weights=rand_weights(n=assets.asset_nb),
                       assets=assets)
-
     ptf_2 = Portfolio(weights=rand_weights(n=assets.asset_nb),
                       assets=assets)
-
+    assert len(ptf_1) == assets.asset_nb
     ptf = ptf_1 + ptf_2
     assert np.array_equal(ptf.weights, ptf_1.weights + ptf_2.weights)
     ptf = ptf_1 - ptf_2

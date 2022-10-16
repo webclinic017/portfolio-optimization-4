@@ -71,7 +71,7 @@ class Population:
 
     def __contains__(self, value: BasePortfolio) -> bool:
         if not isinstance(value, BasePortfolio):
-            raise False
+            return False
         return value.name in self.hashmap
 
     def append(self, value: BasePortfolio) -> None:

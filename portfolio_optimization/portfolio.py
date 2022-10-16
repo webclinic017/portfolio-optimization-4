@@ -2,7 +2,7 @@ from collections.abc import Iterator
 import numpy as np
 import pandas as pd
 import plotly.express as px
-from functools import cached_property
+from functools import cache, cached_property
 import numbers
 import plotly.graph_objects as go
 
@@ -45,6 +45,9 @@ class BasePortfolio:
             raise TypeError('returns should be of type numpy.ndarray')
         if np.any(np.isnan(self.returns)):
             raise TypeError('returns should not contain nan')
+
+    def __len__(self):
+        raise NotImplementedError
 
     def __str__(self) -> str:
         return f"<{type(self).__name__}, name: '{self.name}', tag: '{self.tag}'>"
@@ -166,32 +169,9 @@ class BasePortfolio:
     def cvar_95_ratio(self) -> float:
         return self.annualized_mean / self.cvar_95
 
-    def summary(self, formatted: bool = True) -> pd.Series:
-        summary_fmt = {
-            'Mean (Expected Return)': (self.mean, '0.3%'),
-            'Annualized Mean': (self.annualized_mean, '0.2%'),
-            'Std (Volatility)': (self.std, '0.3%'),
-            'Annualized Std': (self.annualized_std, '0.2%'),
-            'Downside Std': (self.downside_std, '0.3%'),
-            'Annualized Downside Std': (self.annualized_downside_std, '0.2%'),
-            'Max Drawdown': (self.max_drawdown, '0.2%'),
-            'CDaR at 95%': (self.cdar_95, '0.2%'),
-            'CVaR at 95%': (self.cvar_95, '0.2%'),
-            'Variance': (self.variance, '0.6%'),
-            'Downside Variance': (self.downside_variance, '0.6%'),
-            'Sharpe Ratio': (self.sharpe_ratio, '0.2f'),
-            'Sortino Ratio': (self.sortino_ratio, '0.2f'),
-            'Calmar Ratio': (self.calmar_ratio, '0.2f'),
-            'Cdar at 95% Ratio': (self.cdar_95_ratio, '0.2f'),
-            'Cvar at 95% Ratio': (self.cvar_95_ratio, '0.2f'),
-        }
-
-        if formatted:
-            summary = {name: '{value:{fmt}}'.format(value=value, fmt=fmt) for name, (value, fmt) in summary_fmt.items()}
-        else:
-            summary = {name: value for name, (value, fmt) in summary_fmt.items()}
-
-        return pd.Series(summary)
+    @property
+    def composition(self) -> pd.DataFrame:
+        raise NotImplementedError
 
     @cached_property
     def fitness(self) -> np.ndarray:
@@ -218,13 +198,13 @@ class BasePortfolio:
         """
         return dominate(self.fitness[obj], other.fitness[obj])
 
-    def reset_metrics(self) -> None:
+    def reset(self) -> None:
         attrs = list(self.__dict__.keys())
         for attr in attrs:
-            if attr[0] == '_':
+            if attr[0] == '_' and attr != '_portfolios':
                 self.__setattr__(attr, None)
-            elif attr not in ['returns', 'dates', 'name', 'tag', 'validate', 'fitness_type', 'weights', 'assets',
-                              'portfolios']:
+            elif attr not in ['returns', 'dates', 'name', 'tag', 'validate', 'fitness_type',
+                              'weights', 'assets', '_portfolios']:
                 self.__dict__.pop(attr, None)
 
     def reset_fitness(self, fitness_type: FitnessType) -> None:
@@ -296,10 +276,6 @@ class BasePortfolio:
         else:
             return fig
 
-    @property
-    def composition(self) -> pd.DataFrame:
-        raise NotImplementedError
-
     def plot_composition(self, show: bool = True):
         df = self.composition.T
         fig = px.bar(df, x=df.index, y=df.columns)
@@ -311,6 +287,33 @@ class BasePortfolio:
             fig.show()
         else:
             return fig
+
+    def summary(self, formatted: bool = True) -> pd.Series:
+        summary_fmt = {
+            'Mean (Expected Return)': (self.mean, '0.3%'),
+            'Annualized Mean': (self.annualized_mean, '0.2%'),
+            'Std (Volatility)': (self.std, '0.3%'),
+            'Annualized Std': (self.annualized_std, '0.2%'),
+            'Downside Std': (self.downside_std, '0.3%'),
+            'Annualized Downside Std': (self.annualized_downside_std, '0.2%'),
+            'Max Drawdown': (self.max_drawdown, '0.2%'),
+            'CDaR at 95%': (self.cdar_95, '0.2%'),
+            'CVaR at 95%': (self.cvar_95, '0.2%'),
+            'Variance': (self.variance, '0.6%'),
+            'Downside Variance': (self.downside_variance, '0.6%'),
+            'Sharpe Ratio': (self.sharpe_ratio, '0.2f'),
+            'Sortino Ratio': (self.sortino_ratio, '0.2f'),
+            'Calmar Ratio': (self.calmar_ratio, '0.2f'),
+            'Cdar at 95% Ratio': (self.cdar_95_ratio, '0.2f'),
+            'Cvar at 95% Ratio': (self.cvar_95_ratio, '0.2f'),
+        }
+
+        if formatted:
+            summary = {name: '{value:{fmt}}'.format(value=value, fmt=fmt) for name, (value, fmt) in summary_fmt.items()}
+        else:
+            summary = {name: value for name, (value, fmt) in summary_fmt.items()}
+
+        return pd.Series(summary)
 
 
 class Portfolio(BasePortfolio):
@@ -343,7 +346,7 @@ class Portfolio(BasePortfolio):
         if self.assets.asset_nb != len(self.weights):
             raise ValueError(f'weights should be of size {self.assets.asset_nb}')
 
-    @cached_property
+    @cache
     def __len__(self) -> int:
         return np.count_nonzero(abs(self.weights) > ZERO_THRESHOLD)
 
@@ -427,6 +430,10 @@ class Portfolio(BasePortfolio):
         df.set_index('asset', inplace=True)
         return df
 
+    def reset(self) -> None:
+        super().reset()
+        self.__len__.cache_clear()
+
     def summary(self, formatted: bool = True) -> pd.Series:
         df = super().summary(formatted=formatted)
         assets_number = len(self)
@@ -449,14 +456,13 @@ class MultiPeriodPortfolio(BasePortfolio):
                  tag: str | None = None,
                  fitness_type: FitnessType = FitnessType.MEAN_STD):
         portfolios, returns, dates = self._initialize(portfolios=portfolios)
-
+        self._portfolios = portfolios
         super().__init__(returns=returns,
                          dates=dates,
                          name=name,
                          tag=tag,
                          fitness_type=fitness_type,
                          validate=False)
-        self._portfolios = portfolios
 
     @staticmethod
     def _initialize(portfolios: list[Portfolio] | None = None) -> tuple[list[Portfolio], np.ndarray, np.ndarray]:
@@ -482,42 +488,44 @@ class MultiPeriodPortfolio(BasePortfolio):
     @portfolios.setter
     def portfolios(self, value: list[Portfolio] | None = None):
         portfolios, returns, dates = self._initialize(portfolios=value)
-        self.portfolios = portfolios
+        self._portfolios = portfolios
         self.returns = returns
         self.dates = dates
-        self.reset_metrics()
+        self.reset()
 
     def __len__(self) -> int:
-        return len(self.portfolios)
+        return len(self._portfolios)
 
     def __getitem__(self, key: int | slice) -> Portfolio | list[Portfolio]:
-        return self.portfolios[key]
+        return self._portfolios[key]
 
     def __setitem__(self, key: int, value: Portfolio) -> None:
         if not isinstance(value, Portfolio):
             raise TypeError(f'Cannot set a value with type {type(value)}')
-        self.portfolios[key] = value
-        portfolios, returns, dates = self._initialize(portfolios=self.portfolios)
-        self.portfolios = portfolios
+        new_portfolios = self._portfolios.copy()
+        new_portfolios[key] = value
+        portfolios, returns, dates = self._initialize(portfolios=new_portfolios)
+        self._portfolios = portfolios
         self.returns = returns
         self.dates = dates
-        self.reset_metrics()
+        self.reset()
 
     def __delitem__(self, key: int) -> None:
-        del self.portfolios[key]
-        portfolios, returns, dates = self._initialize(portfolios=self.portfolios)
-        self.portfolios = portfolios
+        new_portfolios = self._portfolios.copy()
+        del new_portfolios[key]
+        portfolios, returns, dates = self._initialize(portfolios=new_portfolios)
+        self._portfolios = portfolios
         self.returns = returns
         self.dates = dates
-        self.reset_metrics()
+        self.reset()
 
     def __iter__(self) -> Iterator[Portfolio]:
-        return iter(self.portfolios)
+        return iter(self._portfolios)
 
     def __contains__(self, value: Portfolio) -> bool:
         if not isinstance(value, Portfolio):
-            raise False
-        return value in self.portfolios
+            return False
+        return value in self._portfolios
 
     def __neg__(self):
         return MultiPeriodPortfolio(portfolios=[-p for p in self], tag=self.tag, fitness_type=self.fitness_type)
@@ -526,7 +534,7 @@ class MultiPeriodPortfolio(BasePortfolio):
         return MultiPeriodPortfolio(portfolios=[abs(p) for p in self], tag=self.tag, fitness_type=self.fitness_type)
 
     def __round__(self, n: int):
-        return MultiPeriodPortfolio(portfolios=[np.round(p, n) for p in self], tag=self.tag,
+        return MultiPeriodPortfolio(portfolios=[round(p, n) for p in self], tag=self.tag,
                                     fitness_type=self.fitness_type)
 
     def __floor__(self):
@@ -578,37 +586,36 @@ class MultiPeriodPortfolio(BasePortfolio):
 
     def append(self, portfolio: Portfolio) -> None:
         if len(self) != 0:
-            start_date = portfolio.assets.dates[0]
-            prev_last_date = self.portfolios[-1].assets.dates[-1]
+            start_date = portfolio.dates[0]
+            prev_last_date = self[-1].dates[-1]
             if start_date < prev_last_date:
                 raise ValueError(f'Portfolios dates should not overlap: {prev_last_date} -> {start_date} ')
-        self.portfolios.append(portfolio)
+        self._portfolios.append(portfolio)
         self.returns = np.concatenate([self.returns, portfolio.returns], axis=0)
         self.dates = np.concatenate([self.dates, portfolio.dates], axis=0)
-        self.reset_metrics()
+        self.reset()
 
     @property
     def assets_index(self) -> np.ndarray:
-        return np.array([portfolio.assets_index for portfolio in self.portfolios])
+        return np.array([p.assets_index for p in self])
 
     @property
     def assets_names(self) -> np.ndarray:
-        return np.array([portfolio.assets_names for portfolio in self.portfolios])
+        return np.array([p.assets_names for p in self])
 
     @property
     def composition(self) -> pd.DataFrame:
-        df = pd.concat([portfolio.composition for portfolio in self.portfolios], axis=1)
+        df = pd.concat([p.composition for p in self], axis=1)
         df.fillna(0, inplace=True)
         return df
 
     def summary(self, formatted: bool = True) -> pd.Series:
         df = super().summary(formatted=formatted)
-        portfolios_number = len(self.portfolios)
-        avg_assets_per_portfolio = np.mean([portfolio.length for portfolio in self.portfolios])
+        portfolios_number = len(self)
+        avg_assets_per_portfolio = np.mean([len(p) for p in self])
         if formatted:
             portfolios_number = str(int(portfolios_number))
             avg_assets_per_portfolio = f'{avg_assets_per_portfolio:0.1f}'
-
         df['portfolios number'] = portfolios_number
         df['avg nb of assets per portfolio'] = avg_assets_per_portfolio
         return df
