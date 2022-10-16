@@ -10,11 +10,11 @@ from portfolio_optimization.bloomberg import *
 from portfolio_optimization.assets import *
 
 PARAMS = [{'method_name': 'mean_variance',
-           'target': 0.02**2 / 255,
+           'target': 0.02 ** 2 / 255,
            'portfolio_target_name': 'variance',
            'threshold': 1e-10},
           {'method_name': 'mean_semivariance',
-           'target': 0.02**2 / 255,
+           'target': 0.02 ** 2 / 255,
            'portfolio_target_name': 'downside_variance',
            'threshold': 1e-6},
           {'method_name': 'mean_cvar',
@@ -104,7 +104,7 @@ def minimum_testing(method_name: str,
         assert abs(getattr(portfolio_3, portfolio_target_name) - min_risk) < threshold
 
 
-def population_testing(method_name: str, **kwrarg):
+def population_testing(method_name: str, **kwargs):
     assets = get_assets()
     model = Optimization(assets=assets,
                          investment_type=InvestmentType.FULLY_INVESTED,
@@ -221,7 +221,7 @@ def costs_testing(method_name: str,
     assert abs(portfolio.weights - portfolio_ref.weights).sum() > 5e-2
 
     # costs and identical prev_weight on top two invested assets --> the top two assets weights stay > 0
-    asset_1 = portfolio_ref.composition.index[0]
+    asset_1 = portfolio_ref.composition.index[0].str
     asset_2 = portfolio_ref.composition.index[1]
     costs = {asset_1: 0.2,
              asset_2: 0.5}

@@ -64,7 +64,7 @@ def test_mpp_metrics():
     assert mpp.plot_rolling_sharpe(days=20, show=False)
     assert isinstance(mpp.composition, pd.DataFrame)
     assert mpp.plot_composition(show=False)
-    assert isinstance(mpp.summary(), pd.core.series.Series)
+    assert isinstance(mpp.summary(), pd.Series)
 
 
 def test_mpp_magic_methods():
@@ -126,4 +126,3 @@ def test_mpp_magic_methods():
     assert len(mpp) == 2
     assert mpp[0] != p_1
     assert mpp[1] == p_1
-

@@ -1,10 +1,10 @@
 import logging
-from typing import Union, Optional
 import numpy as np
 import cvxpy as cp
 from cvxpy import SolverError
 from scipy.sparse.linalg import ArpackNoConvergence
 from enum import Enum, unique
+
 from portfolio_optimization.meta import *
 from portfolio_optimization.assets import *
 from portfolio_optimization.exception import *
@@ -27,11 +27,11 @@ class Optimization:
     def __init__(self,
                  assets: Assets,
                  investment_type: InvestmentType = InvestmentType.FULLY_INVESTED,
-                 weight_bounds: tuple[Optional[Union[float, np.ndarray]],
-                                      Optional[Union[float, np.ndarray]]] = (None, None),
-                 costs: Optional[Union[float, np.ndarray]] = None,
-                 investment_duration_in_days: Optional[int] = None,
-                 prev_w: Optional[np.ndarray] = None):
+                 weight_bounds: tuple[float | np.ndarray | None,
+                                      float | np.ndarray | None] = (None, None),
+                 costs: float | np.ndarray | None = None,
+                 investment_duration_in_days: int | None = None,
+                 prev_w: np.ndarray | None = None):
         """
         Convex portfolio optimization
         :param investment_type: investment type (fully invested, market neutral, unconstrained)
@@ -184,8 +184,8 @@ class Optimization:
 
     def _portfolio_expected_return(self,
                                    w: cp.Variable,
-                                   l1_coef: Optional[float] = None,
-                                   l2_coef: Optional[float] = None) -> cp.Expression:
+                                   l1_coef: float | None = None,
+                                   l2_coef: float | None = None) -> cp.Expression:
         """
         CVXPY Expression of the portfolio expected return with l1 and l2 regularization.
         """
@@ -206,6 +206,7 @@ class Optimization:
         if l1_coef is None or l1_coef == 0:
             l1_regularization = 0
         else:
+            # noinspection PyTypeChecker
             l1_regularization = l1_coef * cp.norm(w, 1)
 
         # Norm L2
@@ -261,7 +262,7 @@ class Optimization:
     def _get_optimization_weights(problem: cp.Problem,
                                   w: cp.Variable,
                                   parameter: cp.Parameter,
-                                  target: Union[float, np.ndarray]) -> np.ndarray:
+                                  target: float | np.ndarray) -> np.ndarray:
         """
         Solve CVXPY Problem with variables
         :param problem: CVXPY Problem
@@ -292,7 +293,7 @@ class Optimization:
 
         return np.array(weights)
 
-    def _get_investment_target(self) -> Optional[int]:
+    def _get_investment_target(self) -> int | None:
         """
         Convert the investment target into 0, 1 or None
         """
@@ -327,6 +328,7 @@ class Optimization:
 
         # Constraints
         lower_bounds, upper_bounds = self._get_lower_and_upper_bounds()
+        # noinspection PyTypeChecker
         constraints = [self._portfolio_expected_return(w=w) == 1,
                        w >= lower_bounds * k,
                        w <= upper_bounds * k,
@@ -376,7 +378,7 @@ class Optimization:
         return min_variance, weights
 
     def minimum_semivariance(self,
-                             returns_target: Optional[Union[float, np.ndarray]] = None) -> tuple[float, np.ndarray]:
+                             returns_target: float | np.ndarray | None = None) -> tuple[float, np.ndarray]:
         """
         Find the asset weights that minimize the portfolio semivariance (downside variance) and the value of the minimum
         semivariance
@@ -439,7 +441,7 @@ class Optimization:
 
         # Constraints
         lower_bounds, upper_bounds = self._get_lower_and_upper_bounds()
-
+        # noinspection PyTypeChecker
         constraints = [self.assets.returns.T @ w + alpha + u >= 0,
                        u >= 0,
                        w >= lower_bounds,
@@ -478,7 +480,7 @@ class Optimization:
 
         # Constraints
         lower_bounds, upper_bounds = self._get_lower_and_upper_bounds()
-
+        # noinspection PyTypeChecker
         constraints = [z >= u[1:] - alpha,
                        z >= 0,
                        u[1:] >= u[:-1] - self.assets.returns.T @ w,
@@ -499,10 +501,10 @@ class Optimization:
         return min_cdar, weights
 
     def mean_variance(self,
-                      target_variance: Optional[Union[float, list, np.ndarray]] = None,
-                      population_size: Optional[int] = None,
-                      l1_coef: Optional[float] = None,
-                      l2_coef: Optional[float] = None) -> np.ndarray:
+                      target_variance: float | list | np.ndarray | None = None,
+                      population_size: int | None = None,
+                      l1_coef: float | None = None,
+                      l2_coef: float | None = None) -> np.ndarray:
         """
         Optimization along the mean-variance frontier (Markowitz optimization)
         :param target_variance: the targeted daily variance of the portfolio: the portfolio expected return is maximized
@@ -568,11 +570,11 @@ class Optimization:
         return weights
 
     def mean_semivariance(self,
-                          returns_target: Optional[Union[float, np.ndarray]] = None,
-                          target_semivariance: Optional[Union[float, list, np.ndarray]] = None,
-                          population_size: Optional[int] = None,
-                          l1_coef: Optional[float] = None,
-                          l2_coef: Optional[float] = None) -> np.ndarray:
+                          returns_target: float | np.ndarray | None = None,
+                          target_semivariance: float | list | np.ndarray | None = None,
+                          population_size: int | None = None,
+                          l1_coef: float | None = None,
+                          l2_coef: float | None = None) -> np.ndarray:
         """
          Optimization along the mean-semivariance frontier
         :param returns_target: the target(s) to distinguish "downside" and "upside" returns
@@ -656,10 +658,10 @@ class Optimization:
 
     def mean_cvar(self,
                   beta: float = 0.95,
-                  target_cvar: Optional[Union[float, list, np.ndarray]] = None,
-                  population_size: Optional[int] = None,
-                  l1_coef: Optional[float] = None,
-                  l2_coef: Optional[float] = None) -> np.ndarray:
+                  target_cvar: float | list | np.ndarray | None = None,
+                  population_size: int | None = None,
+                  l1_coef: float | None = None,
+                  l2_coef: float | None = None) -> np.ndarray:
         """
         Optimization along the mean-CVaR frontier (Conditional Value-at-Risk or Expected Shortfall).
         The CVaR is the average of the “extreme” losses beyond the VaR threshold
@@ -700,7 +702,7 @@ class Optimization:
         # Constraints
         portfolio_cvar = alpha + 1.0 / (self.assets.date_nb * (1 - beta)) * cp.sum(u)
         lower_bounds, upper_bounds = self._get_lower_and_upper_bounds()
-
+        # noinspection PyTypeChecker
         constraints = [portfolio_cvar <= target_cvar_param,
                        self.assets.returns.T @ w + alpha + u >= 0,
                        u >= 0,
@@ -735,10 +737,10 @@ class Optimization:
 
     def mean_cdar(self,
                   beta: float = 0.95,
-                  target_cdar: Optional[Union[float, list, np.ndarray]] = None,
-                  population_size: Optional[int] = None,
-                  l1_coef: Optional[float] = None,
-                  l2_coef: Optional[float] = None) -> np.ndarray:
+                  target_cdar: float | list | np.ndarray | None = None,
+                  population_size: int | None = None,
+                  l1_coef: float | None = None,
+                  l2_coef: float | None = None) -> np.ndarray:
         """
         Optimization along the mean-CDaR frontier (Conditional Drawdown-at-Risk).
         The CDaR is the average drawdown for all the days that drawdown exceeds a threshold
@@ -780,7 +782,7 @@ class Optimization:
         # Constraints
         portfolio_cdar = alpha + 1.0 / (self.assets.date_nb * (1 - beta)) * cp.sum(z)
         lower_bounds, upper_bounds = self._get_lower_and_upper_bounds()
-
+        # noinspection PyTypeChecker
         constraints = [portfolio_cdar <= target_cdar_param,
                        z >= u[1:] - alpha,
                        z >= 0,

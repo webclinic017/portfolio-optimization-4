@@ -27,6 +27,7 @@ class BasePortfolio:
         self.returns = returns
         self.dates = dates
         self.fitness_type = fitness_type
+        self.weights = None
         if validate:
             self._validation()
         if name is None:
@@ -56,7 +57,7 @@ class BasePortfolio:
         return f"<{type(self).__name__} '{self.name}'>"
 
     def __hash__(self) -> int:
-        return hash(self.name)
+        return hash((self.name, self.fitness_type, tuple(self.dates)))
 
     def __eq__(self, other) -> bool:
         return (isinstance(other, BasePortfolio)
@@ -186,15 +187,19 @@ class BasePortfolio:
             return np.array([self.mean, -self.downside_std, -self.max_drawdown])
         raise ValueError(f'fitness_type {self.fitness_type} should be of type {FitnessType}')
 
+    @cached_property
+    def assets_index(self) -> np.ndarray:
+        raise NotImplementedError
+
     def dominates(self, other, obj=slice(None)) -> bool:
         """
         Return true if each objective of the current portfolio's fitness is not strictly worse than
         the corresponding objective of the other portfolio's fitness and at least one objective is
-        strictly better.
+        strictly better
         :param other: Other portfolio
         :param obj: Slice indicating on which objectives the domination is
                     tested. The default value is `slice(None)`, representing
-                    every objectives.
+                    every objective.
         """
         return dominate(self.fitness[obj], other.fitness[obj])
 
@@ -442,7 +447,7 @@ class Portfolio(BasePortfolio):
         df['assets number'] = assets_number
         return df
 
-    def get_weight(self, asset_name: str) -> np.ndarray:
+    def get_weight(self, asset_name: str) -> float:
         try:
             return self.weights[np.where(self.assets.names == asset_name)[0][0]]
         except IndexError:
@@ -534,7 +539,7 @@ class MultiPeriodPortfolio(BasePortfolio):
         return MultiPeriodPortfolio(portfolios=[abs(p) for p in self], tag=self.tag, fitness_type=self.fitness_type)
 
     def __round__(self, n: int):
-        return MultiPeriodPortfolio(portfolios=[round(p, n) for p in self], tag=self.tag,
+        return MultiPeriodPortfolio(portfolios=[p.__round__(n) for p in self], tag=self.tag,
                                     fitness_type=self.fitness_type)
 
     def __floor__(self):

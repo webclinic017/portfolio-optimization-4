@@ -78,6 +78,7 @@ def test_portfolio_magic_methods():
                       assets=assets)
     ptf_2 = Portfolio(weights=rand_weights(n=assets.asset_nb),
                       assets=assets)
+
     assert len(ptf_1) == assets.asset_nb
     ptf = ptf_1 + ptf_2
     assert np.array_equal(ptf.weights, ptf_1.weights + ptf_2.weights)
@@ -102,6 +103,7 @@ def test_portfolio_magic_methods():
     ptf = ptf_1 // 2
     assert np.array_equal(ptf.weights, ptf_1.weights // 2)
 
+    assert hash(ptf_1) == hash(ptf_1)
     assert hash(ptf_1) != hash(ptf_2)
     assert ptf_1 == ptf_1
     assert ptf_1 != ptf_2

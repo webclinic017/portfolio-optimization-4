@@ -1,5 +1,5 @@
 import logging
-from typing import Union, Optional, Dict
+from typing import Dict
 from itertools import islice
 import pandas as pd
 import plotly.express as px
@@ -18,11 +18,11 @@ logger = logging.getLogger('portfolio_optimization.population')
 
 
 class Population:
-    def __init__(self, portfolios: Optional[list[BasePortfolio]] = None):
+    def __init__(self, portfolios: list[BasePortfolio] | None = None):
         self.hashmap = self._hashmap(portfolios=portfolios)
 
     @staticmethod
-    def _hashmap(portfolios: Optional[list[BasePortfolio]]) -> Dict[str, BasePortfolio]:
+    def _hashmap(portfolios: list[BasePortfolio] | None) -> Dict[str, BasePortfolio]:
         hashmap = {}
         if portfolios is not None:
             for p in portfolios:
@@ -38,13 +38,19 @@ class Population:
         return list(self.hashmap.values())
 
     @portfolios.setter
-    def portfolios(self, value: Optional[list[BasePortfolio]] = None):
+    def portfolios(self, value: list[BasePortfolio] | None = None) -> None:
         self.hashmap = self._hashmap(portfolios=value)
+
+    def __str__(self) -> str:
+        return f'<Population of {len(self)} portfolios: {self.hashmap.values()}>'
+
+    def __repr__(self) -> str:
+        return f'<Population of {len(self)} portfolios>'
 
     def __len__(self) -> int:
         return len(self.hashmap)
 
-    def __getitem__(self, key: Union[int, slice]) -> Union[BasePortfolio, list[BasePortfolio]]:
+    def __getitem__(self, key: int | slice) -> BasePortfolio | list[BasePortfolio]:
         if isinstance(key, slice) or key < 0:
             return list(self.hashmap.values())[key]
         return self.hashmap[next(islice(self.hashmap, key, None))]
@@ -90,7 +96,7 @@ class Population:
     def non_denominated_sort(self, first_front_only: bool = False) -> list[list[int]]:
         """ Fast non-dominated sorting.
         Sort the portfolios into different non-domination levels.
-        Complexity O(MN^2) where M is the number of objectives and N the number of portfolios.
+        Complexity O(MN^2) where M is the number of objectives and N the number of portfolios
         :param first_front_only: If :obj:`True` sort only the first front and exit.
         :returns: A list of Pareto fronts (lists), the first list includes non-dominated portfolios.
         """
@@ -104,8 +110,8 @@ class Population:
         return self.non_denominated_sort()
 
     def get_portfolios(self,
-                       names: Optional[Union[str, list[str]]] = None,
-                       tags: Optional[Union[str, list[str]]] = None) -> list[BasePortfolio]:
+                       names: str | list[str] | None = None,
+                       tags: str | list[str] | None = None) -> list[BasePortfolio]:
         if tags is None and names is None:
             return self.portfolios
         if names is not None:
@@ -126,47 +132,47 @@ class Population:
     def sort(self,
              metric: Metrics,
              reverse: bool = False,
-             names: Union[str, list[str]] = None,
-             tags: Union[str, list[str]] = None) -> list[BasePortfolio]:
+             names: str | list[str] | None = None,
+             tags: str | list[str] | None = None) -> list[BasePortfolio]:
         portfolios = self.get_portfolios(names=names, tags=tags)
         return sorted(portfolios, key=lambda x: x.__getattribute__(metric.value), reverse=reverse)
 
     def k_min(self, metric: Metrics,
               k: int,
-              names: Union[str, list[str]] = None,
-              tags: Union[str, list[str]] = None) -> list[BasePortfolio]:
+              names: str | list[str] | None = None,
+              tags: str | list[str] | None = None) -> list[BasePortfolio]:
         return self.sort(metric=metric, reverse=False, names=names, tags=tags)[:k]
 
     def k_max(self,
               metric: Metrics,
               k: int,
-              names: Union[str, list[str]] = None,
-              tags: Union[str, list[str]] = None) -> list[BasePortfolio]:
+              names: str | list[str] | None = None,
+              tags: str | list[str] | None = None) -> list[BasePortfolio]:
         return self.sort(metric=metric, reverse=True, names=names, tags=tags)[:k]
 
     def min(self,
             metric: Metrics,
-            names: Union[str, list[str]] = None,
-            tags: Union[str, list[str]] = None) -> BasePortfolio:
+            names: str | list[str] | None = None,
+            tags: str | list[str] | None = None) -> BasePortfolio:
         return self.sort(metric=metric, reverse=False, names=names, tags=tags)[0]
 
     def max(self,
             metric: Metrics,
-            names: Union[str, list[str]] = None,
-            tags: Union[str, list[str]] = None) -> BasePortfolio:
+            names: str | list[str] | None = None,
+            tags: str | list[str] | None = None) -> BasePortfolio:
         return self.sort(metric=metric, reverse=True, names=names, tags=tags)[0]
 
     def summary(self,
-                names: Union[str, list[str]] = None,
-                tags: Union[str, list[str]] = None,
+                names: str | list[str] | None = None,
+                tags: str | list[str] | None = None,
                 formatted: bool = True) -> pd.DataFrame:
         portfolios = self.get_portfolios(names=names, tags=tags)
         return pd.concat([p.summary(formatted=formatted) for p in portfolios], keys=[p.name for p in portfolios],
                          axis=1)
 
     def composition(self,
-                    names: Union[str, list[str]] = None,
-                    tags: Union[str, list[str]] = None) -> pd.DataFrame:
+                    names: str | list[str] | None = None,
+                    tags: str | list[str] | None = None) -> pd.DataFrame:
         portfolios = self.get_portfolios(names=names, tags=tags)
         comp_list = []
         for p in portfolios:
@@ -182,9 +188,9 @@ class Population:
         return df
 
     def plot_cumulative_returns(self, idx=slice(None),
-                                names: Union[str, list[str]] = None,
-                                tags: Union[str, list[str]] = None,
-                                show: bool = True) -> Optional[go.Figure]:
+                                names: str | list[str] | None = None,
+                                tags: str | list[str] | None = None,
+                                show: bool = True) -> go.Figure | None:
         portfolios = self.get_portfolios(names=names, tags=tags)
         df = pd.concat([p.cumulative_returns_df for p in portfolios], axis=1).iloc[:, idx]
         df.columns = [p.name for p in portfolios]
@@ -199,9 +205,9 @@ class Population:
             return fig
 
     def plot_composition(self,
-                         names: Union[str, list[str]] = None,
-                         tags: Union[str, list[str]] = None,
-                         show: bool = True) -> Optional[go.Figure]:
+                         names: str | list[str] | None = None,
+                         tags: str | list[str] | None = None,
+                         show: bool = True) -> go.Figure | None:
         df = self.composition(names=names, tags=tags).T
         fig = px.bar(df, x=df.index, y=df.columns, title='Portfolios Composition')
         if show:
@@ -215,11 +221,11 @@ class Population:
                      z: Metrics = None,
                      hover_metrics: list[Metrics] = None,
                      fronts: bool = False,
-                     color_scale: Union[Metrics, str] = None,
-                     names: Union[str, list[str]] = None,
-                     tags: Union[str, list[str]] = None,
+                     color_scale: Metrics | str | None = None,
+                     names: str | list[str] | None = None,
+                     tags: str | list[str] | None = None,
                      title='Portfolios',
-                     show: bool = True) -> Optional[go.Figure]:
+                     show: bool = True) -> go.Figure | None:
         portfolios = self.get_portfolios(names=names, tags=tags)
         num_fmt = ':.3f'
         hover_data = {x.value: num_fmt,

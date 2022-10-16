@@ -1,13 +1,11 @@
 import datetime as dt
 import numpy as np
-from numba import jit
 
 __all__ = ['prices_rebased',
            'portfolio_returns',
            'rand_weights',
            'rand_weights_dirichlet',
            'walk_forward']
-
 
 
 def prices_rebased(returns: np.array) -> np.array:

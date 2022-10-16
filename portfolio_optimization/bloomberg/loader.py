@@ -1,5 +1,4 @@
 import logging
-from typing import Union
 from pathlib import Path
 import datetime as dt
 import pandas as pd
@@ -11,7 +10,7 @@ __all__ = ['save_bloomberg_prices',
            'load_prices']
 
 
-def save_bloomberg_prices(file: Union[Path, str],
+def save_bloomberg_prices(file: Path | str,
                           tickers: list[str],
                           date_from: dt.date,
                           date_to: dt.date):
@@ -28,7 +27,7 @@ def save_bloomberg_prices(file: Union[Path, str],
     logger.info(f'Bloomberg prices saved in {file}')
 
 
-def load_prices(file: Union[Path, str]) -> pd.DataFrame:
+def load_prices(file: Path | str) -> pd.DataFrame:
     """
     Read bloomberg prices saved in prices.csv and return a DataFrame
     :param file: the path of the prices csv file

@@ -2,16 +2,14 @@ import datetime as dt
 import numpy as np
 import time
 
-from portfolio_optimization import (Assets,
-                                    load_prices,
-                                    load_assets,
-                                    load_train_test_assets,
-                                    TEST_PRICES_PATH)
+from portfolio_optimization.paths import *
+from portfolio_optimization.assets import *
+from portfolio_optimization.loader import *
+from portfolio_optimization.bloomberg.loader import *
 
 
 def test_assets_class():
     prices = load_prices(file=TEST_PRICES_PATH).iloc[:, :30]
-
     start_date = dt.date(2017, 1, 1)
     assets = Assets(prices=prices,
                     start_date=start_date,
@@ -50,10 +48,12 @@ def test_assets_class():
     for i, name in enumerate(assets.names):
         assert costs.get(name, 0) == costs_array[i]
 
+    assert assets == assets
+    assert hash(assets) == hash(assets)
+
 
 def test_load_assets():
     prices = load_prices(file=TEST_PRICES_PATH)
-
     correlation_threshold = 0.99
     random_selection = 15
     pre_selection_number = 10
@@ -75,10 +75,8 @@ def test_load_assets():
 
 def test_load_train_test_assets():
     prices = load_prices(file=TEST_PRICES_PATH)
-
     train_period = (dt.date(2016, 1, 1), dt.date(2017, 1, 1))
     test_period = (dt.date(2017, 1, 1), dt.date(2018, 1, 1))
-
     train_assets, test_assets = load_train_test_assets(prices=prices,
                                                        train_period=train_period,
                                                        test_period=test_period,
@@ -94,7 +92,6 @@ def test_load_train_test_assets():
 
 def test_load_assets_speed():
     prices = load_prices(file=TEST_PRICES_PATH)
-
     correlation_threshold = 0.99
     pre_selection_number = 10
 

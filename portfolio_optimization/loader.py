@@ -1,5 +1,4 @@
 import logging
-from typing import Optional
 import datetime as dt
 import numpy as np
 import pandas as pd
@@ -20,11 +19,11 @@ def pre_selection(assets: Assets,
                   k: int,
                   correlation_threshold: float = 0) -> list[str]:
     """
-    Assets Preselection Process 2 from "Large-Scale Portfolio Optimization Using Multiobjective
+    Assets Preselection Process 2 from "Large-Scale Portfolio Optimization Using Multi-objective
     Evolutionary Algorithms and Preselection Methods" by B.Y. Qu and Q.Zhou - 2017.
 
     Good single asset (high return and low risk) is likely to contribute to the final optimized portfolio.
-    Each asset is considered as a portfolio and these assets are ranked using the nondomination sorting method.
+    Each asset is considered as a portfolio and these assets are ranked using the non-domination sorting method.
     The selection is based on the ranks assigned to each asset until the number of selected assets reaches
     the user-defined number.
 
@@ -32,7 +31,7 @@ def pre_selection(assets: Assets,
     assets has the potential to reduce the risk. Therefore, negatively correlated pairs of assets are also considered.
 
     We find the portfolio with minimum variance obtained by the pair of negatively correlated assets. We then includes
-    it in the nondomination sorting process.
+    it in the non-domination sorting process.
 
     ptf_variance = 𝜎1^2 𝑤1^2 + 𝜎2^2 𝑤2^2 + 2 𝜎12 𝑤1 𝑤2 (1)
     with 𝑤1 + 𝑤2 = 1
@@ -45,7 +44,7 @@ def pre_selection(assets: Assets,
     :param k: minimum number of assets to pre-select. If k is reached before the end of the current front, we will
            the remaining assets of the current front. We do that because all assets in the same front have same rank
     :param correlation_threshold: asset pair with a correlation below correlation_threshold are included in the
-           nondomination sorting, default is 0
+           non-domination sorting, default is 0
     """
 
     if k >= assets.asset_nb:
@@ -80,7 +79,7 @@ def pre_selection(assets: Assets,
     while i < len(population.fronts) and len(new_assets_idx) < k:
         front = population.fronts[i]
         for idx in front:
-            new_assets_idx.update(population.portfolios[idx].assets_index)
+            new_assets_idx.update(population[idx].assets_index)
         i += 1
 
     new_assets_names = list(assets.prices.columns[list(new_assets_idx)])
@@ -89,16 +88,16 @@ def pre_selection(assets: Assets,
 
 
 def load_assets(prices: pd.DataFrame,
-                start_date: Optional[dt.date] = None,
-                end_date: Optional[dt.date] = None,
-                asset_missing_threshold: float = None,
-                dates_missing_threshold: float = None,
-                names_to_keep: Optional[list[str]] = None,
-                random_selection: Optional[int] = None,
-                removal_correlation: float = None,
-                pre_selection_number: Optional[int] = None,
-                pre_selection_correlation: Optional[float] = None,
-                name: Optional[str] = 'assets',
+                start_date: dt.date | None = None,
+                end_date: dt.date | None = None,
+                asset_missing_threshold: float | None = None,
+                dates_missing_threshold: float | None = None,
+                names_to_keep: list[str] | np.ndarray | None = None,
+                random_selection: int | None = None,
+                removal_correlation: float | None = None,
+                pre_selection_number: int | None = None,
+                pre_selection_correlation: float | None = None,
+                name: str | None = None,
                 verbose: bool = True) -> Assets:
     """
     Load Assets form multiple periods
@@ -110,15 +109,16 @@ def load_assets(prices: pd.DataFrame,
     :param names_to_keep: asset names to keep in the final DataFrame
     :param random_selection: number of assets to randomly keep in the final DataFrame
     :param removal_correlation: when two assets have a correlation above this threshold,
-            we keep the asset with higher returns.
+            we keep the asset with higher returns
     :param pre_selection_number: number of assets to pre-select using the Assets Preselection Process
     :param pre_selection_correlation: asset pair with a correlation below this threshold are included in the
-           nondomination sorting of the pre selection method.
+           non-domination sorting of the pre-selection method
     :param name: name of the Assets class
     :param verbose: True to print logging info
     """
 
-    assets = Assets(prices=prices,
+    assets = Assets(name=name,
+                    prices=prices,
                     start_date=start_date,
                     end_date=end_date,
                     asset_missing_threshold=asset_missing_threshold,
@@ -126,7 +126,6 @@ def load_assets(prices: pd.DataFrame,
                     names_to_keep=names_to_keep,
                     random_selection=random_selection,
                     correlation_threshold=removal_correlation,
-                    name=name,
                     verbose=verbose)
 
     if pre_selection_number is not None or pre_selection_correlation is not None:
@@ -137,14 +136,14 @@ def load_assets(prices: pd.DataFrame,
                                          k=pre_selection_number,
                                          correlation_threshold=pre_selection_correlation)
         # Reloading Assets after removing assets discarded form the pre-selection process
-        assets = Assets(prices=prices,
+        assets = Assets(name=name,
+                        prices=prices,
                         start_date=start_date,
                         end_date=end_date,
                         asset_missing_threshold=asset_missing_threshold,
                         dates_missing_threshold=dates_missing_threshold,
                         correlation_threshold=None,
                         names_to_keep=new_assets_names,
-                        name=name,
                         verbose=verbose)
 
     return assets
@@ -153,14 +152,14 @@ def load_assets(prices: pd.DataFrame,
 def load_train_test_assets(prices: pd.DataFrame,
                            train_period: (dt.date, dt.date),
                            test_period: (dt.date, dt.date),
-                           asset_missing_threshold: float = None,
-                           dates_missing_threshold: float = None,
-                           names_to_keep: Optional[list[str]] = None,
-                           random_selection: Optional[int] = None,
-                           removal_correlation: float = None,
-                           pre_selection_number: Optional[int] = None,
-                           pre_selection_correlation: Optional[float] = None,
-                           verbose: bool = True) -> (Assets, Assets):
+                           asset_missing_threshold: float | None = None,
+                           dates_missing_threshold: float | None = None,
+                           names_to_keep: list[str] | np.ndarray | None = None,
+                           random_selection: int | None = None,
+                           removal_correlation: float | None = None,
+                           pre_selection_number: int | None = None,
+                           pre_selection_correlation: float | None = None,
+                           verbose: bool = True) -> tuple[Assets, Assets]:
     """
     Load Assets form multiple periods
     :param prices: DataFrame of asset prices. Index has to be DateTime and columns names are the assets names
@@ -171,10 +170,10 @@ def load_train_test_assets(prices: pd.DataFrame,
     :param names_to_keep: asset names to keep in the final DataFrame
     :param random_selection: number of assets to randomly keep in the final DataFrame
     :param removal_correlation: when two assets have a correlation above this threshold,
-            we keep the asset with higher returns.
+            we keep the asset with higher returns
     :param pre_selection_number: number of assets to pre-select using the Assets Preselection Process
     :param pre_selection_correlation: asset pair with a correlation below this threshold are included in the
-           nondomination sorting of the pre selection method.
+           non-domination sorting of the pre-selection method
     :param verbose: True to print logging info
     :return a tuple of train Assets and test Assets
     """
