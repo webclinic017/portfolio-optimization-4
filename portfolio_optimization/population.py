@@ -18,15 +18,16 @@ logger = logging.getLogger('portfolio_optimization.population')
 
 
 class Population:
-    def __init__(self, portfolios: list[BasePortfolio] | None = None):
+    def __init__(self, portfolios: list[Portfolio | MultiPeriodPortfolio] | None = None):
         self.hashmap = self._hashmap(portfolios=portfolios)
 
     @staticmethod
-    def _hashmap(portfolios: list[BasePortfolio] | None) -> Dict[str, BasePortfolio]:
+    def _hashmap(portfolios: list[Portfolio | MultiPeriodPortfolio] | None) -> Dict[str,
+                                                                                    Portfolio | MultiPeriodPortfolio]:
         hashmap = {}
         if portfolios is not None:
             for p in portfolios:
-                if not isinstance(p, BasePortfolio):
+                if not isinstance(p, (BasePortfolio, Portfolio, MultiPeriodPortfolio)):
                     raise TypeError(f'Portfolio has wrong type {type(p)}')
                 if p.name in hashmap:
                     raise KeyError(f'portfolio {p.name} is in duplicate')
@@ -34,11 +35,11 @@ class Population:
         return hashmap
 
     @property
-    def portfolios(self) -> list[BasePortfolio]:
+    def portfolios(self) -> list[Portfolio | MultiPeriodPortfolio]:
         return list(self.hashmap.values())
 
     @portfolios.setter
-    def portfolios(self, value: list[BasePortfolio] | None = None) -> None:
+    def portfolios(self, value: list[Portfolio | MultiPeriodPortfolio] | None = None) -> None:
         self.hashmap = self._hashmap(portfolios=value)
 
     def __str__(self) -> str:
@@ -50,13 +51,14 @@ class Population:
     def __len__(self) -> int:
         return len(self.hashmap)
 
-    def __getitem__(self, key: int | slice) -> BasePortfolio | list[BasePortfolio]:
+    def __getitem__(self, key: int | slice) -> Portfolio | MultiPeriodPortfolio | list[Portfolio
+                                                                                       | MultiPeriodPortfolio]:
         if isinstance(key, slice) or key < 0:
             return list(self.hashmap.values())[key]
         return self.hashmap[next(islice(self.hashmap, key, None))]
 
-    def __setitem__(self, key: int, value: BasePortfolio) -> None:
-        if not isinstance(value, BasePortfolio):
+    def __setitem__(self, key: int, value: Portfolio | MultiPeriodPortfolio) -> None:
+        if not isinstance(value, (BasePortfolio, Portfolio, MultiPeriodPortfolio)):
             raise TypeError(f'Cannot set a value with type {type(value)}')
         new_name = value.name
         old_name = list(self.hashmap.keys())[key]
@@ -72,22 +74,22 @@ class Population:
     def __delitem__(self, key: int) -> None:
         del self.hashmap[next(islice(self.hashmap, key, None))]
 
-    def __iter__(self) -> Iterator[BasePortfolio]:
+    def __iter__(self) -> Iterator[Portfolio | MultiPeriodPortfolio]:
         return iter(self.hashmap.values())
 
-    def __contains__(self, value: BasePortfolio) -> bool:
+    def __contains__(self, value: Portfolio | MultiPeriodPortfolio) -> bool:
         if not isinstance(value, BasePortfolio):
             return False
         return value.name in self.hashmap
 
-    def append(self, value: BasePortfolio) -> None:
-        if not isinstance(value, BasePortfolio):
+    def append(self, value: Portfolio | MultiPeriodPortfolio) -> None:
+        if not isinstance(value, (Portfolio, MultiPeriodPortfolio)):
             raise TypeError(f'Cannot append a value with type {type(value)}')
         if value.name in self.hashmap:
             raise KeyError(f'portfolio {value.name} is already in the population')
         self.hashmap[value.name] = value
 
-    def get(self, name: str) -> BasePortfolio:
+    def get(self, name: str) -> Portfolio | MultiPeriodPortfolio:
         try:
             return self.hashmap[name]
         except KeyError:
@@ -111,7 +113,7 @@ class Population:
 
     def get_portfolios(self,
                        names: str | list[str] | None = None,
-                       tags: str | list[str] | None = None) -> list[BasePortfolio]:
+                       tags: str | list[str] | None = None) -> list[Portfolio | MultiPeriodPortfolio]:
         if tags is None and names is None:
             return self.portfolios
         if names is not None:
@@ -133,33 +135,33 @@ class Population:
              metric: Metrics,
              reverse: bool = False,
              names: str | list[str] | None = None,
-             tags: str | list[str] | None = None) -> list[BasePortfolio]:
+             tags: str | list[str] | None = None) -> list[Portfolio | MultiPeriodPortfolio]:
         portfolios = self.get_portfolios(names=names, tags=tags)
         return sorted(portfolios, key=lambda x: x.__getattribute__(metric.value), reverse=reverse)
 
     def k_min(self, metric: Metrics,
               k: int,
               names: str | list[str] | None = None,
-              tags: str | list[str] | None = None) -> list[BasePortfolio]:
+              tags: str | list[str] | None = None) -> list[Portfolio | MultiPeriodPortfolio]:
         return self.sort(metric=metric, reverse=False, names=names, tags=tags)[:k]
 
     def k_max(self,
               metric: Metrics,
               k: int,
               names: str | list[str] | None = None,
-              tags: str | list[str] | None = None) -> list[BasePortfolio]:
+              tags: str | list[str] | None = None) -> list[Portfolio | MultiPeriodPortfolio]:
         return self.sort(metric=metric, reverse=True, names=names, tags=tags)[:k]
 
     def min(self,
             metric: Metrics,
             names: str | list[str] | None = None,
-            tags: str | list[str] | None = None) -> BasePortfolio:
+            tags: str | list[str] | None = None) -> Portfolio | MultiPeriodPortfolio:
         return self.sort(metric=metric, reverse=False, names=names, tags=tags)[0]
 
     def max(self,
             metric: Metrics,
             names: str | list[str] | None = None,
-            tags: str | list[str] | None = None) -> BasePortfolio:
+            tags: str | list[str] | None = None) -> Portfolio | MultiPeriodPortfolio:
         return self.sort(metric=metric, reverse=True, names=names, tags=tags)[0]
 
     def summary(self,

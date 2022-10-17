@@ -9,7 +9,6 @@ from portfolio_optimization.utils.sorting import *
 from portfolio_optimization.assets import *
 from portfolio_optimization.portfolio import *
 from portfolio_optimization.paths import *
-from portfolio_optimization.bloomberg.loader import *
 
 
 def test_portfolio_metrics():
@@ -62,8 +61,8 @@ def test_portfolio_metrics():
     assert portfolio.plot_rolling_sharpe(days=20, show=False)
     assert isinstance(portfolio.composition, pd.DataFrame)
     assert portfolio.plot_composition(show=False)
-    assert isinstance(portfolio.summary(), pd.core.series.Series)
-    assert isinstance(portfolio.summary(formatted=False), pd.core.series.Series)
+    assert isinstance(portfolio.summary(), pd.Series)
+    assert isinstance(portfolio.summary(formatted=False), pd.Series)
     assert portfolio.get_weight(asset_name=portfolio.assets_names[5])
 
 

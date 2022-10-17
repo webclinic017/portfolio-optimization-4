@@ -1,3 +1,3 @@
-from .tools import walk_forward
+from .tools import walk_forward, load_prices
 
-__all__ = ['walk_forward']
+__all__ = ['walk_forward', 'load_prices']

@@ -3,11 +3,9 @@ from .assets import Assets
 from .portfolio import Portfolio, MultiPeriodPortfolio
 from .population import Population
 from .loader import load_assets, load_train_test_assets
-from .utils import walk_forward
+from .utils import walk_forward, load_prices
 from .optimization import *
-from .bloomberg import *
 from .exception import *
-
 from .paths import *
 from .meta import *
 
@@ -17,12 +15,12 @@ __all__ = ['Assets',
            'Population',
            'load_assets',
            'load_train_test_assets',
-           'walk_forward']
+           'walk_forward',
+           'load_prices']
 
 __all__ += paths.__all__
 __all__ += meta.__all__
 __all__ += optimization.__all__
-__all__ += bloomberg.__all__
 __all__ += exception.__all__
 
 

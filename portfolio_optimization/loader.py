@@ -52,7 +52,6 @@ def pre_selection(assets: Assets,
 
     # Build a population of portfolio
     population = Population()
-
     # Add single assets
     for i in range(assets.asset_nb):
         weights = np.zeros(assets.asset_nb)
@@ -110,7 +109,9 @@ def load_assets(prices: pd.DataFrame,
     :param random_selection: number of assets to randomly keep in the final DataFrame
     :param removal_correlation: when two assets have a correlation above this threshold,
             we keep the asset with higher returns
-    :param pre_selection_number: number of assets to pre-select using the Assets Preselection Process
+    :param pre_selection_number: number of assets to pre-select using the Assets Preselection Process 2 from
+           "Large-Scale Portfolio Optimization Using Multi-objective Evolutionary Algorithms and Preselection
+           Methods" by B.Y. Qu and Q.Zhou - 2017
     :param pre_selection_correlation: asset pair with a correlation below this threshold are included in the
            non-domination sorting of the pre-selection method
     :param name: name of the Assets class
@@ -171,7 +172,9 @@ def load_train_test_assets(prices: pd.DataFrame,
     :param random_selection: number of assets to randomly keep in the final DataFrame
     :param removal_correlation: when two assets have a correlation above this threshold,
             we keep the asset with higher returns
-    :param pre_selection_number: number of assets to pre-select using the Assets Preselection Process
+    :param pre_selection_number: number of assets to pre-select using the Assets Preselection Process 2 from
+           "Large-Scale Portfolio Optimization Using Multi-objective Evolutionary Algorithms and Preselection
+           Methods" by B.Y. Qu and Q.Zhou - 2017
     :param pre_selection_correlation: asset pair with a correlation below this threshold are included in the
            non-domination sorting of the pre-selection method
     :param verbose: True to print logging info

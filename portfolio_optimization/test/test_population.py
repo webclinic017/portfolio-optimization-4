@@ -7,7 +7,6 @@ from portfolio_optimization.assets import *
 from portfolio_optimization.portfolio import *
 from portfolio_optimization.population import *
 from portfolio_optimization.paths import *
-from portfolio_optimization.bloomberg import *
 
 
 def load_population() -> Population:

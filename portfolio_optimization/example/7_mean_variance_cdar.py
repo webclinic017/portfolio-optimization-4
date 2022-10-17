@@ -6,7 +6,7 @@ from portfolio_optimization.portfolio import Portfolio
 from portfolio_optimization.population import Population
 from portfolio_optimization.optimization import Optimization
 from portfolio_optimization.loader import load_assets
-from portfolio_optimization.bloomberg.loader import load_prices
+from portfolio_optimization.utils.tools import *
 
 
 def mean_variance_cdar():

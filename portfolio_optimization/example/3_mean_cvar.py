@@ -6,7 +6,7 @@ from portfolio_optimization.portfolio import *
 from portfolio_optimization.population import *
 from portfolio_optimization.optimization import *
 from portfolio_optimization.loader import *
-from portfolio_optimization.bloomberg.loader import *
+from portfolio_optimization.utils.tools import *
 
 if __name__ == '__main__':
     """

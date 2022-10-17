@@ -1,27 +1,18 @@
 import datetime as dt
 
-from portfolio_optimization.meta import InvestmentType, Metrics
-from portfolio_optimization.paths import EXAMPLE_PRICES_PATH
-from portfolio_optimization.portfolio import Portfolio
-from portfolio_optimization.population import Population
-from portfolio_optimization.optimization import Optimization
-from portfolio_optimization.loader import load_assets
-from portfolio_optimization.bloomberg.loader import load_prices
-
+from portfolio_optimization import (EXAMPLE_PRICES_PATH, InvestmentType, Metrics, Portfolio,
+                                    Population, Optimization, load_assets, load_prices)
 
 if __name__ == '__main__':
     """
     Compare the Efficient Frontier of the mean-variance against the mean-cdar optimization
     """
     prices = load_prices(file=EXAMPLE_PRICES_PATH)
-
     assets = load_assets(prices=prices,
                          start_date=dt.date(2018, 1, 1),
                          end_date=dt.date(2019, 1, 1),
-                         random_selection=200,
                          pre_selection_number=100,
                          pre_selection_correlation=0)
-
     population = Population()
 
     model = Optimization(assets=assets,
@@ -74,7 +65,6 @@ if __name__ == '__main__':
 
     # Prices
     population.plot_cumulative_returns(names=[max_sharpe.name, max_cdar_95_ratio.name])
-
 
 
 def mean_cdar_vs_mean_cvar():
@@ -136,5 +126,3 @@ def mean_cdar_vs_mean_cvar():
 
     # Prices
     population.plot_cumulative_returns(names=[max_cdar_95_ratio.name, max_cvar_95_ratio.name])
-
-

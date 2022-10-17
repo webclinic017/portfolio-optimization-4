@@ -5,7 +5,7 @@ import time
 from portfolio_optimization.assets import *
 from portfolio_optimization.loader import *
 from portfolio_optimization.paths import *
-from portfolio_optimization.bloomberg import *
+from portfolio_optimization.utils.tools import *
 
 
 def test_pre_selection():

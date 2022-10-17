@@ -1,7 +1,8 @@
 import datetime as dt
 import numpy as np
 
-from portfolio_optimization import *
+from portfolio_optimization import (EXAMPLE_PRICES_PATH, InvestmentType, Metrics, Portfolio,
+                                    Population, Optimization, load_assets, load_prices)
 
 if __name__ == '__main__':
 
@@ -10,12 +11,10 @@ if __name__ == '__main__':
     inverse vol and single asset portfolios.
     """
     prices = load_prices(file=EXAMPLE_PRICES_PATH)
-
     assets = load_assets(prices=prices,
                          start_date=dt.date(2018, 1, 1),
                          end_date=dt.date(2019, 1, 1),
-                         random_selection=200,
-                         pre_selection_number=100,
+                         pre_selection_number=50,
                          pre_selection_correlation=0)
 
     population = Population()
@@ -35,21 +34,18 @@ if __name__ == '__main__':
 
     # Random portfolios
     for i in range(10):
-        weights = model.random()
-        population.append(Portfolio(weights=weights,
+        population.append(Portfolio(weights=model.random(),
                                     assets=assets,
                                     name=f'random_{i}',
                                     tag='random'))
 
     # Inverse Volatility
-    weights = model.inverse_volatility()
-    population.append(Portfolio(weights=weights,
+    population.append(Portfolio(weights=model.inverse_volatility(),
                                 assets=assets,
                                 name='inverse_volatility'))
 
     # Equal Weighted
-    weights = model.equal_weighted()
-    population.append(Portfolio(weights=weights,
+    population.append(Portfolio(weights=model.equal_weighted(),
                                 assets=assets,
                                 name='equal_weighted'))
 
@@ -61,28 +57,29 @@ if __name__ == '__main__':
                                     name=f'mean_variance_{i}',
                                     tag='mean_variance'))
 
+    # Plot
     population.plot_metrics(x=Metrics.ANNUALIZED_STD,
                             y=Metrics.ANNUALIZED_MEAN,
                             color_scale=Metrics.SHARPE_RATIO,
                             hover_metrics=[Metrics.MAX_DRAWDOWN, Metrics.SORTINO_RATIO])
 
-    # Metrics
+    # Find the portfolio with maximum Sharpe Ratio
     max_sharpe_ptf = population.max(metric=Metrics.SHARPE_RATIO)
     print(max_sharpe_ptf.sharpe_ratio)
     print(max_sharpe_ptf.summary())
 
+    # Find the portfolio with maximum CDaR 95% Ratio
     max_cdar_95_ptf = population.max(metric=Metrics.CDAR_95_RATIO)
-    print(max_cdar_95_ptf.sharpe_ratio)
+    print(max_cdar_95_ptf.cdar_95_ratio)
     print(max_cdar_95_ptf.summary())
 
-    # Composition
-    population.plot_composition(names=[max_sharpe_ptf.name,
-                                       max_cdar_95_ptf.name,
-                                       'equal_weighted',
-                                       'inverse_volatility'])
+    names = [max_sharpe_ptf.name, max_cdar_95_ptf.name, 'equal_weighted', 'inverse_volatility']
 
-    # Prices
-    population.plot_cumulative_returns(names=[max_sharpe_ptf.name,
-                                              max_cdar_95_ptf.name,
-                                              'equal_weighted',
-                                              'inverse_volatility'])
+    # Display summaries:
+    population.summary(names=names)
+
+    # Plot compositions
+    population.plot_composition(names=names)
+
+    # Plot cumulative returns
+    population.plot_cumulative_returns(names=names)

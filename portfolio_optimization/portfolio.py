@@ -27,7 +27,6 @@ class BasePortfolio:
         self.returns = returns
         self.dates = dates
         self.fitness_type = fitness_type
-        self.weights = None
         if validate:
             self._validation()
         if name is None:
@@ -322,7 +321,6 @@ class BasePortfolio:
 
 
 class Portfolio(BasePortfolio):
-
     def __init__(self,
                  weights: np.ndarray,
                  assets: Assets,
@@ -334,7 +332,6 @@ class Portfolio(BasePortfolio):
         self.weights = weights
         returns = self.weights @ self.assets.returns
         self._validation()
-
         super().__init__(returns=returns,
                          dates=assets.dates[1:],
                          name=name,

@@ -1,6 +1,7 @@
 import datetime as dt
 
 from portfolio_optimization import *
+from portfolio_optimization.utils.tools import *
 
 if __name__ == '__main__':
     """

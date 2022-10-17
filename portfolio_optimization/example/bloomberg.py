@@ -6,8 +6,7 @@ from xbbg import blp
 
 logger = logging.getLogger('portfolio_optimization.loader')
 
-__all__ = ['save_bloomberg_prices',
-           'load_prices']
+__all__ = ['save_bloomberg_prices']
 
 
 def save_bloomberg_prices(file: Path | str,
@@ -27,16 +26,6 @@ def save_bloomberg_prices(file: Path | str,
     logger.info(f'Bloomberg prices saved in {file}')
 
 
-def load_prices(file: Path | str) -> pd.DataFrame:
-    """
-    Read bloomberg prices saved in prices.csv and return a DataFrame
-    :param file: the path of the prices csv file
-    """
-    df = pd.read_csv(file, sep=',', index_col=0)
-    df.index = pd.to_datetime(df.index, format='%Y-%m-%d')
-    return df
-
-
 if __name__ == '__main__':
     answer = input('Are you sure to reload bloomberg data? [yes/no]')
     if answer == 'yes':
@@ -45,4 +34,3 @@ if __name__ == '__main__':
                               tickers=list(tickers_df['ticker'].unique()),
                               date_from=dt.date(2018, 1, 1),
                               date_to=dt.date.today())
-        print(load_prices(file=r'./data/prices.csv'))

@@ -1,11 +1,14 @@
 import datetime as dt
+from pathlib import Path
 import numpy as np
+import pandas as pd
 
 __all__ = ['prices_rebased',
            'portfolio_returns',
            'rand_weights',
            'rand_weights_dirichlet',
-           'walk_forward']
+           'walk_forward',
+           'load_prices']
 
 
 def prices_rebased(returns: np.array) -> np.array:
@@ -73,3 +76,13 @@ def walk_forward(start_date: dt.date,
                 test_end = end_date
         yield (train_start, train_end), (test_start, test_end)
         train_start = train_start + dt.timedelta(days=test_duration)
+
+
+def load_prices(file: Path | str) -> pd.DataFrame:
+    """
+    Read prices csv and return a DataFrame
+    :param file: the path of the prices csv file
+    """
+    df = pd.read_csv(file, sep=',', index_col=0)
+    df.index = pd.to_datetime(df.index, format='%Y-%m-%d')
+    return df
