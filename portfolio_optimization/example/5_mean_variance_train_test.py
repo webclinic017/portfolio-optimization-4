@@ -25,7 +25,7 @@ if __name__ == '__main__':
         portfolios_weights = model.mean_variance(population_size=30)
         for i, weights in enumerate(portfolios_weights):
             population.append(Portfolio(weights=weights,
-                                        fitness_type=FitnessType.MEAN_STD,
+                                        fitness_metrics=FitnessType.MEAN_STD,
                                         assets=assets,
                                         name=f'train_{assets.name}_{i}',
                                         tag=f'train_{assets.name}'))
@@ -33,7 +33,7 @@ if __name__ == '__main__':
     # Test the portfolios on the test period
     for portfolio in population.get_portfolios(tags=f'train_{assets_train.name}'):
         population.append(Portfolio(weights=portfolio.weights,
-                                    fitness_type=FitnessType.MEAN_STD,
+                                    fitness_metrics=FitnessType.MEAN_STD,
                                     assets=assets_test,
                                     name=f'test_{assets.name}_{portfolio.name}',
                                     tag=f'test_{assets_test.name}'))

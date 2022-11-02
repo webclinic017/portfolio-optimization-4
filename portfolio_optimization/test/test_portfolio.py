@@ -35,9 +35,9 @@ def test_portfolio_metrics():
     assert abs(portfolio.annualized_mean / portfolio.annualized_downside_std - portfolio.sortino_ratio) < 1e-10
     assert max_drawdown_slow(portfolio.cumulative_returns) == portfolio.max_drawdown
     assert np.array_equal(portfolio.fitness, np.array([portfolio.mean, -portfolio.std]))
-    portfolio.reset_fitness(fitness_type=FitnessType.MEAN_DOWNSIDE_STD)
+    portfolio.fitness_metrics = [Metrics.MEAN, Metrics.DOWNSIDE_STD]
     assert np.array_equal(portfolio.fitness, np.array([portfolio.mean, -portfolio.downside_std]))
-    portfolio.reset_fitness(fitness_type=FitnessType.MEAN_DOWNSIDE_STD_MAX_DRAWDOWN)
+    portfolio.fitness_metrics = [Metrics.MEAN, Metrics.DOWNSIDE_STD, Metrics.MAX_DRAWDOWN]
     assert np.array_equal(portfolio.fitness,
                           np.array([portfolio.mean, -portfolio.downside_std, -portfolio.max_drawdown]))
     assert len(portfolio.assets_index) == n
@@ -107,11 +107,7 @@ def test_portfolio_magic_methods():
     assert ptf_1 == ptf_1
     assert ptf_1 != ptf_2
     assert (ptf_1 > ptf_2) is ptf_1.dominates(ptf_2)
-    assert (ptf_1 < ptf_2) is not ptf_1.dominates(ptf_2)
-    assert (ptf_1 > ptf_2) is (ptf_2 < ptf_1)
-    assert (ptf_1 < ptf_2) is (ptf_2 > ptf_1)
-    assert (ptf_1 >= ptf_2) is (ptf_1 > ptf_2)
-    assert (ptf_1 <= ptf_2) is (ptf_1 < ptf_2)
+    assert (ptf_1 < ptf_2) is ptf_2.dominates(ptf_1)
 
 
 def test_portfolio_dominate():
@@ -126,10 +122,10 @@ def test_portfolio_dominate():
         weights_1 = rand_weights(n=assets.asset_nb)
         weights_2 = rand_weights(n=assets.asset_nb)
         portfolio_1 = Portfolio(weights=weights_1,
-                                fitness_type=FitnessType.MEAN_DOWNSIDE_STD_MAX_DRAWDOWN,
+                                fitness_metrics=[Metrics.MEAN, Metrics.DOWNSIDE_STD, Metrics.MAX_DRAWDOWN],
                                 assets=assets)
         portfolio_2 = Portfolio(weights=weights_2,
-                                fitness_type=FitnessType.MEAN_DOWNSIDE_STD_MAX_DRAWDOWN,
+                                fitness_metrics=[Metrics.MEAN, Metrics.DOWNSIDE_STD, Metrics.MAX_DRAWDOWN],
                                 assets=assets)
 
         # Doesn't dominate itself (same front)

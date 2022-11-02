@@ -20,7 +20,7 @@ def load_population() -> Population:
     for i in range(100):
         weights = rand_weights(n=assets.asset_nb, zeros=assets.asset_nb - 10)
         portfolio = Portfolio(weights=weights,
-                              fitness_type=FitnessType.MEAN_DOWNSIDE_STD_MAX_DRAWDOWN,
+                              fitness_metrics=FitnessType.MEAN_DOWNSIDE_STD_MAX_DRAWDOWN,
                               assets=assets,
                               name=str(i))
         population.append(portfolio)

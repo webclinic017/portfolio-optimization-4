@@ -73,7 +73,12 @@ if __name__ == '__main__':
     print(max_cdar_95_ptf.cdar_95_ratio)
     print(max_cdar_95_ptf.summary())
 
-    names = [max_sharpe_ptf.name, max_cdar_95_ptf.name, 'equal_weighted', 'inverse_volatility']
+    # Combination of the two portfolio
+    ptf = max_sharpe_ptf * 0.5 + max_cdar_95_ptf * 0.5
+    ptf.name = 'sharpe_cdar'
+    population.append(ptf)
+
+    names = [max_sharpe_ptf.name, max_cdar_95_ptf.name, ptf.name, 'equal_weighted', 'inverse_volatility']
 
     # Display summaries:
     population.summary(names=names)
@@ -83,3 +88,49 @@ if __name__ == '__main__':
 
     # Plot cumulative returns
     population.plot_cumulative_returns(names=names)
+
+from dataclasses import dataclass
+
+class Test2:
+    def __init__(self, a:int):
+        self._a = a
+
+    @property
+    def a(self):
+        return self._a
+
+
+@dataclass(frozen=True)
+class Test:
+    a: int
+
+
+t = Test(a=1)
+t.a = 3
+
+t2=Test2(a=1)
+t2.a = 2
+
+# descriptors.py
+class V:
+    def __init__(self):
+        print('__init__')
+    def __set_name__(self, owner, name):
+        print(f'__set_name__(owner={owner}, name={name})')
+        self.a = name
+    def __get__(self, obj, type=None) -> object:
+        print("accessing the attribute to get the value")
+        return self.a
+    def __set__(self, obj, value) -> None:
+        print("accessing the attribute to set the value")
+        raise AttributeError("Cannot change the value")
+
+class Foo():
+    a = V()
+
+
+c = Foo()
+del c.__setattr__
+
+c.a
+c.a = 1

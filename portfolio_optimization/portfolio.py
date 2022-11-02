@@ -22,21 +22,38 @@ class BasePortfolio:
                  dates: np.ndarray,
                  name: str | None = None,
                  tag: str | None = None,
-                 fitness_type: FitnessType = FitnessType.MEAN_STD,
+                 fitness_metrics: list[Metrics] | None = None,
                  validate: bool = True):
-        self.returns = returns
-        self.dates = dates
-        self.fitness_type = fitness_type
+        self._name = name if name is not None else str(id(self))
+        self._returns = returns
+        self._dates = dates
+        self.fitness_metrics = fitness_metrics if fitness_metrics is not None else [Metrics.MEAN, Metrics.STD]
+        self.tag = tag if tag is not None else self._name
         if validate:
             self._validation()
-        if name is None:
-            self.name = str(id(self))
-        else:
-            self.name = name
-        if tag is None:
-            self.tag = self.name
-        else:
-            self.tag = tag
+
+    @property
+    def name(self):
+        return self._name
+
+    @property
+    def returns(self):
+        return self._returns
+
+    @property
+    def dates(self):
+        return self._dates
+
+    @property
+    def fitness_metrics(self) -> list[Metrics]:
+        return self._fitness_metrics
+
+    @fitness_metrics.setter
+    def fitness_metrics(self, value: list[Metrics]) -> None:
+        if not isinstance(value, list) or len(value) == 0:
+            raise TypeError(f'fitness_metrics should be a non-empty list of Metrics')
+        self._fitness_metrics = [Metrics(v) for v in value]
+        self.__dict__.pop('fitness', None)
 
     def _validation(self) -> None:
         if len(self.returns) != len(self.dates):
@@ -56,7 +73,7 @@ class BasePortfolio:
         return f"<{type(self).__name__} '{self.name}'>"
 
     def __hash__(self) -> int:
-        return hash((self.name, self.fitness_type, tuple(self.dates)))
+        return hash((self.name, tuple(self.fitness_metrics), tuple(self.dates)))
 
     def __eq__(self, other) -> bool:
         return (isinstance(other, BasePortfolio)
@@ -112,24 +129,32 @@ class BasePortfolio:
         return self.returns.std(ddof=1)
 
     @property
+    def annualized_std(self) -> float:
+        return self.std * np.sqrt(AVG_TRADING_DAYS_PER_YEAR)
+
+    @property
     def variance(self) -> float:
         return self.std ** 2
 
     @property
-    def annualized_std(self) -> float:
-        return self.std * np.sqrt(AVG_TRADING_DAYS_PER_YEAR)
+    def annualized_variance(self) -> float:
+        return self.annualized_std ** 2
 
     @cached_property
     def downside_std(self) -> float:
         return downside_std(returns=self.returns)
 
     @property
+    def annualized_downside_std(self) -> float:
+        return self.downside_std * np.sqrt(AVG_TRADING_DAYS_PER_YEAR)
+
+    @property
     def downside_variance(self) -> float:
         return self.downside_std ** 2
 
     @property
-    def annualized_downside_std(self) -> float:
-        return self.downside_std * np.sqrt(AVG_TRADING_DAYS_PER_YEAR)
+    def annualized_downside_variance(self) -> float:
+        return self.annualized_downside_std ** 2
 
     @cached_property
     def max_drawdown(self) -> float:
@@ -177,14 +202,21 @@ class BasePortfolio:
     def fitness(self) -> np.ndarray:
         """
         Fitness of the portfolio that contains the objectives to maximise and/or minimize .
-=        """
-        if self.fitness_type == FitnessType.MEAN_STD:
-            return np.array([self.mean, -self.std])
-        if self.fitness_type == FitnessType.MEAN_DOWNSIDE_STD:
-            return np.array([self.mean, -self.downside_std])
-        if self.fitness_type == FitnessType.MEAN_DOWNSIDE_STD_MAX_DRAWDOWN:
-            return np.array([self.mean, -self.downside_std, -self.max_drawdown])
-        raise ValueError(f'fitness_type {self.fitness_type} should be of type {FitnessType}')
+        """
+        res = []
+        for metric in self.fitness_metrics:
+            if metric in [Metrics.MEAN,
+                          Metrics.ANNUALIZED_MEAN,
+                          Metrics.SHARPE_RATIO,
+                          Metrics.SORTINO_RATIO,
+                          Metrics.CALMAR_RATIO,
+                          Metrics.CDAR_95_RATIO,
+                          Metrics.CVAR_95_RATIO]:
+                sign = 1
+            else:
+                sign = -1
+            res.append(sign * getattr(self, metric.value))
+        return np.array(res)
 
     @cached_property
     def assets_index(self) -> np.ndarray:
@@ -205,15 +237,8 @@ class BasePortfolio:
     def reset(self) -> None:
         attrs = list(self.__dict__.keys())
         for attr in attrs:
-            if attr[0] == '_' and attr != '_portfolios':
-                self.__setattr__(attr, None)
-            elif attr not in ['returns', 'dates', 'name', 'tag', 'validate', 'fitness_type',
-                              'weights', 'assets', '_portfolios']:
+            if attr[0] != '_' and attr not in ['tag', 'validate']:
                 self.__dict__.pop(attr, None)
-
-    def reset_fitness(self, fitness_type: FitnessType) -> None:
-        self.__dict__.pop('fitness', None)
-        self.fitness_type = fitness_type
 
     def metrics(self) -> pd.DataFrame:
         idx = [e.value for e in Metrics]
@@ -326,18 +351,24 @@ class Portfolio(BasePortfolio):
                  assets: Assets,
                  name: str | None = None,
                  tag: str | None = None,
-                 fitness_type: FitnessType = FitnessType.MEAN_STD):
-
-        self.assets = assets
-        self.weights = weights
-        returns = self.weights @ self.assets.returns
+                 fitness_metrics: list[Metrics] | None = None):
+        self._assets = assets
+        self._weights = weights
         self._validation()
-        super().__init__(returns=returns,
+        super().__init__(returns=self.weights @ self.assets.returns,
                          dates=assets.dates[1:],
                          name=name,
                          tag=tag,
-                         fitness_type=fitness_type,
+                         fitness_metrics=fitness_metrics,
                          validate=False)
+
+    @property
+    def assets(self):
+        return self._assets
+
+    @property
+    def weights(self):
+        return self._weights
 
     def _validation(self) -> None:
         self.assets.validate_returns()
@@ -456,14 +487,14 @@ class MultiPeriodPortfolio(BasePortfolio):
                  portfolios: list[Portfolio] | None = None,
                  name: str | None = None,
                  tag: str | None = None,
-                 fitness_type: FitnessType = FitnessType.MEAN_STD):
+                 fitness_metrics: list[Metrics] | None = None):
         portfolios, returns, dates = self._initialize(portfolios=portfolios)
         self._portfolios = portfolios
         super().__init__(returns=returns,
                          dates=dates,
                          name=name,
                          tag=tag,
-                         fitness_type=fitness_type,
+                         fitness_metrics=fitness_metrics,
                          validate=False)
 
     @staticmethod
@@ -491,8 +522,8 @@ class MultiPeriodPortfolio(BasePortfolio):
     def portfolios(self, value: list[Portfolio] | None = None):
         portfolios, returns, dates = self._initialize(portfolios=value)
         self._portfolios = portfolios
-        self.returns = returns
-        self.dates = dates
+        self._returns = returns
+        self._dates = dates
         self.reset()
 
     def __len__(self) -> int:
@@ -508,8 +539,8 @@ class MultiPeriodPortfolio(BasePortfolio):
         new_portfolios[key] = value
         portfolios, returns, dates = self._initialize(portfolios=new_portfolios)
         self._portfolios = portfolios
-        self.returns = returns
-        self.dates = dates
+        self._returns = returns
+        self._dates = dates
         self.reset()
 
     def __delitem__(self, key: int) -> None:
@@ -517,8 +548,8 @@ class MultiPeriodPortfolio(BasePortfolio):
         del new_portfolios[key]
         portfolios, returns, dates = self._initialize(portfolios=new_portfolios)
         self._portfolios = portfolios
-        self.returns = returns
-        self.dates = dates
+        self._returns = returns
+        self._dates = dates
         self.reset()
 
     def __iter__(self) -> Iterator[Portfolio]:
@@ -530,22 +561,23 @@ class MultiPeriodPortfolio(BasePortfolio):
         return value in self._portfolios
 
     def __neg__(self):
-        return MultiPeriodPortfolio(portfolios=[-p for p in self], tag=self.tag, fitness_type=self.fitness_type)
+        return MultiPeriodPortfolio(portfolios=[-p for p in self], tag=self.tag, fitness_metrics=self.fitness_metrics)
 
     def __abs__(self):
-        return MultiPeriodPortfolio(portfolios=[abs(p) for p in self], tag=self.tag, fitness_type=self.fitness_type)
+        return MultiPeriodPortfolio(portfolios=[abs(p) for p in self], tag=self.tag,
+                                    fitness_metrics=self.fitness_metrics)
 
     def __round__(self, n: int):
         return MultiPeriodPortfolio(portfolios=[p.__round__(n) for p in self], tag=self.tag,
-                                    fitness_type=self.fitness_type)
+                                    fitness_metrics=self.fitness_metrics)
 
     def __floor__(self):
         return MultiPeriodPortfolio(portfolios=[np.floor(p) for p in self], tag=self.tag,
-                                    fitness_type=self.fitness_type)
+                                    fitness_metrics=self.fitness_metrics)
 
     def __trunc__(self):
         return MultiPeriodPortfolio(portfolios=[np.trunc(p) for p in self], tag=self.tag,
-                                    fitness_type=self.fitness_type)
+                                    fitness_metrics=self.fitness_metrics)
 
     def __add__(self, other):
         if not isinstance(other, MultiPeriodPortfolio):
@@ -553,7 +585,7 @@ class MultiPeriodPortfolio(BasePortfolio):
         if len(self) != len(other):
             raise TypeError(f'Cannot add two MultiPeriodPortfolio of different sizes')
         return MultiPeriodPortfolio(portfolios=[p1 + p2 for p1, p2 in zip(self, other)], tag=self.tag,
-                                    fitness_type=self.fitness_type)
+                                    fitness_metrics=self.fitness_metrics)
 
     def __sub__(self, other):
         if not isinstance(other, MultiPeriodPortfolio):
@@ -561,14 +593,14 @@ class MultiPeriodPortfolio(BasePortfolio):
         if len(self) != len(other):
             raise TypeError(f'Cannot subtract two MultiPeriodPortfolio of different sizes')
         return MultiPeriodPortfolio(portfolios=[p1 - p2 for p1, p2 in zip(self, other)], tag=self.tag,
-                                    fitness_type=self.fitness_type)
+                                    fitness_metrics=self.fitness_metrics)
 
     def __mul__(self, other: numbers.Number | list[numbers.Number] | np.ndarray):
         if np.isscalar(other):
             portfolios = [p * other for p in self]
         else:
             portfolios = [p * a for p, a in zip(self, other)]
-        return MultiPeriodPortfolio(portfolios=portfolios, tag=self.tag, fitness_type=self.fitness_type)
+        return MultiPeriodPortfolio(portfolios=portfolios, tag=self.tag, fitness_metrics=self.fitness_metrics)
 
     __rmul__ = __mul__
 
@@ -577,14 +609,14 @@ class MultiPeriodPortfolio(BasePortfolio):
             portfolios = [p // other for p in self]
         else:
             portfolios = [p // a for p, a in zip(self, other)]
-        return MultiPeriodPortfolio(portfolios=portfolios, tag=self.tag, fitness_type=self.fitness_type)
+        return MultiPeriodPortfolio(portfolios=portfolios, tag=self.tag, fitness_metrics=self.fitness_metrics)
 
     def __truediv__(self, other: numbers.Number | list[numbers.Number] | np.ndarray):
         if np.isscalar(other):
             portfolios = [p / other for p in self]
         else:
             portfolios = [p / a for p, a in zip(self, other)]
-        return MultiPeriodPortfolio(portfolios=portfolios, tag=self.tag, fitness_type=self.fitness_type)
+        return MultiPeriodPortfolio(portfolios=portfolios, tag=self.tag, fitness_metrics=self.fitness_metrics)
 
     def append(self, portfolio: Portfolio) -> None:
         if len(self) != 0:
@@ -593,8 +625,8 @@ class MultiPeriodPortfolio(BasePortfolio):
             if start_date < prev_last_date:
                 raise ValueError(f'Portfolios dates should not overlap: {prev_last_date} -> {start_date} ')
         self._portfolios.append(portfolio)
-        self.returns = np.concatenate([self.returns, portfolio.returns], axis=0)
-        self.dates = np.concatenate([self.dates, portfolio.dates], axis=0)
+        self._returns = np.concatenate([self.returns, portfolio.returns], axis=0)
+        self._dates = np.concatenate([self.dates, portfolio.dates], axis=0)
         self.reset()
 
     @property
