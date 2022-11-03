@@ -3,7 +3,6 @@ import datetime as dt
 import numpy as np
 import pandas as pd
 
-from portfolio_optimization.meta import *
 from portfolio_optimization.assets import *
 from portfolio_optimization.population import *
 from portfolio_optimization.portfolio import *
@@ -56,7 +55,7 @@ def pre_selection(assets: Assets,
     for i in range(assets.asset_nb):
         weights = np.zeros(assets.asset_nb)
         weights[i] = 1
-        portfolio = Portfolio(weights=weights, fitness_metrics=FitnessType.MEAN_STD, assets=assets)
+        portfolio = Portfolio(weights=weights, assets=assets)
         population.append(portfolio)
 
     # Add negatively correlated pairs with minimum variance

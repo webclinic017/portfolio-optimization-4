@@ -7,6 +7,7 @@ from portfolio_optimization.assets import *
 from portfolio_optimization.portfolio import *
 from portfolio_optimization.population import *
 from portfolio_optimization.paths import *
+from copy import copy
 
 
 def load_population() -> Population:
@@ -20,7 +21,7 @@ def load_population() -> Population:
     for i in range(100):
         weights = rand_weights(n=assets.asset_nb, zeros=assets.asset_nb - 10)
         portfolio = Portfolio(weights=weights,
-                              fitness_metrics=FitnessType.MEAN_DOWNSIDE_STD_MAX_DRAWDOWN,
+                              fitness_metrics=[Metrics.MEAN, Metrics.DOWNSIDE_STD, Metrics.MAX_DRAWDOWN],
                               assets=assets,
                               name=str(i))
         population.append(portfolio)
@@ -36,7 +37,9 @@ def load_multi_period_portfolio() -> MultiPeriodPortfolio:
                (dt.date(2017, 3, 15), dt.date(2017, 5, 1)),
                (dt.date(2017, 5, 1), dt.date(2017, 8, 1))]
 
-    mpp = MultiPeriodPortfolio(name='mmp')
+    mpp = MultiPeriodPortfolio(name='mmp',
+                               fitness_metrics=[Metrics.MEAN, Metrics.DOWNSIDE_STD, Metrics.MAX_DRAWDOWN],
+                               )
     for i, period in enumerate(periods):
         assets = Assets(prices=prices,
                         start_date=period[0],
@@ -93,10 +96,24 @@ def test_magic_methods():
         pass
     assert len(population) == 100
     new_ptf = population[11]
-    new_ptf.name = 'new_name'
-    population[10] = new_ptf
+    try:
+        new_ptf.name = 'new_name'
+        raise
+    except AttributeError:
+        pass
+    new_ptf_copy = copy(new_ptf)
+    new_ptf_copy.name = 'new_name'
+    population[10] = new_ptf_copy
     assert len(population) == 100
     assert population[10] == new_ptf
+    ptf = copy(new_ptf)
+    ptf.name = 'different_fitness'
+    ptf.fitness_metrics = [Metrics.MEAN, Metrics.DOWNSIDE_STD, Metrics.SORTINO_RATIO]
+    try:
+        population.append(ptf)
+        raise
+    except ValueError:
+        pass
 
 
 def test_non_dominated_sorting():
@@ -130,11 +147,9 @@ def test_multi_period_portfolio():
     population = load_population()
     mpp = load_multi_period_portfolio()
     population.append(mpp)
+
+    assert population.fronts
     assert len(population) == 101
-
-
-
-
 
     assert population.plot_metrics(x=Metrics.ANNUALIZED_STD,
                                    y=Metrics.ANNUALIZED_MEAN,

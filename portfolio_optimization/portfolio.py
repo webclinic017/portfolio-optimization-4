@@ -25,43 +25,13 @@ class BasePortfolio:
                  fitness_metrics: list[Metrics] | None = None,
                  validate: bool = True):
         self._name = name if name is not None else str(id(self))
+        self._frozen = False
         self._returns = returns
         self._dates = dates
         self.fitness_metrics = fitness_metrics if fitness_metrics is not None else [Metrics.MEAN, Metrics.STD]
         self.tag = tag if tag is not None else self._name
         if validate:
             self._validation()
-
-    @property
-    def name(self):
-        return self._name
-
-    @property
-    def returns(self):
-        return self._returns
-
-    @property
-    def dates(self):
-        return self._dates
-
-    @property
-    def fitness_metrics(self) -> list[Metrics]:
-        return self._fitness_metrics
-
-    @fitness_metrics.setter
-    def fitness_metrics(self, value: list[Metrics]) -> None:
-        if not isinstance(value, list) or len(value) == 0:
-            raise TypeError(f'fitness_metrics should be a non-empty list of Metrics')
-        self._fitness_metrics = [Metrics(v) for v in value]
-        self.__dict__.pop('fitness', None)
-
-    def _validation(self) -> None:
-        if len(self.returns) != len(self.dates):
-            raise ValueError(f'returns and dates should be of same size : {len(self.returns)} vs {len(self.dates)}')
-        if not isinstance(self.returns, np.ndarray):
-            raise TypeError('returns should be of type numpy.ndarray')
-        if np.any(np.isnan(self.returns)):
-            raise TypeError('returns should not contain nan')
 
     def __len__(self):
         raise NotImplementedError
@@ -88,6 +58,57 @@ class BasePortfolio:
         if not isinstance(other, BasePortfolio):
             raise TypeError(f">=' not supported between instances of 'Portfolio' and '{type(other)}'")
         return self.__eq__(other) or self.__gt__(other)
+
+    def __copy__(self):
+        cls = self.__class__
+        result = cls.__new__(cls)
+        result.__dict__.update(self.__dict__)
+        result.unfreeze()
+        return result
+
+    def _validation(self) -> None:
+        if len(self.returns) != len(self.dates):
+            raise ValueError(f'returns and dates should be of same size : {len(self.returns)} vs {len(self.dates)}')
+        if not isinstance(self.returns, np.ndarray):
+            raise TypeError('returns should be of type numpy.ndarray')
+        if np.any(np.isnan(self.returns)):
+            raise TypeError('returns should not contain nan')
+
+    @property
+    def name(self):
+        return self._name
+
+    @name.setter
+    def name(self, value: str) -> None:
+        if self._frozen:
+            raise AttributeError(f"can't set attribute 'name' after the Portfolio has been frozen (Portfolios are "
+                                 f"frozen when they are added to a Population)")
+        self._name = value
+
+    @property
+    def returns(self):
+        return self._returns
+
+    @property
+    def dates(self):
+        return self._dates
+
+    @property
+    def fitness_metrics(self) -> list[Metrics]:
+        return self._fitness_metrics
+
+    @fitness_metrics.setter
+    def fitness_metrics(self, value: list[Metrics]) -> None:
+        if not isinstance(value, list) or len(value) == 0:
+            raise TypeError(f'fitness_metrics should be a non-empty list of Metrics')
+        self._fitness_metrics = [Metrics(v) for v in value]
+        self.__dict__.pop('fitness', None)
+
+    def freeze(self):
+        self._frozen = True
+
+    def unfreeze(self):
+        self._frozen = False
 
     @cached_property
     def cumulative_returns(self) -> np.ndarray:

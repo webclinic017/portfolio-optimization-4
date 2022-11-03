@@ -21,27 +21,6 @@ class Population:
     def __init__(self, portfolios: list[Portfolio | MultiPeriodPortfolio] | None = None):
         self.hashmap = self._hashmap(portfolios=portfolios)
 
-    @staticmethod
-    def _hashmap(portfolios: list[Portfolio | MultiPeriodPortfolio] | None) -> Dict[str,
-                                                                                    Portfolio | MultiPeriodPortfolio]:
-        hashmap = {}
-        if portfolios is not None:
-            for p in portfolios:
-                if not isinstance(p, (BasePortfolio, Portfolio, MultiPeriodPortfolio)):
-                    raise TypeError(f'Portfolio has wrong type {type(p)}')
-                if p.name in hashmap:
-                    raise KeyError(f'portfolio {p.name} is in duplicate')
-                hashmap[p.name] = p
-        return hashmap
-
-    @property
-    def portfolios(self) -> list[Portfolio | MultiPeriodPortfolio]:
-        return list(self.hashmap.values())
-
-    @portfolios.setter
-    def portfolios(self, value: list[Portfolio | MultiPeriodPortfolio] | None = None) -> None:
-        self.hashmap = self._hashmap(portfolios=value)
-
     def __str__(self) -> str:
         return f'<Population of {len(self)} portfolios: {self.hashmap.values()}>'
 
@@ -82,12 +61,41 @@ class Population:
             return False
         return value.name in self.hashmap
 
+    @staticmethod
+    def _hashmap(portfolios: list[Portfolio | MultiPeriodPortfolio] | None) -> Dict[str,
+                                                                                    Portfolio | MultiPeriodPortfolio]:
+        hashmap = {}
+        if portfolios is not None and len(portfolios) > 0:
+            fitness_metrics = set(portfolios[0].fitness_metrics)
+            for p in portfolios:
+                if not isinstance(p, (BasePortfolio, Portfolio, MultiPeriodPortfolio)):
+                    raise TypeError(f'Portfolio has wrong type {type(p)}')
+                if p.name in hashmap:
+                    raise KeyError(f'portfolio {p.name} is in duplicate')
+                if set(p.fitness_metrics) != fitness_metrics:
+                    raise ValueError(f'Cannot have a Population of Portfolios with mixed fitness_metrics')
+                hashmap[p.name] = p
+                p.freeze()
+        return hashmap
+
+    @property
+    def portfolios(self) -> list[Portfolio | MultiPeriodPortfolio]:
+        return list(self.hashmap.values())
+
+    @portfolios.setter
+    def portfolios(self, value: list[Portfolio | MultiPeriodPortfolio] | None = None) -> None:
+        self.hashmap = self._hashmap(portfolios=value)
+
     def append(self, value: Portfolio | MultiPeriodPortfolio) -> None:
         if not isinstance(value, (Portfolio, MultiPeriodPortfolio)):
             raise TypeError(f'Cannot append a value with type {type(value)}')
         if value.name in self.hashmap:
             raise KeyError(f'portfolio {value.name} is already in the population')
+        if len(self) != 0 and set(value.fitness_metrics) != set(self[0].fitness_metrics):
+            raise ValueError(f'Cannot have a Population of Portfolios with mixed fitness_metrics')
+        
         self.hashmap[value.name] = value
+        value.freeze()
 
     def get(self, name: str) -> Portfolio | MultiPeriodPortfolio:
         try:

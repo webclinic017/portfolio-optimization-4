@@ -172,7 +172,7 @@ def investment_type_testing(method_name: str,
 
 def costs_testing(method_name: str,
                   target: float,
-                  portfolio_target_name: 'str',
+                  portfolio_target_name: str,
                   threshold: float):
     target_name = method_name.replace('mean', 'target')
     assets = get_assets()
@@ -221,7 +221,7 @@ def costs_testing(method_name: str,
     assert abs(portfolio.weights - portfolio_ref.weights).sum() > 5e-2
 
     # costs and identical prev_weight on top two invested assets --> the top two assets weights stay > 0
-    asset_1 = portfolio_ref.composition.index[0].str
+    asset_1 = portfolio_ref.composition.index[0]
     asset_2 = portfolio_ref.composition.index[1]
     costs = {asset_1: 0.2,
              asset_2: 0.5}
