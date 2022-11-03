@@ -9,7 +9,8 @@ if __name__ == '__main__':
 
     start_date = prices.index[int(2 * len(prices) / 3)].date()
     end_date = prices.index[-1].date()
-    target_volatility = 0.025 / np.sqrt(255)
+    target_annualized_volatility = 0.01
+    target_variance = target_annualized_volatility**2 / 255
     train_duration = 300
     test_duration = 30
 
@@ -24,15 +25,14 @@ if __name__ == '__main__':
         train, test = load_train_test_assets(prices=prices,
                                              train_period=train_period,
                                              test_period=test_period,
-                                             removal_correlation=0.90,
-                                             pre_selection_correlation=-0.5,
-                                             pre_selection_number=50,
+                                             pre_selection_number=20,
+                                             pre_selection_correlation=0,
                                              verbose=False)
         try:
             model = Optimization(assets=train,
                                  investment_type=InvestmentType.FULLY_INVESTED,
                                  weight_bounds=(0, None))
-            weights = model.mean_variance(target_volatility=target_volatility)
+            weights = model.mean_variance(target_variance=target_variance)
         except OptimizationError:
             print('OptimizationError')
             continue

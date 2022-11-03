@@ -181,8 +181,8 @@ def load_train_test_assets(prices: pd.DataFrame,
     """
     train_start, train_end = train_period
     test_start, test_end = test_period
-    train_name = f'train_{train_start}-{train_end}'
-    test_name = f'test_{test_start}-{test_end}'
+    train_name = f'assets-{train_start}-{train_end}'
+    test_name = f'assets-{test_start}-{test_end}'
 
     if train_start >= train_end or test_start >= test_end:
         raise ValueError(f'Periods are incorrect')
