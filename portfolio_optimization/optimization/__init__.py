@@ -1,3 +1,5 @@
-from .optimization import Optimization
+from .optimization import Optimization, RiskMeasure, ObjectiveFunction
 
-__all__ = ['Optimization']
+__all__ = ['Optimization',
+           'RiskMeasure',
+           'ObjectiveFunction']

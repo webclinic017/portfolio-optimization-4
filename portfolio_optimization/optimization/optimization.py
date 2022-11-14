@@ -2,6 +2,7 @@ import logging
 import numpy as np
 import cvxpy as cp
 from cvxpy import SolverError
+from cvxpy.constraints.constraint import Constraint
 from scipy.sparse.linalg import ArpackNoConvergence
 from enum import Enum, unique
 
@@ -10,17 +11,25 @@ from portfolio_optimization.assets import *
 from portfolio_optimization.exception import *
 from portfolio_optimization.utils.tools import *
 
-__all__ = ['Optimization']
+__all__ = ['Optimization',
+           'RiskMeasure',
+           'ObjectiveFunction']
 
 logger = logging.getLogger('portfolio_optimization.optimization')
 
 
-@unique
-class RiskMeasures(Enum):
-    VARIANCE = 0
-    SEMI_VARIANCE = 1
-    CVAR = 2
-    CDAR = 3
+class RiskMeasure(Enum):
+    VARIANCE = 'variance'
+    SEMI_VARIANCE = 'semi_variance'
+    CVAR = 'cvar'
+    CDAR = 'cdar'
+
+
+class ObjectiveFunction(Enum):
+    MIN_RISK = 'min_risk'
+    MAX_RETURN = 'max_return'
+    RATIO = 'ratio'
+    UTILITY = 'utility'
 
 
 class Optimization:
@@ -31,7 +40,11 @@ class Optimization:
                                       float | np.ndarray | None] = (None, None),
                  costs: float | np.ndarray | None = None,
                  investment_duration_in_days: int | None = None,
-                 prev_w: np.ndarray | None = None):
+                 prev_w: np.ndarray | None = None,
+                 risk_free_rate: float = 0,
+                 logarithmic_returns: bool = False,
+                 solvers: list[str] | None = None,
+                 solver_params: dict | None = None):
         """
         Convex portfolio optimization
         :param investment_type: investment type (fully invested, market neutral, unconstrained)
@@ -73,10 +86,181 @@ class Optimization:
         self.investment_type = investment_type
         self.weight_bounds = weight_bounds
         self.costs = costs
+        self.risk_free_rate = risk_free_rate
+        self.logarithmic_returns = logarithmic_returns
         self.investment_duration_in_days = investment_duration_in_days
         self.prev_w = prev_w
         self.loaded = True
+        if solvers is None:
+            self.solvers = ['ECOS', 'SCS', 'OSQP', 'CVXOPT']
+        else:
+            self.solvers = solvers
+        if solver_params is None:
+            solver_params = {}
+        self.solver_params = {k: solver_params.get(k, {}) for k in self.solvers}
+        self.N = 1000
         self._validation()
+
+    def optimize(self,
+                 risk_measure: RiskMeasure | str,
+                 objective_function: ObjectiveFunction | str,
+                 gamma: float = 2,
+                 l1_coef: float | None = None,
+                 l2_coef: float | None = None,
+                 min_return: float | list | np.ndarray | None = None,
+                 max_variance: float | list | np.ndarray | None = None,
+                 max_semi_variance: float | list | np.ndarray | None = None,
+                 semi_variance_returns_target: float | np.ndarray | None = None,
+                 max_cvar: float | list | np.ndarray | None = None,
+                 cvar_beta: float = 0.95,
+                 max_cdar: float | list | np.ndarray | None = None,
+                 cdar_beta: float = 0.95,
+                 objective_values: bool = False):
+
+        if isinstance(risk_measure, str):
+            risk_measure = RiskMeasure(risk_measure)
+        if isinstance(objective_function, str):
+            objective_function = ObjectiveFunction(objective_function)
+
+        w = cp.Variable(self.assets.asset_nb)
+        n = self.assets.date_nb
+
+        constraints = []
+
+        if objective_function == ObjectiveFunction.RATIO:
+            k = cp.Variable()
+            gr = cp.Variable(self.assets.date_nb)
+        else:
+            k = None
+            gr = None
+
+        ret = self._portfolio_expected_return(w=w,
+                                              l1_coef=l1_coef,
+                                              l2_coef=l2_coef,
+                                              k=k,
+                                              gr=gr)
+
+        # min_return constraint
+        if min_return is not None:
+            if k is None:
+                # noinspection PyTypeChecker
+                constraints.append(ret >= min_return)
+            else:
+                # noinspection PyTypeChecker
+                constraints.append(ret >= min_return * k)
+
+        # weight constraints
+        constraints += self._get_weight_constraints(w=w, k=k)
+
+        # risk and risk constraints
+        risk = None
+        parameters_values = []
+        for r_m in RiskMeasure:
+            risk_limit = locals()[f'max_{r_m.value}']
+            # risk_limit = {'max_semi_variance': max_semi_variance}.get(f'max_{r_m.value}')
+            if risk_measure == r_m or risk_limit is not None:
+                risk_func = getattr(self, f'_{r_m.value}_risk')
+                args = {}
+                for arg_name in risk_func.__code__.co_varnames[:risk_func.__code__.co_argcount]:
+                    if arg_name == 'self':
+                        pass
+                    elif arg_name == 'w':
+                        args[arg_name] = w
+                    elif arg_name == 'k':
+                        args[arg_name] = k
+                    else:
+                        args[arg_name] = locals()[arg_name]
+                risk_i, constraints_i = risk_func(**args)
+                constraints += constraints_i
+                if risk_limit is not None:
+                    parameter = cp.Parameter(nonneg=True)
+                    if k is not None:
+                        # noinspection PyTypeChecker
+                        constraints += [risk_i <= parameter * k]
+                    else:
+                        # noinspection PyTypeChecker
+                        constraints += [risk_i <= parameter]
+                    parameters_values.append((parameter, risk_limit))
+                if risk_measure == r_m:
+                    risk = risk_i
+
+        # objectives
+        if objective_function == ObjectiveFunction.MAX_RETURN:
+            # noinspection PyTypeChecker
+            objective = cp.Maximize(ret * self.N)
+        elif objective_function == ObjectiveFunction.MIN_RISK:
+            objective = cp.Minimize(risk * self.N)
+        elif objective_function == ObjectiveFunction.UTILITY:
+            objective = cp.Maximize(ret - gamma * risk)
+        elif objective_function == ObjectiveFunction.RATIO:
+            if self.logarithmic_returns:
+                constraints += [risk <= 1,
+                                cp.constraints.ExpCone(gr, np.ones((n, 1)) @ k, k + self.assets.returns @ w)]
+                # noinspection PyTypeChecker
+                objective = cp.Maximize(ret * self.N)
+            else:
+                # noinspection PyTypeChecker
+                constraints += [self._portfolio_expected_return(w=w, l1_coef=l1_coef, l2_coef=l2_coef)
+                                - self.risk_free_rate * k == 1]
+                objective = cp.Minimize(risk * self.N)
+        else:
+            raise ValueError(f'objective_function {objective_function} is not valid')
+
+        # problem
+        problem = cp.Problem(objective, constraints)
+
+        # results
+        return self._solve_problem(problem=problem,
+                                   w=w,
+                                   k=k,
+                                   parameters_values=parameters_values,
+                                   objective_values=objective_values)
+
+    def _variance_risk(self, w: cp.Variable):
+        v = cp.Variable(nonneg=True)
+        z = np.linalg.cholesky(self.assets.expected_cov)
+        risk = v ** 2
+        constraints = [cp.SOC(v, z.T @ w)]
+        return risk, constraints
+
+    def _semi_variance_risk(self, w: cp.Variable,
+                            semi_variance_returns_target: float | np.ndarray | None = None):
+        if semi_variance_returns_target is None:
+            semi_variance_returns_target = self.assets.expected_returns
+
+            # Additional matrix
+        if (not np.isscalar(semi_variance_returns_target)
+                and semi_variance_returns_target.shape != (len(semi_variance_returns_target), 1)):
+            semi_variance_returns_target = semi_variance_returns_target[:, np.newaxis]
+
+        v = cp.Variable(self.assets.date_nb)
+        risk = cp.sum_squares(v) / (self.assets.date_nb - 1)
+        # noinspection PyTypeChecker
+        constraints = [(self.assets.returns - semi_variance_returns_target).T @ w >= -v,
+                       v >= 0]
+        return risk, constraints
+
+    def _cvar_risk(self, w: cp.Variable, cvar_beta: float):
+        alpha = cp.Variable()
+        v = cp.Variable(self.assets.date_nb)
+        risk = alpha + 1.0 / (self.assets.date_nb * (1 - cvar_beta)) * cp.sum(v)
+        # noinspection PyTypeChecker
+        constraints = [self.assets.returns.T @ w + alpha + v >= 0,
+                       v >= 0]
+        return risk, constraints
+
+    def _cdar_risk(self, w: cp.Variable, cdar_beta: float):
+        alpha = cp.Variable()
+        v = cp.Variable(self.assets.date_nb + 1)
+        z = cp.Variable(self.assets.date_nb)
+        risk = alpha + 1.0 / (self.assets.date_nb * (1 - cdar_beta)) * cp.sum(z)
+        # noinspection PyTypeChecker
+        constraints = [z * self.N >= v[1:] * self.N - alpha * self.N,
+                       z * self.N >= 0,
+                       v[1:] * self.N >= v[:-1] * self.N - self.assets.returns.T @ w * self.N,
+                       v[1:] * self.N >= 0,
+                       v[0] * self.N == 0]
+        return risk, constraints
 
     def update(self, **kwargs):
         """
@@ -185,7 +369,9 @@ class Optimization:
     def _portfolio_expected_return(self,
                                    w: cp.Variable,
                                    l1_coef: float | None = None,
-                                   l2_coef: float | None = None) -> cp.Expression:
+                                   l2_coef: float | None = None,
+                                   k: cp.Variable | None = None,
+                                   gr: cp.Variable | None = None) -> cp.Expression:
         """
         CVXPY Expression of the portfolio expected return with l1 and l2 regularization.
         """
@@ -215,11 +401,16 @@ class Optimization:
         else:
             l2_regularization = l2_coef * cp.sum_squares(w)
 
-        portfolio_return = (self.assets.expected_returns @ w
-                            - portfolio_cost
-                            - l1_regularization
-                            - l2_regularization)
+        if self.logarithmic_returns:
+            if k is not None:
+                # noinspection PyTypeChecker
+                ret = 1 / self.assets.date_nb * cp.sum(gr) - self.risk_free_rate * k
+            else:
+                ret = 1 / self.assets.date_nb * cp.sum(cp.log(1 + self.assets.returns @ w))
+        else:
+            ret = self.assets.expected_returns @ w
 
+        portfolio_return = ret - portfolio_cost - l1_regularization - l2_regularization
         return portfolio_return
 
     def _get_lower_and_upper_bounds(self) -> tuple[np.ndarray, np.ndarray]:
@@ -240,59 +431,6 @@ class Optimization:
 
         return lower_bounds, upper_bounds
 
-    @staticmethod
-    def _solve_problem(problem: cp.Problem, w: cp.Variable) -> tuple[float, np.ndarray]:
-        """
-        Solve CVXPY Problem without variables
-        """
-        try:
-            problem.solve(solver='ECOS')
-            if w.value is None:
-                raise OptimizationError('None return')
-            weights = w.value
-            result = problem.value
-        except (OptimizationError, SolverError, ArpackNoConvergence) as e:
-            logger.warning(f'No solution found: {e}')
-            weights = np.empty(w.shape) * np.nan
-            result = np.nan
-
-        return result, weights
-
-    @staticmethod
-    def _get_optimization_weights(problem: cp.Problem,
-                                  w: cp.Variable,
-                                  parameter: cp.Parameter,
-                                  target: float | np.ndarray) -> np.ndarray:
-        """
-        Solve CVXPY Problem with variables
-        :param problem: CVXPY Problem
-        :param w: CVXPY Variable representing the weights
-        :param parameter: CVXPY Parameter
-        :param target: parameter's value(s)
-        :returns: weights array
-        """
-        if np.isscalar(target):
-            parameter_array = [target]
-        else:
-            parameter_array = target
-
-        weights = []
-        for value in parameter_array:
-            parameter.value = value
-            try:
-                problem.solve(solver='ECOS')
-                if w.value is None:
-                    raise OptimizationError('None return')
-                weights.append(w.value)
-            except (OptimizationError, SolverError, ArpackNoConvergence) as e:
-                logger.warning(f'No solution found for {value:e}: {e}')
-                weights.append(np.empty(w.shape) * np.nan)
-
-        if np.isscalar(target):
-            weights = weights[0]
-
-        return np.array(weights)
-
     def _get_investment_target(self) -> int | None:
         """
         Convert the investment target into 0, 1 or None
@@ -302,6 +440,93 @@ class Optimization:
             return 1
         elif self.investment_type == InvestmentType.MARKET_NEUTRAL:
             return 0
+
+    def _get_weight_constraints(self, w: cp.Variable, k: cp.Variable | None = None) -> list[Constraint]:
+        lower_bounds, upper_bounds = self._get_lower_and_upper_bounds()
+        if k is None:
+            constraints = [w >= lower_bounds,
+                           w <= upper_bounds]
+        else:
+            constraints = [w >= lower_bounds * k,
+                           w <= upper_bounds * k]
+
+        investment_target = self._get_investment_target()
+        if investment_target is not None:
+            if k is None:
+                constraints.append(cp.sum(w) == investment_target)
+            else:
+                # noinspection PyTypeChecker
+                constraints.append(cp.sum(w) == investment_target * k)
+
+        return constraints
+
+    def _solve_problem(self,
+                       problem: cp.Problem,
+                       w: cp.Variable,
+                       parameters_values: list[tuple[cp.Parameter, float | np.ndarray]] | None = None,
+                       k: cp.Variable | None = None,
+                       objective_values: bool = False) -> tuple[np.ndarray | float, np.ndarray] | np.ndarray:
+        """
+        Solve CVXPY Problem with variables
+        :param problem: CVXPY Problem
+        :param w: CVXPY Variable representing the weights
+        :returns: weights array
+        """
+        n = 0
+        is_scalar = True
+        if parameters_values is None or len(parameters_values) == 0:
+            new_parameters_values = [(None, None)]
+        else:
+            new_parameters_values = []
+            prev_n = None
+            for parameter, value in parameters_values:
+                if np.isscalar(value):
+                    n = 0
+                    new_parameters_values.append((parameter, [value]))
+                else:
+                    is_scalar = False
+                    n = len(value)
+                    new_parameters_values.append((parameter, value))
+                if prev_n is not None and prev_n != n:
+                    raise ValueError(f'All elements from parameters_values should have same length')
+                prev_n = n
+
+        weights = []
+        results = []
+        n = max(1, n)
+        for i in range(n):
+            for parameter, values in new_parameters_values:
+                if parameter is not None:
+                    parameter.value = values[i]
+            for solver in self.solvers:
+                try:
+                    problem.solve(solver=solver, **self.solver_params[solver])
+                except (SolverError, ArpackNoConvergence) as e:
+                    logger.warning(f'Solver {solver} failed with error: {e}')
+                    pass
+                if w.value is not None:
+                    break
+            if w.value is None:
+                raise OptimizationError('No solution found')
+
+            if k is None:
+                weights.append(np.array(w.value, dtype=float))
+            else:
+                weights.append(np.array(w.value / k.value, dtype=float))
+
+            results.append(problem.value)
+
+        if is_scalar:
+            weights = weights[0]
+            results = results[0]
+        else:
+            weights = np.array(weights, dtype=float)
+            results = np.array(results, dtype=float)
+
+        if objective_values:
+            return results, weights
+        else:
+            return weights
 
     def maximum_sharpe(self) -> np.ndarray:
         """
@@ -327,13 +552,10 @@ class Optimization:
         objective = cp.Minimize(cp.quad_form(w, self.assets.expected_cov))
 
         # Constraints
-        lower_bounds, upper_bounds = self._get_lower_and_upper_bounds()
+        constraints = self._get_weight_constraints(w=w, k=k)
         # noinspection PyTypeChecker
-        constraints = [self._portfolio_expected_return(w=w) == 1,
-                       w >= lower_bounds * k,
-                       w <= upper_bounds * k,
-                       cp.sum(w) == k,
-                       k >= 0]
+        constraints.extend([self._portfolio_expected_return(w=w) == 1,
+                            k >= 0])
 
         # Problem
         problem = cp.Problem(objective, constraints)
@@ -349,36 +571,7 @@ class Optimization:
 
         return weights
 
-    def minimum_variance(self) -> tuple[float, np.ndarray]:
-        """
-        Find the asset weights that minimize the portfolio variance and the value of the minimum
-        variance.
-        :returns: the tuple (minimum variance, weights of the minimum variance portfolio)
-        """
-        # Variables
-        w = cp.Variable(self.assets.asset_nb)
-
-        # Objectives
-        portfolio_variance = cp.quad_form(w, self.assets.expected_cov)
-        objective = cp.Minimize(portfolio_variance)
-
-        # Constraints
-        lower_bounds, upper_bounds = self._get_lower_and_upper_bounds()
-        constraints = [w >= lower_bounds,
-                       w <= upper_bounds]
-        investment_target = self._get_investment_target()
-        if investment_target is not None:
-            constraints.append(cp.sum(w) == investment_target)
-
-        # Problem
-        problem = cp.Problem(objective, constraints)
-
-        min_variance, weights = self._solve_problem(problem=problem, w=w)
-
-        return min_variance, weights
-
-    def minimum_semivariance(self,
-                             returns_target: float | np.ndarray | None = None) -> tuple[float, np.ndarray]:
+    def minimum_variance(self, objective_values: bool = False) -> tuple[float, np.ndarray]:
         """
         Find the asset weights that minimize the portfolio semivariance (downside variance) and the value of the minimum
         semivariance
@@ -386,41 +579,27 @@ class Optimization:
         :type returns_target: float or np.ndarray of shape(Number of Assets)
         :returns: the tuple (minimum semivariance, weights of the minimum semivariance portfolio)
         """
-        if returns_target is None:
-            returns_target = self.assets.expected_returns
+        return self.optimize(risk_measure=RiskMeasure.VARIANCE,
+                             objective_function=ObjectiveFunction.MIN_RISK,
+                             objective_values=objective_values)
 
-        # Additional matrix
-        if not np.isscalar(returns_target) and returns_target.shape != (len(returns_target), 1):
-            returns_target = returns_target[:, np.newaxis]
-        b = (self.assets.returns - returns_target) / np.sqrt(self.assets.date_nb)
 
-        # Variables
-        w = cp.Variable(self.assets.asset_nb)
-        p = cp.Variable(self.assets.date_nb, nonneg=True)
-        n = cp.Variable(self.assets.date_nb, nonneg=True)
+    def minimum_semivariance(self,
+                             returns_target: float | np.ndarray | None = None,
+                             objective_values: bool = False) -> tuple[float, np.ndarray]:
+        """
+        Find the asset weights that minimize the portfolio semivariance (downside variance) and the value of the minimum
+        semivariance
+        :param returns_target: the target(s) to distinguish "downside" and "upside" returns
+        :type returns_target: float or np.ndarray of shape(Number of Assets)
+        :returns: the tuple (minimum semivariance, weights of the minimum semivariance portfolio)
+        """
+        return self.optimize(risk_measure=RiskMeasure.SEMI_VARIANCE,
+                             objective_function=ObjectiveFunction.MIN_RISK,
+                             semi_variance_returns_target=returns_target,
+                             objective_values=objective_values)
 
-        # Objectives
-        portfolio_semivariance = cp.sum(cp.square(n))
-        objective = cp.Minimize(portfolio_semivariance)
-
-        # Constraints
-        lower_bounds, upper_bounds = self._get_lower_and_upper_bounds()
-        constraints = [b.T @ w - p + n == 0,
-                       w >= lower_bounds,
-                       w <= upper_bounds]
-
-        investment_target = self._get_investment_target()
-        if investment_target is not None:
-            constraints.append(cp.sum(w) == investment_target)
-
-        # Problem
-        problem = cp.Problem(objective, constraints)
-
-        min_semivariance, weights = self._solve_problem(problem=problem, w=w)
-
-        return min_semivariance, weights
-
-    def minimum_cvar(self, beta: float = 0.95) -> tuple[float, np.ndarray]:
+    def minimum_cvar(self, beta: float = 0.95, objective_values: bool = False) -> tuple[float, np.ndarray]:
         """
         Find the asset weights that minimize the portfolio CVaR (Conditional Value-at-Risk or Expected Shortfall)
         and the value of the minimum CVaR.
@@ -430,35 +609,12 @@ class Optimization:
         :returns: the tuple (minimum CVaR, weights of the minimum CVaR portfolio)
         """
 
-        # Variables
-        w = cp.Variable(self.assets.asset_nb)
-        alpha = cp.Variable()
-        u = cp.Variable(self.assets.date_nb)
+        return self.optimize(risk_measure=RiskMeasure.CVAR,
+                             objective_function=ObjectiveFunction.MIN_RISK,
+                             cvar_beta=beta,
+                             objective_values=objective_values)
 
-        # Objectives
-        portfolio_cvar = alpha + 1.0 / (self.assets.date_nb * (1 - beta)) * cp.sum(u)
-        objective = cp.Minimize(portfolio_cvar)
-
-        # Constraints
-        lower_bounds, upper_bounds = self._get_lower_and_upper_bounds()
-        # noinspection PyTypeChecker
-        constraints = [self.assets.returns.T @ w + alpha + u >= 0,
-                       u >= 0,
-                       w >= lower_bounds,
-                       w <= upper_bounds]
-
-        investment_target = self._get_investment_target()
-        if investment_target is not None:
-            constraints.append(cp.sum(w) == investment_target)
-
-        # Problem
-        problem = cp.Problem(objective, constraints)
-
-        min_cvar, weights = self._solve_problem(problem=problem, w=w)
-
-        return min_cvar, weights
-
-    def minimum_cdar(self, beta: float = 0.95) -> tuple[float, np.ndarray]:
+    def minimum_cdar(self, beta: float = 0.95,  objective_values: bool = False) -> tuple[float, np.ndarray]:
         """
         Find the asset weights that minimize the portfolio CDaR (Conditional Drawdown-at-Risk)
         and the value of the minimum CDaR.
@@ -468,106 +624,104 @@ class Optimization:
         :returns: the tuple (minimum CDaR, weights of the minimum CDaR portfolio)
        """
 
-        # Variables
-        w = cp.Variable(self.assets.asset_nb)
-        alpha = cp.Variable()
-        u = cp.Variable(self.assets.date_nb + 1)
-        z = cp.Variable(self.assets.date_nb)
-
-        # Objectives
-        portfolio_cdar = alpha + 1.0 / (self.assets.date_nb * (1 - beta)) * cp.sum(z)
-        objective = cp.Minimize(portfolio_cdar)
-
-        # Constraints
-        lower_bounds, upper_bounds = self._get_lower_and_upper_bounds()
-        # noinspection PyTypeChecker
-        constraints = [z >= u[1:] - alpha,
-                       z >= 0,
-                       u[1:] >= u[:-1] - self.assets.returns.T @ w,
-                       u[0] == 0,
-                       u[1:] >= 0,
-                       w >= lower_bounds,
-                       w <= upper_bounds]
-
-        investment_target = self._get_investment_target()
-        if investment_target is not None:
-            constraints.append(cp.sum(w) == investment_target)
-
-        # Problem
-        problem = cp.Problem(objective, constraints)
-
-        min_cdar, weights = self._solve_problem(problem=problem, w=w)
-
-        return min_cdar, weights
+        return self.optimize(risk_measure=RiskMeasure.CDAR,
+                             objective_function=ObjectiveFunction.MIN_RISK,
+                             cvar_beta=beta,
+                             objective_values=objective_values)
 
     def mean_variance(self,
                       target_variance: float | list | np.ndarray | None = None,
+                      target_return: float | list | np.ndarray | None = None,
                       population_size: int | None = None,
                       l1_coef: float | None = None,
-                      l2_coef: float | None = None) -> np.ndarray:
-        """
+                      l2_coef: float | None = None,
+                      objective_values: bool = False) -> np.ndarray:
+        r"""
         Optimization along the mean-variance frontier (Markowitz optimization)
-        :param target_variance: the targeted daily variance of the portfolio: the portfolio expected return is maximized
-        under this target constraint
-        :type target_variance: float or list or numpy.ndarray optional
-        :param population_size: number of pareto optimal portfolio weights to compute along the efficient frontier
-        :type population_size: int, optional
-        :param l1_coef: L1 regularisation coefficient. Increasing this coef will reduce the number of non-zero weights.
-                        It is similar to the L1 regularisation in Lasso.
-                        If both l1_coef and l2_coef are strictly positive, it is similar to the regularisation
-                        in Elastic-Net
-        :type l1_coef: float, default to None
-        :param l2_coef: L2 regularisation coefficient. It is similar to the L2 regularisation in Ridge.
-                        If both l1_coef and l2_coef are strictly positive, it is similar to the regularisation in
-                        Elastic-Net
-        :type l1_coef: float, default to None
-        :returns: the portfolio weights that are in the efficient frontier.
-        :rtype: numpy.ndarray of shape (asset number,) if target is a scalar,
+
+        .. math::
+            \begin{align}
+            &\underset{w}{\text{optimize}} & & F(w)\\
+            &\text{s. t.} & & Aw \geq B\\
+            & & & \phi_{i}(w) \leq c_{i}\\
+            \end{align}
+
+        .. math::
+            \begin{aligned}
+            &\underset{w}{\max} & & R (w)\\
+            &\text{s.t.} & & Aw \geq B\\
+            & & &\phi_{i}(w) \leq c_{i} \; \forall \; i \; \in \; [1,13] \\
+            & & & R (w) \geq \overline{\mu}
+            \end{aligned}
+
+        .. math::
+            \begin{aligned}
+            &\underset{w}{\min} & & \phi_{k}(w)\\
+            &\text{s.t.} & & Aw \geq B\\
+            & & &\phi_{i}(w) \leq c_{i} \; \forall \; i \; \in \; [1,13] \\
+            & & & R (w) \geq \overline{\mu}
+            \end{aligned}
+
+        Parameters
+        ----------
+        target_variance: float | list | numpy.ndarray, optional
+                         The targeted daily variance of the portfolio: the portfolio expected return is maximized
+                         under this target constraint
+        population_size: int, optional
+                         Number of pareto optimal portfolio weights to compute along the efficient frontier
+        l1_coef: float, default to None
+                 L1 regularisation coefficient. Increasing this coef will reduce the number of non-zero weights.
+                 It is similar to the L1 regularisation in Lasso.
+                 If both l1_coef and l2_coef are strictly positive, it is similar to the regularisation in Elastic-Net
+        l1_coef: float, default to None
+                 L2 regularisation coefficient. It is similar to the L2 regularisation in Ridge.
+                 If both l1_coef and l2_coef are strictly positive, it is similar to the regularisation in Elastic-Net
+
+
+        Returns
+        -------
+        numpy.ndarray of shape (asset number,) if target is a scalar,
                 otherwise numpy.ndarray of shape (population size, asset number) or (len(target_variance), asset number)
+        the portfolio weights that are in the efficient frontier.
         """
-        self._validate_args(**{k: v for k, v in locals().items() if k != 'self'})
+        # self._validate_args(**{k: v for k, v in locals().items() if k != 'self'})
 
-        # Variables
         w = cp.Variable(self.assets.asset_nb)
+        a = cp.Variable(nonneg=True)
+        G = np.linalg.cholesky(self.assets.expected_cov)
 
-        # Parameters
-        target_variance_param = cp.Parameter(nonneg=True)
+        ret = self._portfolio_expected_return(w=w, l1_coef=l1_coef, l2_coef=l2_coef)
+        risk = a ** 2
 
-        # Objectives
-        objective = cp.Maximize(self._portfolio_expected_return(w=w, l1_coef=l1_coef, l2_coef=l2_coef))
+        constraints = self._get_weight_constraints(w=w)
+        constraints.append(cp.SOC(a, G.T @ w))  # slightly faster than cp.norm(G.T @ w) <= a
+        param = cp.Parameter(nonneg=True)
 
-        # Constraints
-        portfolio_variance = cp.quad_form(w, self.assets.expected_cov)
-        lower_bounds, upper_bounds = self._get_lower_and_upper_bounds()
-        constraints = [portfolio_variance <= target_variance_param,
-                       w >= lower_bounds,
-                       w <= upper_bounds]
-        investment_target = self._get_investment_target()
-        if investment_target is not None:
-            constraints.append(cp.sum(w) == investment_target)
+        if population_size is not None:
+            objective = cp.Maximize(ret)
+            constraints.append(risk <= param)
+            min_variance, _ = self.mean_variance(objective_values=True)
+            max_variance = max(0.4 ** 2 / 255, min_variance * 10)  # max(40% annualized volatility, 10 x min variance)
+            target = np.logspace(np.log10(min_variance), np.log10(max_variance), num=population_size)
 
-        # Problem
+        elif target_variance is not None:
+            objective = cp.Maximize(ret)
+            constraints.append(risk <= param)
+            target = target_variance
+
+        elif target_return is not None:
+            objective = cp.Minimize(risk)
+            constraints.append(ret >= param)
+            target = target_return
+
+        else:
+            objective = cp.Minimize(risk)
+            target = None
+
         problem = cp.Problem(objective, constraints)
 
-        # Target
-        if target_variance is not None:
-            if not np.isscalar(target_variance):
-                target_variance = np.array(target_variance)
-        else:
-            min_variance, _ = self.minimum_variance()
-            if np.isnan(min_variance):
-                raise OptimizationError(f'Unable to find the minimum variance portfolio used as the starting point '
-                                        f'of the pareto frontier --> you can input your own target_variance array')
-            max_variance = max(0.4 ** 2 / 255, min_variance * 10)  # max(40% annualized volatility, 10 x min variance)
-            target_variance = np.logspace(np.log10(min_variance), np.log10(max_variance), num=population_size)
-
-        # weights
-        weights = self._get_optimization_weights(problem=problem,
-                                                 w=w,
-                                                 parameter=target_variance_param,
-                                                 target=target_variance)
-
-        return weights
+        return self._solve_problem(problem=problem, w=w, parameter=param, target=target,
+                                   objective_values=objective_values)
 
     def mean_semivariance(self,
                           returns_target: float | np.ndarray | None = None,
@@ -649,10 +803,10 @@ class Optimization:
                                               num=population_size)
 
         # weights
-        weights = self._get_optimization_weights(problem=problem,
-                                                 w=w,
-                                                 parameter=target_semivariance_param,
-                                                 target=target_semivariance)
+        weights = self._solve_problem(problem=problem,
+                                      w=w,
+                                      parameter=target_semivariance_param,
+                                      target=target_semivariance)
 
         return weights
 
@@ -728,10 +882,10 @@ class Optimization:
             max_cvar = max(0.3, min_cvar * 10)  # 30% CVaR
             target_cvar = np.logspace(np.log10(min_cvar), np.log10(max_cvar), num=population_size)
 
-        weights = self._get_optimization_weights(problem=problem,
-                                                 w=w,
-                                                 parameter=target_cvar_param,
-                                                 target=target_cvar)
+        weights = self._solve_problem(problem=problem,
+                                      w=w,
+                                      parameter=target_cvar_param,
+                                      target=target_cvar)
 
         return weights
 
@@ -811,10 +965,10 @@ class Optimization:
             max_cdar = max(0.3, min_cdar * 10)  # 30% CDaR
             target_cdar = np.logspace(np.log10(min_cdar), np.log10(max_cdar), num=population_size)
 
-        weights = self._get_optimization_weights(problem=problem,
-                                                 w=w,
-                                                 parameter=target_cdar_param,
-                                                 target=target_cdar)
+        weights = self._solve_problem(problem=problem,
+                                      w=w,
+                                      parameter=target_cdar_param,
+                                      target=target_cdar)
 
         return weights
 

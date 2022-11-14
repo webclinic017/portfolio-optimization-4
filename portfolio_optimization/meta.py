@@ -35,3 +35,8 @@ class Metrics(Enum):
     CDAR_95_RATIO = 'cdar_95_ratio'
     CVAR_95_RATIO = 'cvar_95_ratio'
 
+    @property
+    def is_ration(self) -> bool:
+        return self.value[-5:] == 'ratio'
+
+

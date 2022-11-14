@@ -14,7 +14,7 @@ if __name__ == '__main__':
     assets = load_assets(prices=prices,
                          start_date=dt.date(2018, 1, 1),
                          end_date=dt.date(2019, 1, 1),
-                         pre_selection_number=50,
+                         pre_selection_number=100,
                          pre_selection_correlation=0)
 
     population = Population()
@@ -31,6 +31,10 @@ if __name__ == '__main__':
     model = Optimization(assets=assets,
                          investment_type=InvestmentType.FULLY_INVESTED,
                          weight_bounds=(0, None))
+
+    model.minimum_variance2()
+    model.mean_variance2()
+    model.minimum_variance()
 
     # Random portfolios
     for i in range(10):

@@ -7,6 +7,7 @@ import plotly.graph_objects as go
 import numpy as np
 from functools import cached_property
 from collections.abc import Iterator
+from scipy.interpolate import griddata
 
 from portfolio_optimization.meta import *
 from portfolio_optimization.portfolio import *
@@ -93,7 +94,7 @@ class Population:
             raise KeyError(f'portfolio {value.name} is already in the population')
         if len(self) != 0 and set(value.fitness_metrics) != set(self[0].fitness_metrics):
             raise ValueError(f'Cannot have a Population of Portfolios with mixed fitness_metrics')
-        
+
         self.hashmap[value.name] = value
         value.freeze()
 
@@ -229,6 +230,7 @@ class Population:
                      x: Metrics,
                      y: Metrics,
                      z: Metrics = None,
+                     to_surface: bool = False,
                      hover_metrics: list[Metrics] = None,
                      fronts: bool = False,
                      color_scale: Metrics | str | None = None,
@@ -274,14 +276,58 @@ class Population:
             color = 'tag'
 
         if z is not None:
-            fig = px.scatter_3d(df,
-                                x=x.value,
-                                y=y.value,
-                                z=z.value,
-                                hover_name='name',
-                                hover_data=hover_data,
-                                color=color,
-                                symbol='tag')
+            if to_surface:
+                # estimate the surface
+                x_arr = np.array(df[x.value])
+                y_arr = np.array(df[y.value])
+                z_arr = np.array(df[z.value])
+
+                xi = np.linspace(start=min(x_arr), stop=max(x_arr), num=100)
+                yi = np.linspace(start=min(y_arr), stop=max(y_arr), num=100)
+
+                X, Y = np.meshgrid(xi, yi)
+                Z = griddata(points=(x_arr, y_arr), values=z_arr, xi=(X, Y), method='cubic')
+                fig = go.Figure(go.Surface(x=xi,
+                                           y=yi,
+                                           z=Z,
+                                           hovertemplate='<br>'.join([e.value + ': %{' + v + ':'
+                                                                      + (',.3%' if not e.is_ration else None) + '}'
+                                                                      for e, v in [(x, 'x'), (y, 'y'), (z, 'z')]])
+                                                         + '<extra></extra>',
+                                           colorbar=dict(
+                                               title=z.value,
+                                               titleside='top',
+                                               tickformat=',.2%' if not z.is_ration else None
+                                           )
+                                           ))
+
+                fig.update_layout(title=title,
+                                  scene=dict(xaxis={'title': x.value,
+                                                    'tickformat': ',.1%' if not x.is_ration else None},
+                                             yaxis={'title': y.value,
+                                                    'tickformat': ',.1%' if not y.is_ration else None},
+                                             zaxis={'title': z.value,
+                                                    'tickformat': ',.1%' if not z.is_ration else None}))
+            else:
+                # plot the points
+                fig = px.scatter_3d(df,
+                                    x=x.value,
+                                    y=y.value,
+                                    z=z.value,
+                                    hover_name='name',
+                                    hover_data=hover_data,
+                                    color=color,
+                                    symbol='tag')
+                fig.update_traces(marker_size=8)
+                fig.update_layout(title=title,
+                                  xaxis={'tickformat': ',.1%' if not x.is_ration else None},
+                                  yaxis={'tickformat': ',.1%' if not y.is_ration else None},
+                                  zaxis={'tickformat': ',.1%' if not z.is_ration else None},
+                                  legend=dict(yanchor='top',
+                                              y=0.99,
+                                              xanchor='left',
+                                              x=1.15))
+
         else:
             fig = px.scatter(df,
                              x=x.value,
@@ -290,12 +336,14 @@ class Population:
                              hover_data=hover_data,
                              color=color,
                              symbol='tag')
-        fig.update_traces(marker_size=10)
-        fig.update_layout(title=title,
-                          legend=dict(yanchor='top',
-                                      y=0.99,
-                                      xanchor='left',
-                                      x=1.15))
+            fig.update_traces(marker_size=10)
+            fig.update_layout(title=title,
+                              xaxis={'tickformat': ',.1%' if not x.is_ration else None},
+                              yaxis={'tickformat': ',.1%' if not y.is_ration else None},
+                              legend=dict(yanchor='top',
+                                          y=0.99,
+                                          xanchor='left',
+                                          x=1.15))
         if show:
             fig.show()
         else:

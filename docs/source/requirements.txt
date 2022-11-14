@@ -1,0 +1,13 @@
+sphinx
+numpydoc
+sphinxcontrib-napoleon==0.7
+sphinx_rtd_theme
+sphinxcontrib-bibtex
+sphinxemoji
+sphinx-sitemap
+RinohType
+numpy
+scipy
+pandas
+matplotlib
+cvxpy
