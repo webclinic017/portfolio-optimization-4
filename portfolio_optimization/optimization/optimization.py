@@ -62,9 +62,10 @@ class Optimization:
         r"""
         Class for convex portfolio optimization
 
-       Parameters
-       ----------
+        Parameters
+        ----------
         assets: Assets
+
                 The Assets object containing the assets market data and mean/covariance models
 
         investment_type: InvestmentType, default InvestmentType.FULLY_INVESTED
@@ -122,8 +123,7 @@ class Optimization:
                  In order to take that into account, the costs provided are divided by the expected investment duration
                  in days in the optimization problem
 
-        previous_weight: np.ndarray of shape(Number of Assets), default None (equivalent to an array of zeros)
-        :type
+        previous_weights: np.ndarray of shape(Number of Assets), default None (equivalent to an array of zeros)
         """
         self.assets = assets
         self.investment_type = investment_type
