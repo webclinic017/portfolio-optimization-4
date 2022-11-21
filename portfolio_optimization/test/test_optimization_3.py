@@ -22,17 +22,17 @@ def get_assets() -> Assets:
 
 def test_mean_variance():
     assets = get_assets()
-    # weight_bounds= (0, None)
-    # investment_type = InvestmentType.FULLY_INVESTED
+    weight_bounds= (0, None)
+    investment_type = InvestmentType.FULLY_INVESTED
     model = Optimization(assets=assets,
                          investment_type=investment_type,
                          weight_bounds=weight_bounds,
                          transaction_costs=0.01,
                          investment_duration=255)
 
-    min_variance, w = model.optimize(risk_measure=RiskMeasure.VARIANCE,
-                                     objective_function=ObjectiveFunction.MIN_RISK,
-                                     objective_values=True)
+    min_variance, w = model.mean_risk_optimization(risk_measure=RiskMeasure.VARIANCE,
+                                                   objective_function=ObjectiveFunction.MIN_RISK,
+                                                   objective_values=True)
 
 
     for weight_bounds in [(None,None), (0, None)]:
@@ -41,44 +41,44 @@ def test_mean_variance():
                                  investment_type=investment_type,
                                  weight_bounds=weight_bounds)
 
-            min_variance, w = model.optimize(risk_measure=RiskMeasure.VARIANCE,
-                                             objective_function=ObjectiveFunction.MIN_RISK,
-                                             objective_values=True)
+            min_variance, w = model.mean_risk_optimization(risk_measure=RiskMeasure.VARIANCE,
+                                                           objective_function=ObjectiveFunction.MIN_RISK,
+                                                           objective_values=True)
 
             p = Portfolio(assets=assets, weights=w)
             assert is_close(p.variance, min_variance)
 
             var=min_variance+1e-8
-            w = model.optimize(risk_measure=RiskMeasure.VARIANCE,
-                               objective_function=ObjectiveFunction.MAX_RETURN,
-                               max_variance=var)
+            w = model.mean_risk_optimization(risk_measure=RiskMeasure.VARIANCE,
+                                             objective_function=ObjectiveFunction.MAX_RETURN,
+                                             max_variance=var)
 
             p = Portfolio(assets=assets, weights=w)
             assert is_close(p.variance, var)
 
-            w = model.optimize(risk_measure=RiskMeasure.VARIANCE,
-                               objective_function=ObjectiveFunction.MIN_RISK,
-                               max_variance=min_variance)
+            w = model.mean_risk_optimization(risk_measure=RiskMeasure.VARIANCE,
+                                             objective_function=ObjectiveFunction.MIN_RISK,
+                                             max_variance=min_variance)
 
             p = Portfolio(assets=assets, weights=w)
             assert is_close(p.variance, min_variance)
 
             ret = abs(p.mean+0.001) * 3
             try:
-                variance, w = model.optimize(risk_measure=RiskMeasure.VARIANCE,
-                                             objective_function=ObjectiveFunction.MIN_RISK,
-                                             min_return=ret,
-                                             objective_values=True)
+                variance, w = model.mean_risk_optimization(risk_measure=RiskMeasure.VARIANCE,
+                                                           objective_function=ObjectiveFunction.MIN_RISK,
+                                                           min_return=ret,
+                                                           objective_values=True)
 
                 p = Portfolio(assets=assets, weights=w)
                 assert is_close(p.variance, variance)
                 assert is_close(p.mean, ret)
 
                 var = variance
-                mean, w = model.optimize(risk_measure=RiskMeasure.VARIANCE,
-                                         objective_function=ObjectiveFunction.MAX_RETURN,
-                                         max_variance=var,
-                                         objective_values=True)
+                mean, w = model.mean_risk_optimization(risk_measure=RiskMeasure.VARIANCE,
+                                                       objective_function=ObjectiveFunction.MAX_RETURN,
+                                                       max_variance=var,
+                                                       objective_values=True)
 
                 p = Portfolio(assets=assets, weights=w)
                 assert is_close(p.variance, var)

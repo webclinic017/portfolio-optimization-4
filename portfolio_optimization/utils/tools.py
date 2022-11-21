@@ -8,7 +8,8 @@ __all__ = ['prices_rebased',
            'rand_weights',
            'rand_weights_dirichlet',
            'walk_forward',
-           'load_prices']
+           'load_prices',
+           'args_names']
 
 
 def prices_rebased(returns: np.array) -> np.array:
@@ -86,3 +87,7 @@ def load_prices(file: Path | str) -> pd.DataFrame:
     df = pd.read_csv(file, sep=',', index_col=0)
     df.index = pd.to_datetime(df.index, format='%Y-%m-%d')
     return df
+
+
+def args_names(func: object) -> list[str]:
+    return [v for v in func.__code__.co_varnames[:func.__code__.co_argcount] if v != 'self']

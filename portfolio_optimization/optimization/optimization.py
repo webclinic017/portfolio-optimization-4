@@ -32,13 +32,13 @@ class ObjectiveFunction(Enum):
     UTILITY = 'utility'
 
 
-WeightBounds = tuple[float | np.ndarray | None, float | np.ndarray | None]
-Costs = float | np.ndarray
+WeightBounds = tuple[float | list | np.ndarray | None, float | list | np.ndarray | None]
+Costs = float | list | np.ndarray
 Duration = int | None
-PrevWeight = np.ndarray | None
+PrevWeight = list | np.ndarray | None
 Rate = float
 Solvers = list[str] | None
-solverParams = dict | None
+solverParams = dict[str, dict] | None
 Coef = float | None
 Target = float | list | np.ndarray | None
 ParametersValues = list[tuple[cp.Parameter, float | np.ndarray]] | None
@@ -59,73 +59,102 @@ class Optimization:
                  logarithmic_returns: bool = False,
                  solvers: Solvers = None,
                  solver_params: solverParams = None):
+        self.assets = assets
         r"""
-        Class for convex portfolio optimization
+        Convex portfolio optimization
 
         Parameters
         ----------
         assets: Assets
-
                 The Assets object containing the assets market data and mean/covariance models
 
         investment_type: InvestmentType, default InvestmentType.FULLY_INVESTED
                          The investment type of the portfolio.
 
                          The possible values are:
-                          * fully invested: the sum of weights equal one
-                          * market neutral: the sum of weights equal zero
-                          * unconstrained: the sum of weights has no constraints
+                          * InvestmentType.FULLY_INVESTED: the sum of weights equal one
+                          * InvestmentType.MARKET_NEUTRAL: the sum of weights equal zero
+                          * InvestmentType.UNCONSTRAINED: the sum of weights has no constraints
 
-        weight_bounds: tuple[float | ndarray | None, float | ndarray | None], default (-1, 1)
+        weight_bounds: tuple[float | list | ndarray | None, float | list | ndarray | None], default (-1, 1)
                        Minimum and maximum weight of each asset OR single min/max pair if they are all identical.
-                       A value of None for that lower bound is equivalent to -Inf (no lower bound). And a value
+                       A value of None for the lower bound is equivalent to -Inf (no lower bound). And a value
                        of None for the upper bound is equivalent to +Inf (no upper bound).
 
                        Example:
                             * no short selling (long only portfolio): (0, None)
                             * short only: (None, 0)
                             * no bound (0, 0)
-                            * no short selling with maximum weight of 200%: (0, 2)
+                            * no short selling and maximum weight of 200%: (0, 2)
                             * all weights between -100% and 100% of the total notional: (-1, 1)
 
-        transaction_costs: float or ndarray of shape (number_of_assets), default 0
-                           Transaction costs are fixed costs charged when buying or selling an asset.
-                           When that value is different from 0, you also have to provide `investment_duration` and
-                           `previous_weights`.
+        transaction_costs: float | list | ndarray, default 0
+                           Transaction costs are fixed costs charged you buy or sell an asset.
+                           When that value is different from 0, you also have to provide `investment_duration`.
                            They are used to compute the cost of rebalancing the portfolio which is:
                                 * transaction_costs / investment_duration * |previous_weights - new_weights|
-                           The costs is expressed in the same time unit as the returns (see investment_duration for more
-                           details).
+                           The costs is expressed in the same time unit as the returns series (see investment_duration
+                           for more details).
 
                       Example:
                               * if your broker charges you 0.5% for asset A and 0.6% for Asset B on the notional amount
                               that you buy or sell, you have to input a transaction_costs of [0.005, 0.006]
                               * if your broker charges you 3.1 EUR per share of asset A and 4.8 EUR per share of
-                              asset B, you have to convert it into percentage of notional amount and input a
+                              asset B, you have to convert them into percentage on the notional amount and input a
                               transaction_costs of [3.1 / price_asset_A, 4.8 / price_asset_B]
 
-        investment_duration: The expected investment duration expressed in the same period as the returns.
-                  If the returns are daily, then it is the expected investment duration in business days.
-                  When costs are provided, they need to be converted to an average daily cost over
-                  the expected investment duration. This is because the optimization problem has no notion of investment
-                  duration.
-                  For example, lets assume that asset A has an expected daily return of 0.01%
-                  with a fixed entry cost of 1% and asset B has an expected daily return of 0.005%
-                  with a fixed entry cost of 0%. Both having same volatility and correlated with r=1.
-                  If the investment duration is only one month, we should allocate all the weights to asset B
-                  whereas if the investment duration is one year, we should allocate all the weights to asset A.
-                  Duration = 1 months (21 business days):
-                        * expected return A = (1+0.01%)^21 - 1 - 1% ≈ 0.01% * 21 - 1% ≈ -0.8%
-                        * expected return B ≈ 0.005% * 21 - 0% ≈ 0.1%
-                  Duration = 1 year (255 business days):
-                        * expected return A ≈ 0.01% * 255 - 1% ≈ 1.5%
-                        * expected return B ≈ 0.005% * 21 - 0% ≈ 1.3%
-                 In order to take that into account, the costs provided are divided by the expected investment duration
-                 in days in the optimization problem
+        investment_duration: float | None, default None
+                             The expected investment duration expressed in the same period as the returns.
+                             It needs to be provided when transaction_costs is different from 0.
+                             If the returns are daily, then it is the expected investment duration in business days.
 
-        previous_weights: np.ndarray of shape(Number of Assets), default None (equivalent to an array of zeros)
+                             Examples:
+                                * If you expect to keep your portfolio allocation static for one month and your returns
+                                are daily, investment_duration = 21
+                                * If you expect to keep your portfolio allocation static for one year and your returns
+                                are daily, investment_duration = 255
+                                * If you expect to keep your portfolio allocation static for one year and your returns
+                                are weekly, investment_duration = 52
+
+                             Raison:
+                             When costs are provided, they need to be converted to an average cost per time unit over 
+                             the expected investment duration.
+                             This is because the optimization problem has no notion of investment duration.
+                             For example, lets assume that asset A has an expected daily return of 0.01%
+                             with a transaction cost of 1% and asset B has an expected daily return of 0.005%
+                             with no transaction cost. Let's also assume that both have same volatility and
+                             a correlation of 1. If the investment duration is only one month, we should allocate all
+                             the weights to asset B whereas if the investment duration is one year, we should allocate
+                             all the weights to asset A.
+                             
+                             Proof:
+                             Duration = 1 months (21 business days):
+                                    * expected return A = (1+0.01%)^21 - 1 - 1% ≈ 0.01% * 21 - 1% ≈ -0.8%
+                                    * expected return B ≈ 0.005% * 21 - 0% ≈ 0.1%
+                             Duration = 1 year (255 business days):
+                                    * expected return A ≈ 0.01% * 255 - 1% ≈ 1.5%
+                                    * expected return B ≈ 0.005% * 21 - 0% ≈ 1.3%
+                             
+                             In order to take that into account, the costs provided are divided by the expected
+                             investment duration in the optimization problem.
+                             
+        previous_weights: list | ndarray | None, default None
+                          The previous weights of the portfolio. They need to be of same size and same order as the
+                          Assets. If transaction_cost is 0, it will have no impact on the portfolio allocation.
+        
+        risk_free_rate: float, default 0
+                        The risk free interest rate to use in the portfolio optimization
+        
+        logarithmic_returns: bool, default False
+                             If True, the optimization uses logarithmic returns instead of simple returns
+        
+        solvers: list[str] | None, default None
+                 The list of cvxpy solver to try. If None, then the default list is ['ECOS', 'SCS', 'OSQP', 'CVXOPT'].
+        
+        solverParams: dict[str, dict] | None, default None
+                      Dictionary of solver parameters with key being the solver name and value the dictionary of 
+                      that solver parameter                       
         """
-        self.assets = assets
         self.investment_type = investment_type
         self.weight_bounds = weight_bounds
         self.transaction_costs = transaction_costs
@@ -146,18 +175,18 @@ class Optimization:
 
     def __setattr__(self, name, value):
         if name != 'loaded' and self.__dict__.get('loaded'):
-            logger.warning(f'Attributes should be updated with the update() method to allow proper validation')
+            logger.warning(f'Attributes should be updated with the update() method to allow attribute validation')
         super().__setattr__(name, value)
 
     def _validation(self):
-        """
+        r"""
         Validate the class attributes
         """
         if self.assets.asset_nb < 2:
             raise ValueError(f'assets should contains more than one asset')
 
         if not isinstance(self.weight_bounds, tuple) or len(self.weight_bounds) != 2:
-            raise ValueError(f'weight_bounds should be a tuple of size 2')
+            raise ValueError(f'weight_bounds should be a tuple of size 2: (lower_bound, upper_bound)')
 
         for i in [0, 1]:
             if isinstance(self.weight_bounds[i], np.ndarray) and len(self.weight_bounds[i]) != self.assets.asset_nb:
@@ -179,19 +208,21 @@ class Optimization:
                 raise ValueError(f'When investment_type is {self.investment_type.value}, the sum of all lower bounds '
                                  f'should be less or equal to {investment_target}')
 
-        if self.transaction_costs is not None and not (np.isscalar(self.transaction_costs) and self.transaction_costs == 0):
+        if not np.isscalar(self.transaction_costs) or self.transaction_costs != 0:
             if self.investment_duration is None:
-                raise ValueError(f'investment_duration_in_days cannot be missing when costs is provided')
+                raise ValueError(f'investment_duration cannot be missing when costs is different from 0')
 
         if self.previous_weights is not None:
             if not isinstance(self.previous_weights, np.ndarray):
-                raise TypeError(f'prev_w should be of type numpy.ndarray')
+                raise TypeError(f'previous_weights should be of type numpy.ndarray')
             if len(self.previous_weights) != self.assets.asset_nb:
-                raise ValueError(f'prev_w should be of size {self.assets.asset_nb} but received {len(self.previous_weights)}')
+                raise ValueError(
+                    f'previous_weights should be of size {self.assets.asset_nb} '
+                    f'but received {len(self.previous_weights)}')
 
     def _validate_args(self, **kwargs):
-        """
-        Validate function arguments
+        r"""
+        Validate method arguments
         """
         population_size = kwargs.get('population_size')
         targets_names = [k for k, v in kwargs.items() if k.startswith('target_')]
@@ -236,8 +267,12 @@ class Optimization:
                                    l2_coef: Coef = None,
                                    k: OptionalVariable = None,
                                    gr: OptionalVariable = None) -> cp.Expression:
-        """
-        CVXPY Expression of the portfolio expected return with l1 and l2 regularization.
+        r"""
+        Portfolio expected return with l1 and l2 regularization.
+
+        Returns
+        -------
+        CVXPY Expression of the portfolio expected
         """
         if self.transaction_costs is None or (np.isscalar(self.transaction_costs) and self.transaction_costs == 0):
             portfolio_cost = 0
@@ -278,8 +313,12 @@ class Optimization:
         return portfolio_return
 
     def _get_lower_and_upper_bounds(self) -> tuple[np.ndarray, np.ndarray]:
-        """
-        Format lower and upper bounds
+        r"""
+        Convert the weights lower and upper bounds into numpy arrays
+
+        Returns
+        -------
+        Tuple of ndarray of lower and upper bounds
         """
         # Upper and lower bounds
         lower_bounds, upper_bounds = self.weight_bounds
@@ -296,8 +335,12 @@ class Optimization:
         return lower_bounds, upper_bounds
 
     def _get_investment_target(self) -> int | None:
-        """
-        Convert the investment target into 0, 1 or None
+        r"""
+        Convert the investment_target into a sum of weight constraint integer or None
+
+        Returns
+        -------
+        0, 1 or None
         """
         # Sum of weights
         if self.investment_type == InvestmentType.FULLY_INVESTED:
@@ -306,6 +349,13 @@ class Optimization:
             return 0
 
     def _get_weight_constraints(self, w: cp.Variable, k: OptionalVariable = None) -> list[Constraint]:
+        r"""
+        Weight constraints
+
+        Returns
+        -------
+        A list of weight constraints
+        """
         lower_bounds, upper_bounds = self._get_lower_and_upper_bounds()
         if k is None:
             constraints = [w >= lower_bounds,
@@ -331,10 +381,36 @@ class Optimization:
                        k: OptionalVariable = None,
                        objective_values: bool = False) -> Result:
         """
-        Solve CVXPY Problem with variables
-        :param problem: CVXPY Problem
-        :param w: CVXPY Variable representing the weights
-        :returns: weights array
+        Solve CVXPY Problem
+
+        Parameters
+        ----------
+        problem: cvxpy.Problem
+                 CVXPY Problem.
+
+        w: cvxpy.Variable
+           Weights variable.
+
+        parameters_values: list[tuple[cvxpy.Parameter, float | ndarray]] | None, default None
+                           A list of tuple of CVXPY Parameter and there values.
+                           If The values are ndarray instead of float, the optimization is solved for
+                           each element of the array.
+
+        k: cvxpy.Variable | None, default None
+           CVXPY Variable used for Ratio optimization problems
+
+        objective_values: bool, default False
+                          If true, the optimization objective values are also returned with the weights.
+
+        Returns
+        -------
+        If objective_values is True:
+            tuple (objective values of the optimization problem, weights)
+        else:
+            weights
+
+        if the parameters values are scalars, then the objective values and weights returned are also scalars otherwise
+        they are numpy array of same length as the parameters values.
         """
         n = 0
         is_scalar = True
@@ -393,27 +469,26 @@ class Optimization:
             return weights
 
     def update(self, **kwargs):
-        """
+        r"""
         Update the class attributes then re-validate them
         """
         self.loaded = False
-        valid_kwargs = ['assets',
-                        'investment_type',
-                        'weight_bounds',
-                        'costs',
-                        'investment_duration_in_days',
-                        'prev_w']
+        valid_kwargs = args_names(self.__init__)
         for k, v in kwargs.items():
             if k not in valid_kwargs:
-                raise TypeError(f'Invalid keyword argument {k}')
+                raise TypeError(f'Invalid keyword argument {k}. \n'
+                                f'Valid arguments are {valid_kwargs}')
             setattr(self, k, v)
         self._validation()
         self.loaded = True
 
     def inverse_volatility(self) -> np.ndarray:
-        """
+        r"""
         Inverse volatility portfolio
-        :returns: assets weights of the inverse volatility portfolio, summing to 1
+
+        Returns
+        -------
+        Assets weights of the inverse volatility portfolio, summing to 1
         """
         weights = 1 / self.assets.std
         weights = weights / sum(weights)
@@ -422,7 +497,10 @@ class Optimization:
     def equal_weighted(self) -> np.ndarray:
         """
         Equally weighted portfolio
-        :returns: assets weights of the equally weighted portfolio, summing to 1
+
+        Returns
+        -------
+        Assets weights of the equally weighted portfolio, summing to 1
         """
         weights = np.ones(self.assets.asset_nb) / self.assets.asset_nb
         return weights
@@ -430,7 +508,10 @@ class Optimization:
     def random(self) -> np.ndarray:
         """
         Randomly weighted portfolio
-        :returns:  Random positive weights summing to 1 that respect the bounds constraints
+
+        Returns
+        -------
+        Random positive weights summing to 1 that respect the weight bounds constraints
         """
         # Produces n random weights that sum to 1 with uniform distribution over the simplex
         weights = rand_weights_dirichlet(n=self.assets.asset_nb)
@@ -440,21 +521,59 @@ class Optimization:
         weights = weights / sum(weights)
         return weights
 
-    def optimize(self,
-                 risk_measure: RiskMeasure,
-                 objective_function: ObjectiveFunction,
-                 gamma: float = 2,
-                 l1_coef: Coef = None,
-                 l2_coef: Coef = None,
-                 min_return: Target = None,
-                 max_variance: Target = None,
-                 max_semi_variance: Target = None,
-                 semi_variance_returns_target: Target = None,
-                 max_cvar: Target = None,
-                 cvar_beta: float = 0.95,
-                 max_cdar: Target = None,
-                 cdar_beta: float = 0.95,
-                 objective_values: bool = False) -> Result:
+    def mean_risk_optimization(self,
+                               objective_function: ObjectiveFunction,
+                               risk_measure: RiskMeasure,
+                               gamma: float = 2,
+                               l1_coef: Coef = None,
+                               l2_coef: Coef = None,
+                               min_return: Target = None,
+                               max_variance: Target = None,
+                               max_semi_variance: Target = None,
+                               semi_variance_returns_target: Target = None,
+                               max_cvar: Target = None,
+                               cvar_beta: float = 0.95,
+                               max_cdar: Target = None,
+                               cdar_beta: float = 0.95,
+                               objective_values: bool = False) -> Result:
+
+        r"""
+        General function to solve Mean-Risk optimization problems.
+
+        It takes one objective functions among:
+            * minimize risk
+            * maximize return
+            * maximize the ratio: return/risk
+            * maximize the utility: return - gamma x risk
+        and one or more risk measures among:
+            * variance
+            * semi variance
+            * CVaR
+            * CDaR
+
+        Some combination of objective function /  risk measure(s) may have no solutions.
+
+        Parameters
+        ----------
+        risk_measure
+        objective_function
+        gamma
+        l1_coef
+        l2_coef
+        min_return
+        max_variance
+        max_semi_variance
+        semi_variance_returns_target
+        max_cvar
+        cvar_beta
+        max_cdar
+        cdar_beta
+        objective_values
+
+        Returns
+        -------
+
+        """
 
         if not isinstance(risk_measure, RiskMeasure):
             raise TypeError('risk_measure should be of type RiskMeasure')
@@ -500,10 +619,8 @@ class Optimization:
             if risk_measure == r_m or risk_limit is not None:
                 risk_func = getattr(self, f'_{r_m.value}_risk')
                 args = {}
-                for arg_name in risk_func.__code__.co_varnames[:risk_func.__code__.co_argcount]:
-                    if arg_name == 'self':
-                        pass
-                    elif arg_name == 'w':
+                for arg_name in args_names(risk_func):
+                    if arg_name == 'w':
                         args[arg_name] = w
                     elif arg_name == 'k':
                         args[arg_name] = k
@@ -601,49 +718,6 @@ class Optimization:
                        v[0] * self.N == 0]
         return risk, constraints
 
-    def maximum_sharpe(self) -> np.ndarray:
-        """
-        Find the asset weights that maximize the portfolio sharpe ratio
-        :returns: the asset weights that maximize the portfolio sharpe ratio.
-        """
-
-        if self.investment_type != InvestmentType.FULLY_INVESTED:
-            raise ValueError('maximum_sharpe() can be solved only for investment_type=InvestmentType.FULLY_INVESTED'
-                             '  --> you can find an approximation by computing the efficient frontier with '
-                             ' mean_variance(population=30) and finding the portfolio with the highest sharpe ratio.')
-
-        if self.transaction_costs is not None:
-            raise ValueError('maximum_sharpe() cannot be solved with costs '
-                             '  --> you can find an approximation by computing the efficient frontier with '
-                             ' mean_variance(population=30) and finding the portfolio with the highest sharpe ratio.')
-
-        # Variables
-        w = cp.Variable(self.assets.asset_nb)
-        k = cp.Variable()
-
-        # Objectives
-        objective = cp.Minimize(cp.quad_form(w, self.assets.expected_cov))
-
-        # Constraints
-        constraints = self._get_weight_constraints(w=w, k=k)
-        # noinspection PyTypeChecker
-        constraints.extend([self._portfolio_expected_return(w=w) == 1,
-                            k >= 0])
-
-        # Problem
-        problem = cp.Problem(objective, constraints)
-
-        try:
-            problem.solve(solver='ECOS')
-            if w.value is None or k.value is None:
-                raise OptimizationError('None return')
-            weights = np.array(w.value / k.value, dtype=float)
-        except (OptimizationError, SolverError, ArpackNoConvergence) as e:
-            logger.warning(f'No solution found: {e}')
-            weights = np.empty(w.shape) * np.nan
-
-        return weights
-
     def minimum_variance(self, objective_values: bool = False) -> Result:
         """
         Find the asset weights that minimize the portfolio semivariance (downside variance) and the value of the minimum
@@ -652,9 +726,9 @@ class Optimization:
         :type returns_target: float or np.ndarray of shape(Number of Assets)
         :returns: the tuple (minimum semivariance, weights of the minimum semivariance portfolio)
         """
-        return self.optimize(risk_measure=RiskMeasure.VARIANCE,
-                             objective_function=ObjectiveFunction.MIN_RISK,
-                             objective_values=objective_values)
+        return self.mean_risk_optimization(risk_measure=RiskMeasure.VARIANCE,
+                                           objective_function=ObjectiveFunction.MIN_RISK,
+                                           objective_values=objective_values)
 
     def minimum_semivariance(self,
                              semi_variance_returns_target: Target = None,
@@ -666,10 +740,10 @@ class Optimization:
         :type returns_target: float or np.ndarray of shape(Number of Assets)
         :returns: the tuple (minimum semivariance, weights of the minimum semivariance portfolio)
         """
-        return self.optimize(risk_measure=RiskMeasure.SEMI_VARIANCE,
-                             objective_function=ObjectiveFunction.MIN_RISK,
-                             semi_variance_returns_target=semi_variance_returns_target,
-                             objective_values=objective_values)
+        return self.mean_risk_optimization(risk_measure=RiskMeasure.SEMI_VARIANCE,
+                                           objective_function=ObjectiveFunction.MIN_RISK,
+                                           semi_variance_returns_target=semi_variance_returns_target,
+                                           objective_values=objective_values)
 
     def minimum_cvar(self, beta: float = 0.95, objective_values: bool = False) -> Result:
         """
@@ -681,10 +755,10 @@ class Optimization:
         :returns: the tuple (minimum CVaR, weights of the minimum CVaR portfolio)
         """
 
-        return self.optimize(risk_measure=RiskMeasure.CVAR,
-                             objective_function=ObjectiveFunction.MIN_RISK,
-                             cvar_beta=beta,
-                             objective_values=objective_values)
+        return self.mean_risk_optimization(risk_measure=RiskMeasure.CVAR,
+                                           objective_function=ObjectiveFunction.MIN_RISK,
+                                           cvar_beta=beta,
+                                           objective_values=objective_values)
 
     def minimum_cdar(self, beta: float = 0.95, objective_values: bool = False) -> Result:
         """
@@ -696,10 +770,10 @@ class Optimization:
         :returns: the tuple (minimum CDaR, weights of the minimum CDaR portfolio)
        """
 
-        return self.optimize(risk_measure=RiskMeasure.CDAR,
-                             objective_function=ObjectiveFunction.MIN_RISK,
-                             cvar_beta=beta,
-                             objective_values=objective_values)
+        return self.mean_risk_optimization(risk_measure=RiskMeasure.CDAR,
+                                           objective_function=ObjectiveFunction.MIN_RISK,
+                                           cvar_beta=beta,
+                                           objective_values=objective_values)
 
     def mean_variance(self,
                       target_variance: Target = None,
@@ -711,44 +785,31 @@ class Optimization:
         r"""
         Optimization along the mean-variance frontier (Markowitz optimization)
 
-        .. math::
-            \begin{align}
-            &\underset{w}{\text{optimize}} & & F(w)\\
-            &\text{s. t.} & & Aw \geq B\\
-            & & & \phi_{i}(w) \leq c_{i}\\
-            \end{align}
-
-        .. math::
-            \begin{aligned}
-            &\underset{w}{\max} & & R (w)\\
-            &\text{s.t.} & & Aw \geq B\\
-            & & &\phi_{i}(w) \leq c_{i} \; \forall \; i \; \in \; [1,13] \\
-            & & & R (w) \geq \overline{\mu}
-            \end{aligned}
-
-        .. math::
-            \begin{aligned}
-            &\underset{w}{\min} & & \phi_{k}(w)\\
-            &\text{s.t.} & & Aw \geq B\\
-            & & &\phi_{i}(w) \leq c_{i} \; \forall \; i \; \in \; [1,13] \\
-            & & & R (w) \geq \overline{\mu}
-            \end{aligned}
-
         Parameters
         ----------
-        target_variance: float | list | numpy.ndarray, optional
-                         The targeted daily variance of the portfolio: the portfolio expected return is maximized
-                         under this target constraint
+        target_variance: float | list | ndarray, optional
+                         The targeted variance of the portfolio: the portfolio return is maximized
+                         under this target constraint.
+
+        target_return: float | list | ndarray, optional
+                       The target return of the portfolio: the portfolio variance is minimized under
+                       this target constraint.
+
         population_size: int, optional
-                         Number of pareto optimal portfolio weights to compute along the efficient frontier
-        l1_coef: float, default to None
+                         Number of pareto optimal portfolio weights to compute along the mean-variance efficient
+                         frontier.
+
+        l1_coef: float, optional
                  L1 regularisation coefficient. Increasing this coef will reduce the number of non-zero weights.
                  It is similar to the L1 regularisation in Lasso.
-                 If both l1_coef and l2_coef are strictly positive, it is similar to the regularisation in Elastic-Net
-        l1_coef: float, default to None
-                 L2 regularisation coefficient. It is similar to the L2 regularisation in Ridge.
-                 If both l1_coef and l2_coef are strictly positive, it is similar to the regularisation in Elastic-Net
+                 If both l1_coef and l2_coef are strictly positive, it is similar to the regularisation in Elastic-Net.
 
+        l2_coef: float, optional
+                 L2 regularisation coefficient. It is similar to the L2 regularisation in Ridge.
+                 If both l1_coef and l2_coef are strictly positive, it is similar to the regularisation in Elastic-Net.
+
+        objective_values: bool, default False
+                          If true, the optimization objective values are also returned with the weights.
 
         Returns
         -------
@@ -758,34 +819,32 @@ class Optimization:
         """
         # self._validate_args(**{k: v for k, v in locals().items() if k != 'self'})
 
+        kwargs = dict(risk_measure=RiskMeasure.VARIANCE,
+                      l1_coef=l1_coef,
+                      l2_coef=l2_coef)
+
         if population_size is not None:
             min_variance, _ = self.minimum_variance(objective_values=True)
-            max_variance_weight = self.optimize(risk_measure=RiskMeasure.VARIANCE,
-                                                objective_function=ObjectiveFunction.MAX_RETURN)
+            max_variance_weight = self.mean_risk_optimization(objective_function=ObjectiveFunction.MAX_RETURN,
+                                                              **kwargs)
             max_variance = max_variance_weight @ self.assets.expected_cov @ max_variance_weight.T
             target = np.logspace(np.log10(min_variance) + 0.01, np.log10(max_variance), num=population_size)
-            return self.optimize(risk_measure=RiskMeasure.VARIANCE,
-                                 objective_function=ObjectiveFunction.MAX_RETURN,
-                                 l1_coef=l1_coef,
-                                 l2_coef=l2_coef,
-                                 max_variance=target,
-                                 objective_values=objective_values)
+            return self.mean_risk_optimization(objective_function=ObjectiveFunction.MAX_RETURN,
+                                               max_variance=target,
+                                               objective_values=objective_values,
+                                               **kwargs)
 
         elif target_variance is not None:
-            return self.optimize(risk_measure=RiskMeasure.VARIANCE,
-                                 objective_function=ObjectiveFunction.MAX_RETURN,
-                                 l1_coef=l1_coef,
-                                 l2_coef=l2_coef,
-                                 max_variance=target_variance,
-                                 objective_values=objective_values)
+            return self.mean_risk_optimization(objective_function=ObjectiveFunction.MAX_RETURN,
+                                               max_variance=target_variance,
+                                               objective_values=objective_values,
+                                               **kwargs)
 
         elif target_return is not None:
-            return self.optimize(risk_measure=RiskMeasure.VARIANCE,
-                                 objective_function=ObjectiveFunction.MIN_RISK,
-                                 l1_coef=l1_coef,
-                                 l2_coef=l2_coef,
-                                 min_return=target_return,
-                                 objective_values=objective_values)
+            return self.mean_risk_optimization(objective_function=ObjectiveFunction.MIN_RISK,
+                                               min_return=target_return,
+                                               objective_values=objective_values,
+                                               **kwargs)
 
         else:
             return self.minimum_variance(objective_values=objective_values)
@@ -824,36 +883,36 @@ class Optimization:
 
         if population_size is not None:
             min_semi_variance, _ = self.minimum_semivariance(objective_values=True)
-            max_semi_variance_weight = self.optimize(risk_measure=RiskMeasure.SEMI_VARIANCE,
-                                                     semi_variance_returns_target=semi_variance_returns_target,
-                                                     objective_function=ObjectiveFunction.MAX_RETURN)
+            max_semi_variance_weight = self.mean_risk_optimization(risk_measure=RiskMeasure.SEMI_VARIANCE,
+                                                                   semi_variance_returns_target=semi_variance_returns_target,
+                                                                   objective_function=ObjectiveFunction.MAX_RETURN)
             # TODO: max_semi_variance
             target = np.logspace(np.log10(min_semi_variance) + 0.01, np.log10(0.4 ** 2), num=population_size)
-            return self.optimize(risk_measure=RiskMeasure.SEMI_VARIANCE,
-                                 objective_function=ObjectiveFunction.MAX_RETURN,
-                                 l1_coef=l1_coef,
-                                 l2_coef=l2_coef,
-                                 max_semi_variance=target,
-                                 semi_variance_returns_target=semi_variance_returns_target,
-                                 objective_values=objective_values)
+            return self.mean_risk_optimization(risk_measure=RiskMeasure.SEMI_VARIANCE,
+                                               objective_function=ObjectiveFunction.MAX_RETURN,
+                                               l1_coef=l1_coef,
+                                               l2_coef=l2_coef,
+                                               max_semi_variance=target,
+                                               semi_variance_returns_target=semi_variance_returns_target,
+                                               objective_values=objective_values)
 
         elif target_semivariance is not None:
-            return self.optimize(risk_measure=RiskMeasure.SEMI_VARIANCE,
-                                 objective_function=ObjectiveFunction.MAX_RETURN,
-                                 l1_coef=l1_coef,
-                                 l2_coef=l2_coef,
-                                 max_semi_variance=target_semivariance,
-                                 semi_variance_returns_target=semi_variance_returns_target,
-                                 objective_values=objective_values)
+            return self.mean_risk_optimization(risk_measure=RiskMeasure.SEMI_VARIANCE,
+                                               objective_function=ObjectiveFunction.MAX_RETURN,
+                                               l1_coef=l1_coef,
+                                               l2_coef=l2_coef,
+                                               max_semi_variance=target_semivariance,
+                                               semi_variance_returns_target=semi_variance_returns_target,
+                                               objective_values=objective_values)
 
         elif target_semivariance is not None:
-            return self.optimize(risk_measure=RiskMeasure.SEMI_VARIANCE,
-                                 objective_function=ObjectiveFunction.MIN_RISK,
-                                 l1_coef=l1_coef,
-                                 l2_coef=l2_coef,
-                                 min_return=target_return,
-                                 semi_variance_returns_target=semi_variance_returns_target,
-                                 objective_values=objective_values)
+            return self.mean_risk_optimization(risk_measure=RiskMeasure.SEMI_VARIANCE,
+                                               objective_function=ObjectiveFunction.MIN_RISK,
+                                               l1_coef=l1_coef,
+                                               l2_coef=l2_coef,
+                                               min_return=target_return,
+                                               semi_variance_returns_target=semi_variance_returns_target,
+                                               objective_values=objective_values)
 
         else:
             return self.minimum_semivariance(objective_values=objective_values,
@@ -1018,5 +1077,48 @@ class Optimization:
                                       w=w,
                                       parameter=target_cdar_param,
                                       target=target_cdar)
+
+        return weights
+
+    def maximum_sharpe(self) -> np.ndarray:
+        """
+        Find the asset weights that maximize the portfolio sharpe ratio
+        :returns: the asset weights that maximize the portfolio sharpe ratio.
+        """
+
+        if self.investment_type != InvestmentType.FULLY_INVESTED:
+            raise ValueError('maximum_sharpe() can be solved only for investment_type=InvestmentType.FULLY_INVESTED'
+                             '  --> you can find an approximation by computing the efficient frontier with '
+                             ' mean_variance(population=30) and finding the portfolio with the highest sharpe ratio.')
+
+        if self.transaction_costs is not None:
+            raise ValueError('maximum_sharpe() cannot be solved with costs '
+                             '  --> you can find an approximation by computing the efficient frontier with '
+                             ' mean_variance(population=30) and finding the portfolio with the highest sharpe ratio.')
+
+        # Variables
+        w = cp.Variable(self.assets.asset_nb)
+        k = cp.Variable()
+
+        # Objectives
+        objective = cp.Minimize(cp.quad_form(w, self.assets.expected_cov))
+
+        # Constraints
+        constraints = self._get_weight_constraints(w=w, k=k)
+        # noinspection PyTypeChecker
+        constraints.extend([self._portfolio_expected_return(w=w) == 1,
+                            k >= 0])
+
+        # Problem
+        problem = cp.Problem(objective, constraints)
+
+        try:
+            problem.solve(solver='ECOS')
+            if w.value is None or k.value is None:
+                raise OptimizationError('None return')
+            weights = np.array(w.value / k.value, dtype=float)
+        except (OptimizationError, SolverError, ArpackNoConvergence) as e:
+            logger.warning(f'No solution found: {e}')
+            weights = np.empty(w.shape) * np.nan
 
         return weights
