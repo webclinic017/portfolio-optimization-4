@@ -4,12 +4,11 @@ import cvxpy as cp
 from cvxpy import SolverError
 from cvxpy.constraints.constraint import Constraint
 from scipy.sparse.linalg import ArpackNoConvergence
-from enum import Enum, unique
-
-from portfolio_optimization.meta import *
-from portfolio_optimization.assets import *
-from portfolio_optimization.exception import *
-from portfolio_optimization.utils.tools import *
+from enum import Enum
+from portfolio_optimization.meta import InvestmentType
+from portfolio_optimization.assets import Assets
+from portfolio_optimization.exception import OptimizationError
+from portfolio_optimization.utils.tools import args_names, rand_weights_dirichlet
 
 __all__ = ['Optimization',
            'RiskMeasure',
@@ -207,6 +206,12 @@ class Optimization:
             if sum(lower_bounds) > investment_target:
                 raise ValueError(f'When investment_type is {self.investment_type.value}, the sum of all lower bounds '
                                  f'should be less or equal to {investment_target}')
+        if np.isscalar(self.transaction_costs):
+            if self.transaction_costs < 0:
+                raise ValueError(f'transaction_costs cannot be negative')
+        else:
+            if np.any(self.transaction_costs < 0):
+                raise ValueError(f'transaction_costs cannot have negative values')
 
         if not np.isscalar(self.transaction_costs) or self.transaction_costs != 0:
             if self.investment_duration is None:

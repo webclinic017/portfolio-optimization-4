@@ -5,11 +5,10 @@ import plotly.express as px
 from functools import cache, cached_property
 import numbers
 import plotly.graph_objects as go
-
-from portfolio_optimization.meta import *
-from portfolio_optimization.assets import *
-from portfolio_optimization.utils.sorting import *
-from portfolio_optimization.utils.metrics import *
+from portfolio_optimization.meta import Metrics, AVG_TRADING_DAYS_PER_YEAR, ZERO_THRESHOLD
+from portfolio_optimization.assets import Assets
+from portfolio_optimization.utils.sorting import dominate
+from portfolio_optimization.utils.metrics import downside_std, max_drawdown, cvar, cdar
 
 __all__ = ['BasePortfolio',
            'Portfolio',
@@ -24,6 +23,33 @@ class BasePortfolio:
                  tag: str | None = None,
                  fitness_metrics: list[Metrics] | None = None,
                  validate: bool = True):
+        r"""
+        Base Portfolio
+
+        Parameters
+        ----------
+        returns: ndarray
+                 The returns array of the Portfolio
+
+        dates: ndarray
+               The dates array of the portfolio. Must be of same size as the returns array.
+
+        name: str | None, default None
+              The name of the Portfolio. If None, the object id will be assigned to the name.
+              When the Portfolio is added to a `Population`, the name will be frozen to avoid corrupting the
+              `Population` hashmap.
+
+        tag: str | None, default None
+             A tag that can be used to manipulate group of Portfolios from a `Population`.
+
+        fitness_metrics: list[Metrics] | None
+                         A list of Fitness metrics used compute portfolio domination.
+                         It is used the comparison of Portfolios and compute the `Population` pareto front.
+
+        validate: bool, default True
+                  If True, the Class attributes are validated
+        """
+
         self._name = name if name is not None else str(id(self))
         self._frozen = False
         self._returns = returns
@@ -368,37 +394,71 @@ class BasePortfolio:
 
 class Portfolio(BasePortfolio):
     def __init__(self,
-                 weights: np.ndarray,
                  assets: Assets,
+                 weights: np.ndarray,
+                 previous_weights: np.ndarray | None = None,
+                 transaction_costs: float | np.ndarray = 0,
                  name: str | None = None,
                  tag: str | None = None,
                  fitness_metrics: list[Metrics] | None = None):
+        r"""
+        Portfolio
+
+        Parameters
+        ----------
+        assets: Assets
+                The Assets object containing the assets market data and mean/covariance models
+
+        weights: ndarray
+                 The weights of the portfolio. They need to be of same size and same order as the Assets.
+
+        previous_weights: ndarray | None, default None
+                          The previous weights of the portfolio. They need to be of same size and same order as the
+                          Assets. If transaction_cost is 0, it will have no impact on the portfolio returns.
+
+        transaction_costs: float | ndarray, default 0
+                           Transaction costs are fixed costs charged when you buy or sell an asset.
+                           They are used to compute the cost of rebalancing the portfolio which is:
+                                * transaction_costs * |previous_weights - new_weights|
+                           They need to be a float or an array of same size and same order as the
+                           Assets. A float means that all assets have identical transaction costs.
+                           The total transaction cost is averaged over the entire period and impacted
+                           on the return series.
+
+        name: str | None, default None
+              The name of the `Portfolio`. If None, the object id will be assigned to the name.
+              When the `Portfolio` is added to a `Population`, the name will be frozen to avoid corrupting the
+              `Population` hashmap.
+
+        tag: str | None, default None
+             A tag that can be used to manipulate group of `Portfolios` from a `Population`.
+
+        fitness_metrics: list[Metrics] | None
+                         A list of Fitness metrics used compute portfolio domination.
+                         It is used the comparison of `Portfolios` and compute the `Population` pareto front.
+
+        """
         self._assets = assets
         self._weights = weights
+        if previous_weights is None:
+            self._previous_weights = np.zeros(self.assets.asset_nb)
+        else:
+            self._previous_weights = previous_weights
+        self._transaction_costs = transaction_costs
         self._validation()
-        super().__init__(returns=self.weights @ self.assets.returns,
+
+        portfolio_returns = self.weights @ self.assets.returns
+        if np.isscalar(self.transaction_costs) and self.transaction_costs == 0:
+            costs = 0
+        else:
+            costs = (self.transaction_costs * abs(self.previous_weights - self.weights)).sum()
+
+        super().__init__(returns=portfolio_returns - costs / len(portfolio_returns),
                          dates=assets.dates[1:],
                          name=name,
                          tag=tag,
                          fitness_metrics=fitness_metrics,
                          validate=False)
-
-    @property
-    def assets(self):
-        return self._assets
-
-    @property
-    def weights(self):
-        return self._weights
-
-    def _validation(self) -> None:
-        self.assets.validate_returns()
-        if not isinstance(self.weights, np.ndarray):
-            raise TypeError(f'weights should be of type numpy.ndarray')
-        if np.any(np.isnan(self.weights)):
-            raise TypeError(f'weights should not contain nan')
-        if self.assets.asset_nb != len(self.weights):
-            raise ValueError(f'weights should be of size {self.assets.asset_nb}')
 
     @cache
     def __len__(self) -> int:
@@ -450,17 +510,47 @@ class Portfolio(BasePortfolio):
             raise TypeError(f'Portfolio can only be divided by a number, but received a {type(other)}')
         return Portfolio(weights=self.weights / other, assets=self.assets)
 
-    @cached_property
-    def mean(self) -> float:
-        return self.weights @ self.assets.mu
+    def _validation(self) -> None:
+        self.assets.validate_returns()
+        if not isinstance(self.weights, np.ndarray):
+            raise TypeError(f'weights should be of type numpy.ndarray')
+        if np.any(np.isnan(self.weights)):
+            raise TypeError(f'weights should not contain nan')
+        if self.assets.asset_nb != len(self.weights):
+            raise ValueError(f'weights should be of size {self.assets.asset_nb}')
+        if not isinstance(self.previous_weights, np.ndarray):
+            raise TypeError(f'previous_weights should be of type numpy.ndarray')
+        if np.any(np.isnan(self.previous_weights)):
+            raise TypeError(f'previous_weights should not contain nan')
+        if self.assets.asset_nb != len(self.previous_weights):
+            raise ValueError(f'previous_weights should be of size {self.assets.asset_nb}')
+        if not np.isscalar(self.transaction_costs):
+            if not isinstance(self.transaction_costs, np.ndarray):
+                raise TypeError(f'transaction_costs should be of type numpy.ndarray or float')
+            if np.any(np.isnan(self.transaction_costs)):
+                raise TypeError(f'transaction_costs should not contain nan')
+            if self.assets.asset_nb != len(self.transaction_costs):
+                raise ValueError(f'transaction_costs should be of size {self.assets.asset_nb}')
 
-    @cached_property
-    def std(self) -> float:
-        return np.sqrt(self.weights @ self.assets.cov @ self.weights)
+    @property
+    def assets(self) -> Assets:
+        return self._assets
+
+    @property
+    def weights(self) -> np.ndarray:
+        return self._weights
+
+    @property
+    def previous_weights(self) -> np.ndarray:
+        return self._previous_weights
+
+    @property
+    def transaction_costs(self) -> float | np.ndarray:
+        return self._transaction_costs
 
     @property
     def sric(self) -> float:
-        """
+        r"""
         Sharpe Ratio Information Criterion (SRIC) is an unbiased estimator of the sharpe ratio adjusting for both
         sources of bias which are noise fit and estimation error.
         Ref: Noise Fit, Estimation Error and a Sharpe Information Criterion. Dirk Paulsen (2019)
@@ -509,6 +599,28 @@ class MultiPeriodPortfolio(BasePortfolio):
                  name: str | None = None,
                  tag: str | None = None,
                  fitness_metrics: list[Metrics] | None = None):
+        r"""
+        Multi Period Portfolio
+
+        Parameters
+        ----------
+
+        portfolios: list[Portfolio] | None, default None
+                    A list of Portfolios. If None, MultiPeriodPortfolio will be initialized with an empty list.
+
+        name: str | None, default None
+              The name of the `Portfolio`. If None, the object id will be assigned to the name.
+              When the `Portfolio` is added to a `Population`, the name will be frozen to avoid corrupting the
+              `Population` hashmap.
+
+        tag: str | None, default None
+             A tag that can be used to manipulate group of `Portfolios` from a `Population`.
+
+         fitness_metrics: list[Metrics] | None
+                          A list of Fitness metrics used compute portfolio domination.
+                          It is used the comparison of `Portfolios` and compute the `Population` pareto front.
+        """
+
         portfolios, returns, dates = self._initialize(portfolios=portfolios)
         self._portfolios = portfolios
         super().__init__(returns=returns,
