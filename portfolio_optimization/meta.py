@@ -27,13 +27,13 @@ class Metrics(Enum):
     DOWNSIDE_VARIANCE = 'downside_variance'
     ANNUALIZED_DOWNSIDE_VARIANCE = 'annualized_downside_variance'
     MAX_DRAWDOWN = 'max_drawdown'
-    CDAR_95 = 'cdar_95'
-    CVAR_95 = 'cvar_95'
+    CDAR = 'cdar'
+    CVAR = 'cvar'
     SHARPE_RATIO = 'sharpe_ratio'
     SORTINO_RATIO = 'sortino_ratio'
     CALMAR_RATIO = 'calmar_ratio'
-    CDAR_95_RATIO = 'cdar_95_ratio'
-    CVAR_95_RATIO = 'cvar_95_ratio'
+    CDAR_RATIO = 'cdar_ratio'
+    CVAR_RATIO = 'cvar_ratio'
 
     @property
     def is_ration(self) -> bool:

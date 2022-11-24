@@ -46,17 +46,17 @@ if __name__ == '__main__':
     population.plot_metrics(x=Metrics.ANNUALIZED_STD,
                             y=Metrics.ANNUALIZED_MEAN,
                             color_scale=Metrics.SHARPE_RATIO)
-    population.plot_metrics(x=Metrics.CDAR_95,
+    population.plot_metrics(x=Metrics.CDAR,
                             y=Metrics.ANNUALIZED_MEAN,
-                            color_scale=Metrics.CVAR_95_RATIO)
+                            color_scale=Metrics.CVAR_RATIO)
 
     # Metrics
     max_sharpe_ptf = population.max(metric=Metrics.SHARPE_RATIO)
     print(max_sharpe_ptf.sharpe_ratio)
     print(max_sharpe_ptf.summary())
 
-    max_cvar_ratio_ptf = population.max(metric=Metrics.CVAR_95_RATIO)
-    print(max_cvar_ratio_ptf.cvar_95_ratio)
+    max_cvar_ratio_ptf = population.max(metric=Metrics.CVAR_RATIO)
+    print(max_cvar_ratio_ptf.cvar_ratio)
 
     portfolio_names = [max_sharpe_ptf.name, max_cvar_ratio_ptf.name]
     # Composition

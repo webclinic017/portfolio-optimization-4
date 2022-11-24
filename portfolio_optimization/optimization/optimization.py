@@ -57,7 +57,8 @@ class Optimization:
                  risk_free_rate: Rate = 0,
                  logarithmic_returns: bool = False,
                  solvers: Solvers = None,
-                 solver_params: solverParams = None):
+                 solver_params: solverParams = None,
+                 solver_verbose: bool = False):
         self.assets = assets
         r"""
         Convex portfolio optimization
@@ -168,7 +169,8 @@ class Optimization:
         if solver_params is None:
             solver_params = {}
         self.solver_params = {k: solver_params.get(k, {}) for k in self.solvers}
-        self.N = 1000
+        self.solver_verbose = solver_verbose
+        self.N = 1
         self.loaded = True
         self._validation()
 
@@ -266,18 +268,13 @@ class Optimization:
                 elif v > 0 and np.all(lower_bounds >= 0):
                     logger.warning(f'Positive {k} will have no impact with positive or null lower bounds')
 
-    def _portfolio_expected_return(self,
-                                   w: cp.Variable,
-                                   l1_coef: Coef = None,
-                                   l2_coef: Coef = None,
-                                   k: OptionalVariable = None,
-                                   gr: OptionalVariable = None) -> cp.Expression:
+    def _portfolio_cost(self, w: cp.Variable) -> cp.Expression:
         r"""
-        Portfolio expected return with l1 and l2 regularization.
+        Portfolio cost.
 
         Returns
         -------
-        CVXPY Expression of the portfolio expected
+        CVXPY Expression of the portfolio cost
         """
         if self.transaction_costs is None or (np.isscalar(self.transaction_costs) and self.transaction_costs == 0):
             portfolio_cost = 0
@@ -291,6 +288,22 @@ class Optimization:
                 portfolio_cost = daily_costs * cp.norm(prev_w - w, 1)
             else:
                 portfolio_cost = cp.norm(cp.multiply(daily_costs, (prev_w - w)), 1)
+
+        return portfolio_cost
+
+    def _portfolio_expected_return(self,
+                                   w: cp.Variable,
+                                   l1_coef: Coef = None,
+                                   l2_coef: Coef = None,
+                                   k: OptionalVariable = None,
+                                   gr: OptionalVariable = None) -> cp.Expression:
+        r"""
+        Portfolio expected return with l1 and l2 regularization.
+
+        Returns
+        -------
+        CVXPY Expression of the portfolio expected
+        """
 
         # Norm L1
         if l1_coef is None or l1_coef == 0:
@@ -314,7 +327,7 @@ class Optimization:
         else:
             ret = self.assets.expected_returns @ w
 
-        portfolio_return = ret - portfolio_cost - l1_regularization - l2_regularization
+        portfolio_return = ret - self._portfolio_cost(w=w) - l1_regularization - l2_regularization
         return portfolio_return
 
     def _get_lower_and_upper_bounds(self) -> tuple[np.ndarray, np.ndarray]:
@@ -443,14 +456,20 @@ class Optimization:
             for parameter, values in new_parameters_values:
                 if parameter is not None:
                     parameter.value = values[i]
-            for solver in self.solvers:
+            for j, solver in enumerate(self.solvers):
                 try:
-                    problem.solve(solver=solver, **self.solver_params[solver])
+                    problem.solve(solver=solver, verbose=self.solver_verbose, **self.solver_params[solver])
+                    if w.value is None:
+                        raise SolverError('No solution found')
+                    break
                 except (SolverError, ArpackNoConvergence) as e:
                     logger.warning(f'Solver {solver} failed with error: {e}')
-                    pass
-                if w.value is not None:
-                    break
+                    try:
+                        logger.info(f'Trying another solver: {self.solvers[j + 1]}')
+                    except IndexError:
+                        logger.error(f'All Solvers failed, try another list of solvers or '
+                                     f'solve with solver_verbose=True for more information')
+
             if w.value is None:
                 raise OptimizationError('No solution found')
 
@@ -706,7 +725,8 @@ class Optimization:
         v = cp.Variable(self.assets.date_nb)
         risk = alpha + 1.0 / (self.assets.date_nb * (1 - cvar_beta)) * cp.sum(v)
         # noinspection PyTypeChecker
-        constraints = [self.assets.returns.T @ w + alpha + v >= 0,
+
+        constraints = [self.assets.returns.T @ w - self._portfolio_cost(w=w) + alpha + v >= 0,
                        v >= 0]
         return risk, constraints
 
@@ -718,7 +738,8 @@ class Optimization:
         # noinspection PyTypeChecker
         constraints = [z * self.N >= v[1:] * self.N - alpha * self.N,
                        z * self.N >= 0,
-                       v[1:] * self.N >= v[:-1] * self.N - self.assets.returns.T @ w * self.N,
+                       v[1:] * self.N >= v[:-1] * self.N - (self.assets.returns.T @ w - self._portfolio_cost(w=w))
+                       * self.N,
                        v[1:] * self.N >= 0,
                        v[0] * self.N == 0]
         return risk, constraints

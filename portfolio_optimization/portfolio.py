@@ -22,7 +22,9 @@ class BasePortfolio:
                  name: str | None = None,
                  tag: str | None = None,
                  fitness_metrics: list[Metrics] | None = None,
-                 validate: bool = True):
+                 validate: bool = True,
+                 cvar_beta: float = 0.95,
+                 cdar_beta: float = 0.95):
         r"""
         Base Portfolio
 
@@ -56,6 +58,9 @@ class BasePortfolio:
         self._dates = dates
         self.fitness_metrics = fitness_metrics if fitness_metrics is not None else [Metrics.MEAN, Metrics.STD]
         self.tag = tag if tag is not None else self._name
+        self._cvar_beta = cvar_beta
+        self._cdar_beta = cdar_beta
+
         if validate:
             self._validation()
 
@@ -110,6 +115,26 @@ class BasePortfolio:
             raise AttributeError(f"can't set attribute 'name' after the Portfolio has been frozen (Portfolios are "
                                  f"frozen when they are added to a Population)")
         self._name = value
+
+    @property
+    def cvar_beta(self):
+        return self._cvar_beta
+
+    @cvar_beta.setter
+    def cvar_beta(self, value: str) -> None:
+        for attr in ['cvar', 'cvar_ratio']:
+            self.__dict__.pop(attr, None)
+        self._cvar_beta = value
+
+    @property
+    def cdar_beta(self):
+        return self._cdar_beta
+
+    @cdar_beta.setter
+    def cdar_beta(self, value: str) -> None:
+        for attr in ['cdar', 'cdar_ratio']:
+            self.__dict__.pop(attr, None)
+        self._cdar_beta = value
 
     @property
     def returns(self):
@@ -171,6 +196,7 @@ class BasePortfolio:
     def annualized_mean(self) -> float:
         return self.mean * AVG_TRADING_DAYS_PER_YEAR
 
+    # risks measures
     @cached_property
     def std(self) -> float:
         return self.returns.std(ddof=1)
@@ -188,38 +214,38 @@ class BasePortfolio:
         return self.annualized_std ** 2
 
     @cached_property
-    def downside_std(self) -> float:
+    def semi_std(self) -> float:
         return downside_std(returns=self.returns)
 
     @property
-    def annualized_downside_std(self) -> float:
-        return self.downside_std * np.sqrt(AVG_TRADING_DAYS_PER_YEAR)
+    def annualized_semi_std(self) -> float:
+        return self.semi_std * np.sqrt(AVG_TRADING_DAYS_PER_YEAR)
 
     @property
-    def downside_variance(self) -> float:
-        return self.downside_std ** 2
+    def semi_variance(self) -> float:
+        return self.semi_std ** 2
 
     @property
-    def annualized_downside_variance(self) -> float:
-        return self.annualized_downside_std ** 2
+    def annualized_semi_variance(self) -> float:
+        return self.annualized_semi_std ** 2
 
     @cached_property
     def max_drawdown(self) -> float:
         return max_drawdown(prices=self.cumulative_returns)
 
     @cached_property
-    def cdar_95(self) -> float:
+    def cdar(self) -> float:
         """
-        Conditional Drawdown at Risk (CDaR) with a confidence level at 95%
+        Conditional Drawdown at Risk (CDaR) with a confidence level at self.cdar_beta (default 95%)
         """
-        return cdar(prices=self.cumulative_returns_uncompounded, beta=0.95)
+        return cdar(prices=self.cumulative_returns_uncompounded, beta=self.cdar_beta)
 
     @cached_property
-    def cvar_95(self) -> float:
+    def cvar(self) -> float:
         """
-        Conditional historical Value at Risk (CVaR) with a confidence level at 95%
+        Conditional historical Value at Risk (CVaR) with a confidence level at self.cvar_beta (default 95%)
         """
-        return cvar(returns=self.returns, beta=0.95)
+        return cvar(returns=self.returns, beta=self.cvar_beta)
 
     @property
     def sharpe_ratio(self) -> float:
@@ -227,19 +253,19 @@ class BasePortfolio:
 
     @property
     def sortino_ratio(self) -> float:
-        return self.annualized_mean / self.annualized_downside_std
+        return self.annualized_mean / self.annualized_semi_std
 
     @property
     def calmar_ratio(self) -> float:
         return self.annualized_mean / self.max_drawdown
 
     @property
-    def cdar_95_ratio(self) -> float:
-        return self.annualized_mean / self.cdar_95
+    def cdar_ratio(self) -> float:
+        return self.annualized_mean / self.cdar
 
     @property
-    def cvar_95_ratio(self) -> float:
-        return self.annualized_mean / self.cvar_95
+    def cvar_ratio(self) -> float:
+        return self.annualized_mean / self.cvar
 
     @property
     def composition(self) -> pd.DataFrame:
@@ -257,8 +283,8 @@ class BasePortfolio:
                           Metrics.SHARPE_RATIO,
                           Metrics.SORTINO_RATIO,
                           Metrics.CALMAR_RATIO,
-                          Metrics.CDAR_95_RATIO,
-                          Metrics.CVAR_95_RATIO]:
+                          Metrics.CDAR_RATIO,
+                          Metrics.CVAR_RATIO]:
                 sign = 1
             else:
                 sign = -1
@@ -370,18 +396,18 @@ class BasePortfolio:
             'Annualized Mean': (self.annualized_mean, '0.2%'),
             'Std (Volatility)': (self.std, '0.3%'),
             'Annualized Std': (self.annualized_std, '0.2%'),
-            'Downside Std': (self.downside_std, '0.3%'),
-            'Annualized Downside Std': (self.annualized_downside_std, '0.2%'),
+            'Downside Std': (self.semi_std, '0.3%'),
+            'Annualized Downside Std': (self.annualized_semi_std, '0.2%'),
             'Max Drawdown': (self.max_drawdown, '0.2%'),
-            'CDaR at 95%': (self.cdar_95, '0.2%'),
-            'CVaR at 95%': (self.cvar_95, '0.2%'),
+            'CDaR at 95%': (self.cdar, '0.2%'),
+            'CVaR at 95%': (self.cvar, '0.2%'),
             'Variance': (self.variance, '0.6%'),
-            'Downside Variance': (self.downside_variance, '0.6%'),
+            'Downside Variance': (self.semi_variance, '0.6%'),
             'Sharpe Ratio': (self.sharpe_ratio, '0.2f'),
             'Sortino Ratio': (self.sortino_ratio, '0.2f'),
             'Calmar Ratio': (self.calmar_ratio, '0.2f'),
-            'Cdar at 95% Ratio': (self.cdar_95_ratio, '0.2f'),
-            'Cvar at 95% Ratio': (self.cvar_95_ratio, '0.2f'),
+            'Cdar at 95% Ratio': (self.cdar_ratio, '0.2f'),
+            'Cvar at 95% Ratio': (self.cvar_ratio, '0.2f'),
         }
 
         if formatted:

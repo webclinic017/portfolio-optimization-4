@@ -73,8 +73,8 @@ if __name__ == '__main__':
     print(max_sharpe_ptf.summary())
 
     # Find the portfolio with maximum CDaR 95% Ratio
-    max_cdar_95_ptf = population.max(metric=Metrics.CDAR_95_RATIO)
-    print(max_cdar_95_ptf.cdar_95_ratio)
+    max_cdar_95_ptf = population.max(metric=Metrics.CDAR_RATIO)
+    print(max_cdar_95_ptf.cdar_ratio)
     print(max_cdar_95_ptf.summary())
 
     # Combination of the two portfolio

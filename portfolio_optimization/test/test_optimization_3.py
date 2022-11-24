@@ -1,586 +1,123 @@
 import numpy as np
 
-from portfolio_optimization import *
+from portfolio_optimization import (Assets, load_prices, load_assets, Optimization, RiskMeasure, InvestmentType,
+                                    EXAMPLE_PRICES_PATH, ObjectiveFunction, Portfolio, OptimizationError)
 
 
-def is_close(a: float, b: float):
-    return abs(a - b) < 1e-7
+def is_close(a: float, b: float, precision: float = 1e-7):
+    return abs(a - b) < precision
 
 
 def get_assets() -> Assets:
     prices = load_prices(file=EXAMPLE_PRICES_PATH)
-    prices = prices.iloc[:, :100].copy()
+    prices = prices.iloc[:, 50:100].copy()
     assets = load_assets(prices=prices,
                          asset_missing_threshold=0.1,
                          dates_missing_threshold=0.1,
-                         removal_correlation=0.99,
+                         removal_correlation=0.90,
                          verbose=False)
 
     return assets
 
 
 def test_mean_variance():
+    precision = {
+        RiskMeasure.VARIANCE: 1e-7,
+        RiskMeasure.SEMI_VARIANCE: 1e-7,
+        RiskMeasure.CVAR: 1e-4,
+        RiskMeasure.CDAR: 1e-4
+    }
+
     assets = get_assets()
-    weight_bounds = (0, None)
-    previous_weights = np.random.randn(assets.asset_nb)
-    transaction_costs = abs(np.random.randn(assets.asset_nb)) / 100
-    investment_type = InvestmentType.FULLY_INVESTED
-    model = Optimization(assets=assets,
-                         investment_type=investment_type,
-                         weight_bounds=weight_bounds,
-                         previous_weights=previous_weights,
-                         transaction_costs=transaction_costs,
-                         investment_duration=assets.date_nb)
+    # previous_weights = np.random.randn(assets.asset_nb) / 10
+    previous_weights = np.array([0.06663786, -0.02609581, -0.12200097, -0.03729676, -0.18604607,
+                                 -0.09291357, -0.22839449, -0.08750029, 0.01262641, 0.08712638,
+                                 -0.15731865, 0.14594815, 0.11637876, 0.02163102, 0.03458678,
+                                 -0.1106219, -0.05892651, 0.05990245, -0.11428092, -0.06343284,
+                                 0.0423514, 0.1394012, 0.00185886, 0.00799553, 0.02767036,
+                                 -0.1706394, 0.07544119, -0.06341742, -0.0254911, -0.07081295,
+                                 0.02034429, -0.03295023, 0.09833698, 0.0489829, -0.13253346])
 
-    mean, w = model.mean_risk_optimization(risk_measure=RiskMeasure.VARIANCE,
-                                           objective_function=ObjectiveFunction.MAX_RETURN,
-                                           max_variance=0.1,
-                                           objective_values=True)
+    # transaction_costs = abs(np.random.randn(assets.asset_nb))/100
+    transaction_costs = np.array([3.07368300e-03, 1.22914659e-02, 1.31012389e-02, 5.11069233e-03,
+                                  3.14226164e-03, 1.38225267e-02, 1.01730423e-02, 1.60753223e-02,
+                                  2.16640987e-04, 1.14058494e-02, 8.94785339e-03, 7.30764696e-03,
+                                  1.82260135e-02, 2.00042452e-02, 8.56386327e-03, 4.53884918e-03,
+                                  1.00539220e-02, 3.53354996e-04, 6.15081648e-03, 1.16504714e-02,
+                                  5.66981399e-03, 1.33982849e-02, 2.77254069e-03, 5.52234266e-03,
+                                  1.52447716e-05, 6.58091620e-03, 1.25069156e-02, 1.32262548e-02,
+                                  7.73299012e-03, 5.38849221e-03, 1.51744779e-02, 5.22349873e-03,
+                                  8.18506176e-03, 1.34491053e-02, 9.20145325e-03])
 
-    p = Portfolio(assets=assets,
-                  weights=w,
-                  previous_weights=previous_weights,
-                  transaction_costs=transaction_costs)
+    for risk_measure in RiskMeasure:
+        print(risk_measure)
+        max_risk_arg = f'max_{risk_measure.value}'
+        for weight_bounds in [(None, None), (0, None)]:
+            for investment_type in InvestmentType:
+                model = Optimization(assets=assets,
+                                     investment_type=investment_type,
+                                     weight_bounds=weight_bounds,
+                                     previous_weights=previous_weights,
+                                     transaction_costs=transaction_costs,
+                                     investment_duration=assets.date_nb,
+                                     solvers=['ECOS'])
 
-    assert is_close(p.mean, mean)
-
-    for weight_bounds in [(None, None), (0, None)]:
-        for investment_type in InvestmentType:
-            model = Optimization(assets=assets,
-                                 investment_type=investment_type,
-                                 weight_bounds=weight_bounds,
-                                 previous_weights=previous_weights,
-                                 transaction_costs=transaction_costs,
-                                 investment_duration=assets.date_nb)
-
-            min_variance, w = model.mean_risk_optimization(risk_measure=RiskMeasure.VARIANCE,
+                min_risk, w = model.mean_risk_optimization(risk_measure=risk_measure,
                                                            objective_function=ObjectiveFunction.MIN_RISK,
-                                                           objective_values=True)
-
-            p = Portfolio(assets=assets,
-                          weights=w,
-                          previous_weights=previous_weights,
-                          transaction_costs=transaction_costs)
-            assert is_close(p.variance, min_variance)
-
-            var = min_variance +1e-4
-            w = model.mean_risk_optimization(risk_measure=RiskMeasure.VARIANCE,
-                                             objective_function=ObjectiveFunction.MAX_RETURN,
-                                             max_variance=var)
-
-            p = Portfolio(assets=assets,
-                          weights=w,
-                          previous_weights=previous_weights,
-                          transaction_costs=transaction_costs)
-            assert is_close(p.variance, var)
-
-            w = model.mean_risk_optimization(risk_measure=RiskMeasure.VARIANCE,
-                                             objective_function=ObjectiveFunction.MIN_RISK,
-                                             max_variance=min_variance)
-
-            p = Portfolio(assets=assets,
-                          weights=w,
-                          previous_weights=previous_weights,
-                          transaction_costs=transaction_costs)
-            assert is_close(p.variance, min_variance)
-
-            ret = abs(p.mean + 0.001) * 3
-            try:
-                variance, w = model.mean_risk_optimization(risk_measure=RiskMeasure.VARIANCE,
-                                                           objective_function=ObjectiveFunction.MIN_RISK,
-                                                           min_return=ret,
                                                            objective_values=True)
 
                 p = Portfolio(assets=assets,
                               weights=w,
                               previous_weights=previous_weights,
                               transaction_costs=transaction_costs)
-                assert is_close(p.variance, variance)
-                assert is_close(p.mean, ret)
+                assert is_close(getattr(p, risk_measure.value), min_risk, precision[risk_measure])
+                min_risk_mean = p.mean
 
-                var = variance
-                mean, w = model.mean_risk_optimization(risk_measure=RiskMeasure.VARIANCE,
+                risk = min_risk*1.2
+                mean, w = model.mean_risk_optimization(risk_measure=risk_measure,
                                                        objective_function=ObjectiveFunction.MAX_RETURN,
-                                                       max_variance=var,
+                                                       objective_values=True,
+                                                       **{max_risk_arg: risk})
+
+                p = Portfolio(assets=assets,
+                              weights=w,
+                              previous_weights=previous_weights,
+                              transaction_costs=transaction_costs)
+                assert is_close(getattr(p, risk_measure.value), risk, precision[risk_measure])
+                assert is_close(p.mean, mean)
+                assert mean >= min_risk_mean - 1e-6
+
+                w = model.mean_risk_optimization(risk_measure=risk_measure,
+                                                 objective_function=ObjectiveFunction.MIN_RISK,
+                                                 **{max_risk_arg: risk})
+
+                p = Portfolio(assets=assets,
+                              weights=w,
+                              previous_weights=previous_weights,
+                              transaction_costs=transaction_costs)
+                assert is_close(getattr(p, risk_measure.value), min_risk, precision[risk_measure])
+
+                ret = mean
+                risk, w = model.mean_risk_optimization(risk_measure=risk_measure,
+                                                       objective_function=ObjectiveFunction.MIN_RISK,
+                                                       min_return=ret,
                                                        objective_values=True)
 
                 p = Portfolio(assets=assets,
                               weights=w,
                               previous_weights=previous_weights,
                               transaction_costs=transaction_costs)
-                assert is_close(p.variance, var)
-                assert is_close(p.mean, mean)
-            except OptimizationError:
-                pass
+                assert is_close(getattr(p, risk_measure.value), risk, precision[risk_measure])
+                assert is_close(p.mean, mean, 1e-4)
 
-
-def test_mean_semivariance():
-    assets = get_assets()
-    weight_bounds = (0, None)
-    investment_type = InvestmentType.FULLY_INVESTED
-    model = Optimization(assets=assets,
-                         investment_type=investment_type,
-                         weight_bounds=weight_bounds,
-                         transaction_costs=0.01,
-                         investment_duration=255)
-
-    min_variance, w = model.mean_risk_optimization(risk_measure=RiskMeasure.VARIANCE,
-                                                   objective_function=ObjectiveFunction.MIN_RISK,
-                                                   objective_values=True)
-
-    for weight_bounds in [(None, None), (0, None)]:
-        for investment_type in InvestmentType:
-            model = Optimization(assets=assets,
-                                 investment_type=investment_type,
-                                 weight_bounds=weight_bounds)
-
-            min_variance, w = model.mean_risk_optimization(risk_measure=RiskMeasure.VARIANCE,
-                                                           objective_function=ObjectiveFunction.MIN_RISK,
-                                                           objective_values=True)
-
-            p = Portfolio(assets=assets, weights=w)
-            assert is_close(p.variance, min_variance)
-
-            var = min_variance + 1e-8
-            w = model.mean_risk_optimization(risk_measure=RiskMeasure.VARIANCE,
-                                             objective_function=ObjectiveFunction.MAX_RETURN,
-                                             max_variance=var)
-
-            p = Portfolio(assets=assets, weights=w)
-            assert is_close(p.variance, var)
-
-            w = model.mean_risk_optimization(risk_measure=RiskMeasure.VARIANCE,
-                                             objective_function=ObjectiveFunction.MIN_RISK,
-                                             max_variance=min_variance)
-
-            p = Portfolio(assets=assets, weights=w)
-            assert is_close(p.variance, min_variance)
-
-            ret = abs(p.mean + 0.001) * 3
-            try:
-                variance, w = model.mean_risk_optimization(risk_measure=RiskMeasure.VARIANCE,
-                                                           objective_function=ObjectiveFunction.MIN_RISK,
-                                                           min_return=ret,
-                                                           objective_values=True)
-
-                p = Portfolio(assets=assets, weights=w)
-                assert is_close(p.variance, variance)
-                assert is_close(p.mean, ret)
-
-                var = variance
-                mean, w = model.mean_risk_optimization(risk_measure=RiskMeasure.VARIANCE,
+                mean, w = model.mean_risk_optimization(risk_measure=risk_measure,
                                                        objective_function=ObjectiveFunction.MAX_RETURN,
-                                                       max_variance=var,
-                                                       objective_values=True)
+                                                       objective_values=True,
+                                                       **{max_risk_arg: risk})
 
-                p = Portfolio(assets=assets, weights=w)
-                assert is_close(p.variance, var)
+                p = Portfolio(assets=assets,
+                              weights=w,
+                              previous_weights=previous_weights,
+                              transaction_costs=transaction_costs)
+                assert is_close(getattr(p, risk_measure.value), risk, precision[risk_measure])
                 assert is_close(p.mean, mean)
-            except OptimizationError:
-                pass
-
-
-def test_inverse_volatility():
-    assets = get_assets()
-    model = Optimization(assets=assets)
-    weights = model.inverse_volatility()
-
-    assert abs(sum(weights) - 1) < 1e-10
-    w = 1 / assets.std
-    w = w / sum(w)
-    assert abs(weights - w).sum() < 1e-10
-
-
-def test_equal_weighted():
-    assets = get_assets()
-    model = Optimization(assets=assets)
-    weights = model.equal_weighted()
-
-    assert abs(sum(weights) - 1) < 1e-10
-    w = 1 / assets.asset_nb
-    assert abs(weights - w).sum() < 1e-10
-
-
-def test_random():
-    assets = get_assets()
-    model = Optimization(assets=assets)
-    weights = model.random()
-
-    assert abs(sum(weights) - 1) < 1e-10
-
-
-def minimum_testing(method_name: str,
-                    portfolio_target_name: str,
-                    threshold: float,
-                    **kwargs):
-    minimum_method_name = method_name.replace('mean', 'minimum')
-    assets = get_assets()
-    model = Optimization(assets=assets,
-                         investment_type=InvestmentType.FULLY_INVESTED,
-                         weight_bounds=(0, None))
-    min_func = getattr(model, minimum_method_name)
-    # Population size
-    min_risk, weights = min_func()
-    assert isinstance(min_risk, float)
-    assert min_risk > 0
-    assert isinstance(weights, np.ndarray)
-    assert weights.shape == (assets.asset_nb,)
-    assert not np.isnan(weights).any()
-
-    portfolio = Portfolio(weights=weights,
-                          assets=assets)
-    assert abs(getattr(portfolio, portfolio_target_name) - min_risk) < threshold
-
-    mean_func = getattr(model, method_name)
-    target_name = method_name.replace('mean', 'target')
-    weights_2 = mean_func(**{target_name: min_risk})
-    portfolio_2 = Portfolio(weights=weights_2,
-                            assets=assets)
-    assert abs(getattr(portfolio_2, portfolio_target_name) - min_risk) < threshold
-
-    weights_3 = mean_func(**{target_name: min_risk / 2})
-    if not np.isnan(weights_3).all():
-        portfolio_3 = Portfolio(weights=weights_2,
-                                assets=assets)
-        assert abs(getattr(portfolio_3, portfolio_target_name) - min_risk) < threshold
-
-
-def population_testing(method_name: str, **kwargs):
-    assets = get_assets()
-    model = Optimization(assets=assets,
-                         investment_type=InvestmentType.FULLY_INVESTED,
-                         weight_bounds=(0, None))
-    func = getattr(model, method_name)
-    # Population size
-    portfolios_weights = func(population_size=30)
-    assert isinstance(portfolios_weights, np.ndarray)
-    assert portfolios_weights.shape == (30, assets.asset_nb)
-    assert not np.isnan(portfolios_weights).any()
-
-
-def investment_type_testing(method_name: str,
-                            target: float,
-                            **kwargs):
-    target_name = method_name.replace('mean', 'target')
-    assets = get_assets()
-
-    # Fully invested and no short selling
-    model = Optimization(assets=assets,
-                         investment_type=InvestmentType.FULLY_INVESTED,
-                         weight_bounds=(0, 10))
-    func = getattr(model, method_name)
-    weights = func(**{target_name: target})
-    assert abs(sum(weights) - 1) < 1e-10
-    assert np.all(weights >= 0)
-
-    # Fully invested and short selling
-    model.update(weight_bounds=(None, None))
-    weights = func(**{target_name: target})
-    assert abs(sum(weights) - 1) < 1e-10
-    assert not np.all(weights >= 0)
-
-    # Fully invested and short selling with weights between -20% and 30%
-    lower = -0.2
-    upper = 0.3
-    model.update(weight_bounds=(lower, upper))
-    weights = func(**{target_name: target})
-    assert abs(sum(weights) - 1) < 1e-10
-    assert np.all(weights >= lower) and np.all(weights <= upper)
-
-    # Market neutral with short selling
-    model.update(investment_type=InvestmentType.MARKET_NEUTRAL,
-                 weight_bounds=(None, None))
-    weights = func(**{target_name: target})
-    assert abs(sum(weights)) < 1e-10
-    assert sum(abs(weights)) > 1
-    assert not np.all(weights >= 0)
-
-    # Market neutral with no short selling
-    try:
-        model.update(investment_type=InvestmentType.MARKET_NEUTRAL,
-                     weight_bounds=(0.1, None))
-        raise
-    except ValueError:
-        pass
-
-    # UNCONSTRAINED
-    model.update(investment_type=InvestmentType.UNCONSTRAINED,
-                 weight_bounds=(None, None))
-    weights = func(**{target_name: target})
-    assert abs(sum(weights) - 1) > 1e-5
-    assert abs(sum(weights)) > 1e-5
-
-
-def costs_testing(method_name: str,
-                  target: float,
-                  portfolio_target_name: str,
-                  threshold: float):
-    target_name = method_name.replace('mean', 'target')
-    assets = get_assets()
-    model = Optimization(assets=assets,
-                         investment_type=InvestmentType.FULLY_INVESTED,
-                         weight_bounds=(0, None))
-    func = getattr(model, method_name)
-    # Ref with no costs
-    weights = func(**{target_name: target})
-    portfolio_ref = Portfolio(weights=weights,
-                              assets=assets,
-                              name='ptf_ref')
-    assert abs(getattr(portfolio_ref, portfolio_target_name) - target) < threshold
-
-    # uniform costs for all assets and empty prev_weight --> no impact on weights
-    model.update(costs=0.1,
-                 prev_w=None,
-                 investment_duration_in_days=255)
-    weights = func(**{target_name: target})
-    portfolio = Portfolio(weights=weights,
-                          assets=assets)
-    assert abs(getattr(portfolio, portfolio_target_name) - target) < threshold
-    assert abs(portfolio.weights - portfolio_ref.weights).sum() < 5e-2
-
-    # uniform costs for all assets and uniform prev_weight --> no impact on weights
-    model.update(prev_w=np.ones(assets.asset_nb))
-    weights = func(**{target_name: target})
-    portfolio = Portfolio(weights=weights,
-                          assets=assets)
-    assert abs(getattr(portfolio, portfolio_target_name) - target) < threshold
-    assert abs(portfolio.weights - portfolio_ref.weights).sum() < 5e-2
-
-    # costs on top two invested assets and uniform prev_weight --> impact on the two invested assets weight
-    asset_1 = portfolio_ref.composition.index[0]
-    asset_2 = portfolio_ref.composition.index[1]
-    costs = {asset_1: 0.2,
-             asset_2: 0.5}
-    model.update(costs=assets.dict_to_array(assets_dict=costs),
-                 prev_w=None)
-    weights = func(**{target_name: target})
-    portfolio = Portfolio(weights=weights,
-                          assets=assets)
-    assert abs(getattr(portfolio, portfolio_target_name) - target) < threshold
-    assert asset_1 not in portfolio.composition.index
-    assert asset_2 not in portfolio.composition.index
-    assert abs(portfolio.weights - portfolio_ref.weights).sum() > 5e-2
-
-    # costs and identical prev_weight on top two invested assets --> the top two assets weights stay > 0
-    asset_1 = portfolio_ref.composition.index[0]
-    asset_2 = portfolio_ref.composition.index[1]
-    costs = {asset_1: 0.2,
-             asset_2: 0.5}
-    prev_weights = {asset_1: portfolio_ref.get_weight(asset_name=asset_1),
-                    asset_2: portfolio_ref.get_weight(asset_name=asset_2)}
-    model.update(costs=assets.dict_to_array(assets_dict=costs),
-                 prev_w=assets.dict_to_array(assets_dict=prev_weights))
-    weights = func(**{target_name: target})
-    portfolio = Portfolio(weights=weights,
-                          assets=assets)
-    assert abs(getattr(portfolio, portfolio_target_name) - target) < threshold
-    assert asset_1 in portfolio.composition.index
-    assert asset_2 in portfolio.composition.index
-    assert abs(portfolio.weights - portfolio_ref.weights).sum() < 5e-2
-
-    # identical costs on all assets and large prev_weight on top two invested assets
-    # --> the top two assets weights become larger
-    asset_1 = portfolio_ref.composition.index[0]
-    asset_2 = portfolio_ref.composition.index[1]
-    prev_weights = {asset_1: 1,
-                    asset_2: 1}
-    model.update(costs=0.1,
-                 prev_w=assets.dict_to_array(assets_dict=prev_weights))
-    weights = func(**{target_name: target})
-    portfolio = Portfolio(weights=weights,
-                          assets=assets)
-    assert abs(getattr(portfolio, portfolio_target_name) - target) < threshold
-    assert asset_1 in portfolio.composition.index
-    assert asset_2 in portfolio.composition.index
-    assert portfolio.get_weight(asset_1) > portfolio_ref.get_weight(asset_1)
-    assert portfolio.get_weight(asset_2) > portfolio_ref.get_weight(asset_2)
-    assert abs(portfolio.weights - portfolio_ref.weights).sum() > 1e-3
-
-
-def regularisation_testing(method_name: str,
-                           target: float,
-                           portfolio_target_name: 'str',
-                           threshold: float):
-    target_name = method_name.replace('mean', 'target')
-    assets = get_assets()
-
-    params = {target_name: target}
-
-    coefs_params = [{'l1_coef': 0.1},
-                    {'l2_coef': 0.1},
-                    {'l1_coef': 0.1,
-                     'l2_coef': 0.1}]
-
-    # No short selling --> no impact of regularisation with l1 and impact with l2
-    model = Optimization(assets=assets,
-                         investment_type=InvestmentType.FULLY_INVESTED,
-                         weight_bounds=(0, None))
-    func = getattr(model, method_name)
-    weights = func(**params)
-    portfolio_ref = Portfolio(weights=weights,
-                              assets=assets)
-
-    for coef_param in coefs_params:
-        coef_param.update(params)
-        weights = func(**coef_param)
-        portfolio = Portfolio(weights=weights,
-                              assets=assets)
-        assert abs(getattr(portfolio, portfolio_target_name) - target) < threshold
-        assert abs(sum(portfolio.weights) - 1) < 1e-5
-        if 'l1_coef' in params.keys():
-            assert sum(abs(portfolio_ref.weights - portfolio.weights)) < 1e-4
-        if 'l2_coef' in params.keys():
-            assert sum(abs(portfolio_ref.weights - portfolio.weights)) > 1e-3
-            assert sum(np.square(portfolio_ref.weights)) > sum(np.square(portfolio.weights))
-
-    # Short Selling --> impact of regularisation
-    model.update(weight_bounds=(None, None))
-    weights = func(**params)
-    portfolio_ref = Portfolio(weights=weights,
-                              assets=assets)
-
-    for coef_param in coefs_params:
-        coef_param.update(params)
-        weights = func(**coef_param)
-        portfolio = Portfolio(weights=weights,
-                              assets=assets)
-        assert abs(getattr(portfolio, portfolio_target_name) - target) < threshold
-        assert abs(sum(portfolio.weights) - 1) < 1e-5
-        assert sum(abs(portfolio_ref.weights - portfolio.weights)) > 1e-3
-        if 'l1_coef' in params.keys():
-            assert sum(abs(portfolio_ref.weights)) > sum(abs(portfolio.weights))
-        if 'l2_coef' in params.keys():
-            assert sum(np.square(portfolio_ref.weights)) > sum(np.square(portfolio.weights))
-
-    # Negative coef
-    coefs_params = [{'l1_coef': -1},
-                    {'l2_coef': -1}]
-    for coef_param in coefs_params:
-        try:
-            coef_param.update(params)
-            func(**coef_param)
-            raise
-        except ValueError:
-            pass
-
-
-def args_testing(method_name: str,
-                 **kwargs):
-    target_name = method_name.replace('mean', 'target')
-    prices = load_prices(file=EXAMPLE_PRICES_PATH)
-    prices = prices.iloc[:, :100].copy()
-
-    assets = load_assets(prices=prices,
-                         asset_missing_threshold=0.1,
-                         dates_missing_threshold=0.1,
-                         removal_correlation=0.99,
-                         verbose=False)
-
-    model = Optimization(assets=assets,
-                         investment_type=InvestmentType.FULLY_INVESTED,
-                         weight_bounds=(0, None))
-    func = getattr(model, method_name)
-
-    # target is a float
-    target = 0.05
-    weights = func(**{target_name: target})
-    assert isinstance(weights, np.ndarray)
-    assert weights.shape == (assets.asset_nb,)
-
-    # target is a list or numpy array
-    for target in [[0.02, 0.05], np.array([0.02, 0.05])]:
-        weights = func(**{target_name: target})
-        assert isinstance(weights, np.ndarray)
-        assert weights.shape == (len(target), assets.asset_nb)
-
-    # Target is 0 or neg
-    target = [1, -1]
-    try:
-        func(**{target_name: target})
-        raise
-    except ValueError:
-        pass
-
-    # Population
-    population_size = 3
-    weights = func(population_size=population_size)
-    assert isinstance(weights, np.ndarray)
-    assert weights.shape == (population_size, assets.asset_nb)
-
-    # Both Population and Target is None
-    try:
-        func()
-        raise
-    except ValueError:
-        pass
-
-    # Both Population and Target is None
-    try:
-        func(**{target_name: target, 'population_size': 3})
-        raise
-    except ValueError:
-        pass
-
-
-def test_minimum():
-    for param in PARAMS:
-        print(param)
-        minimum_testing(**param)
-
-
-def test_population():
-    for param in PARAMS:
-        print(param)
-        population_testing(**param)
-
-
-def test_investment_type():
-    for param in PARAMS:
-        print(param)
-        investment_type_testing(**param)
-
-
-def test_costs():
-    for param in PARAMS:
-        print(param)
-        costs_testing(**param)
-
-
-def test_regularisation():
-    for param in PARAMS:
-        print(param)
-        regularisation_testing(**param)
-
-
-def test_args():
-    for param in PARAMS:
-        print(param)
-        args_testing(**param)
-
-
-def test_maximum_sharpe():
-    assets = get_assets()
-
-    model = Optimization(assets=assets,
-                         investment_type=InvestmentType.FULLY_INVESTED,
-                         weight_bounds=(0, 0.1))
-
-    weights = model.maximum_sharpe()
-    portfolio = Portfolio(weights=weights,
-                          assets=assets)
-
-    portfolios_weights = model.mean_variance(population_size=30)
-    # Remove nan
-    portfolios_weights = portfolios_weights[~np.isnan(portfolios_weights).all(axis=1)]
-    population = Population()
-    for weights in portfolios_weights:
-        population.append(Portfolio(weights=weights,
-                                    assets=assets))
-
-    max_sharpe_ptf = population.max(metric=Metrics.SHARPE_RATIO)
-
-    assert abs(sum(portfolio.weights) - 1) < 1e-5
-    assert abs(sum(max_sharpe_ptf.weights) - 1) < 1e-5
-    assert abs(max_sharpe_ptf.sharpe_ratio - portfolio.sharpe_ratio) < 1e-2
-    assert abs(max_sharpe_ptf.std - portfolio.std) < 1e-3
-    assert abs(max_sharpe_ptf.mean - max_sharpe_ptf.mean) < 1e-4

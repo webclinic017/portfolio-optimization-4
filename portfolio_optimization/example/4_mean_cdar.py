@@ -48,17 +48,17 @@ if __name__ == '__main__':
                             y=Metrics.ANNUALIZED_MEAN,
                             color_scale=Metrics.CALMAR_RATIO,
                             hover_metrics=[Metrics.SHARPE_RATIO])
-    population.plot_metrics(x=Metrics.CDAR_95,
+    population.plot_metrics(x=Metrics.CDAR,
                             y=Metrics.ANNUALIZED_MEAN,
-                            color_scale=Metrics.CDAR_95_RATIO,
+                            color_scale=Metrics.CDAR_RATIO,
                             hover_metrics=[Metrics.SHARPE_RATIO])
 
     # Metrics
     max_sharpe = population.max(metric=Metrics.SHARPE_RATIO)
     print(max_sharpe.sharpe_ratio)
 
-    max_cdar_95_ratio = population.max(metric=Metrics.CDAR_95_RATIO)
-    print(max_cdar_95_ratio.cdar_95_ratio)
+    max_cdar_95_ratio = population.max(metric=Metrics.CDAR_RATIO)
+    print(max_cdar_95_ratio.cdar_ratio)
 
     # Composition
     population.plot_composition(names=[max_sharpe.name, max_cdar_95_ratio.name])
@@ -105,21 +105,21 @@ def mean_cdar_vs_mean_cvar():
                                     tag='mean_cvar'))
 
     # Plot
-    population.plot_metrics(x=Metrics.CDAR_95,
+    population.plot_metrics(x=Metrics.CDAR,
                             y=Metrics.ANNUALIZED_MEAN,
-                            color_scale=Metrics.CDAR_95_RATIO,
+                            color_scale=Metrics.CDAR_RATIO,
                             hover_metrics=[Metrics.SHARPE_RATIO])
-    population.plot_metrics(x=Metrics.CVAR_95,
+    population.plot_metrics(x=Metrics.CVAR,
                             y=Metrics.ANNUALIZED_MEAN,
-                            color_scale=Metrics.CVAR_95_RATIO,
+                            color_scale=Metrics.CVAR_RATIO,
                             hover_metrics=[Metrics.SHARPE_RATIO])
 
     # Metrics
-    max_cdar_95_ratio = population.max(metric=Metrics.CDAR_95_RATIO)
-    print(max_cdar_95_ratio.cdar_95_ratio)
+    max_cdar_95_ratio = population.max(metric=Metrics.CDAR_RATIO)
+    print(max_cdar_95_ratio.cdar_ratio)
 
-    max_cvar_95_ratio = population.max(metric=Metrics.CVAR_95_RATIO)
-    print(max_cvar_95_ratio.cvar_95_ratio)
+    max_cvar_95_ratio = population.max(metric=Metrics.CVAR_RATIO)
+    print(max_cvar_95_ratio.cvar_ratio)
 
     # Composition
     population.plot_composition(names=[max_cdar_95_ratio.name, max_cvar_95_ratio.name])
