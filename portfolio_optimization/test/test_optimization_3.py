@@ -25,7 +25,7 @@ def test_mean_variance():
         RiskMeasure.VARIANCE: 1e-7,
         RiskMeasure.SEMI_VARIANCE: 1e-7,
         RiskMeasure.CVAR: 1e-4,
-        RiskMeasure.CDAR: 1e-3
+        RiskMeasure.CDAR: 1e-4
     }
 
     assets = get_assets()
@@ -52,16 +52,21 @@ def test_mean_variance():
     for risk_measure in RiskMeasure:
         print(risk_measure)
         max_risk_arg = f'max_{risk_measure.value}'
-        for weight_bounds in [(None, None), (0, None)]:
-            for investment_type in InvestmentType:
+        if risk_measure == RiskMeasure.CDAR:
+            solvers = ['CVXOPT']
+            continue
+        else:
+            solvers = ['ECOS']
+
+        for weight_bounds in [(-1, 1), (0, None)]:
+            for budget in [1, 0, None]:
                 model = Optimization(assets=assets,
-                                     investment_type=investment_type,
+                                     budget=budget,
                                      weight_bounds=weight_bounds,
                                      previous_weights=previous_weights,
                                      transaction_costs=transaction_costs,
                                      investment_duration=assets.date_nb,
-                                     solvers=['ECOS'],
-                                     scale=1)
+                                     solvers=solvers)
 
                 min_risk, w = model.mean_risk_optimization(risk_measure=risk_measure,
                                                            objective_function=ObjectiveFunction.MIN_RISK,

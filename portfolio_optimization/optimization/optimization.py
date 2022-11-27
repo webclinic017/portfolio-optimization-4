@@ -5,7 +5,7 @@ from cvxpy import SolverError, OPTIMAL
 from cvxpy.constraints.constraint import Constraint
 from scipy.sparse.linalg import ArpackNoConvergence
 from enum import Enum
-from portfolio_optimization.meta import InvestmentType
+from numbers import Number
 from portfolio_optimization.assets import Assets
 from portfolio_optimization.exception import OptimizationError
 from portfolio_optimization.utils.tools import args_names, rand_weights_dirichlet
@@ -31,15 +31,17 @@ class ObjectiveFunction(Enum):
     UTILITY = 'utility'
 
 
-WeightBounds = tuple[float | list | np.ndarray | None, float | list | np.ndarray | None]
-Costs = float | list | np.ndarray
+WeightBounds = tuple[float | np.ndarray | None, float | np.ndarray | None] | None
+Costs = float | np.ndarray
 Duration = int | None
-PrevWeight = list | np.ndarray | None
+PrevWeight = np.ndarray | None
 Rate = float
+Budget = float | None
+BudgetBounds = tuple[float | None, float | None]
 Solvers = list[str] | None
 solverParams = dict[str, dict] | None
 Coef = float | None
-Target = float | list | np.ndarray | None
+Target = float | np.ndarray | None
 ParametersValues = list[tuple[cp.Parameter, float | np.ndarray]] | None
 PopulationSize = int | None
 OptionalVariable = cp.Variable | None
@@ -49,7 +51,8 @@ Result = np.ndarray | tuple[float | np.ndarray, np.ndarray]
 class Optimization:
     def __init__(self,
                  assets: Assets,
-                 investment_type: InvestmentType = InvestmentType.FULLY_INVESTED,
+                 budget: Budget = 1,
+                 budget_bounds: BudgetBounds = None,
                  weight_bounds: WeightBounds = (-1, 1),
                  transaction_costs: Costs = 0,
                  investment_duration: Duration = None,
@@ -69,15 +72,21 @@ class Optimization:
         assets: Assets
                 The Assets object containing the assets market data and mean/covariance models
 
-        investment_type: InvestmentType, default InvestmentType.FULLY_INVESTED
-                         The investment type of the portfolio.
+        budget: float | None, default 1
+                The budget of the portfolio is the sum of long positions and short positions (sum of all weights).
 
-                         The possible values are:
-                          * InvestmentType.FULLY_INVESTED: the sum of weights equal one
-                          * InvestmentType.MARKET_NEUTRAL: the sum of weights equal zero
-                          * InvestmentType.UNCONSTRAINED: the sum of weights has no constraints
+                Examples:
+                      * budget=1: fully invested portfolio 
+                      * budget=0: market neutral portfolio
+                      * budget=None: no constraints on the sum of weights
+                      
+                      
+        budget_bounds: tuple[float | None, float | None] | None, default None
+                       The budget bounds of the portfolio are the lower and upper levels of the sum of long positions 
+                       and short positions (sum of all weights). If at least one of the budget bounds is not None, 
+                       you have to set the budget to None because they contradict each other.
 
-        weight_bounds: tuple[float | list | ndarray | None, float | list | ndarray | None], default (-1, 1)
+        weight_bounds: tuple[float | ndarray | None, float | ndarray | None] | None, default (-1, 1)
                        Minimum and maximum weight of each asset OR single min/max pair if they are all identical.
                        A value of None for the lower bound is equivalent to -Inf (no lower bound). And a value
                        of None for the upper bound is equivalent to +Inf (no upper bound).
@@ -89,7 +98,7 @@ class Optimization:
                             * no short selling and maximum weight of 200%: (0, 2)
                             * all weights between -100% and 100% of the total notional: (-1, 1)
 
-        transaction_costs: float | list | ndarray, default 0
+        transaction_costs: float | ndarray, default 0
                            Transaction costs are fixed costs charged you buy or sell an asset.
                            When that value is different from 0, you also have to provide `investment_duration`.
                            They are used to compute the cost of rebalancing the portfolio which is:
@@ -139,7 +148,7 @@ class Optimization:
                              In order to take that into account, the costs provided are divided by the expected
                              investment duration in the optimization problem.
                              
-        previous_weights: list | ndarray | None, default None
+        previous_weights: ndarray | None, default None
                           The previous weights of the portfolio. They need to be of same size and same order as the
                           Assets. If transaction_cost is 0, it will have no impact on the portfolio allocation.
         
@@ -156,7 +165,8 @@ class Optimization:
                       Dictionary of solver parameters with key being the solver name and value the dictionary of 
                       that solver parameter                       
         """
-        self.investment_type = investment_type
+        self.budget = budget
+        self.budget_bounds = budget_bounds
         self.weight_bounds = weight_bounds
         self.transaction_costs = transaction_costs
         self.risk_free_rate = risk_free_rate
@@ -187,28 +197,37 @@ class Optimization:
         if self.assets.asset_nb < 2:
             raise ValueError(f'assets should contains more than one asset')
 
-        if not isinstance(self.weight_bounds, tuple) or len(self.weight_bounds) != 2:
-            raise ValueError(f'weight_bounds should be a tuple of size 2: (lower_bound, upper_bound)')
+        for name, bounds in [('weight_bounds', self.weight_bounds, 'budget_bounds', self.budget_bounds)]:
+            if bounds is not None:
+                if not isinstance(bounds, tuple or len(bounds) != 2):
+                    raise ValueError(f'{name} should be a tuple of size 2: (lower_bound, upper_bound)')
+                if name == 'weight_bounds':
+                    for i in [0, 1]:
+                        if isinstance(bounds[i], np.ndarray):
+                            if len(bounds[i]) != self.assets.asset_nb:
+                                raise ValueError(f'the weight_bounds arrays should be of size {self.assets.asset_nb}, '
+                                                 f'but received {len(bounds[i])}')
+                        elif bounds[i] is not None and not isinstance(bounds[i], Number):
+                            raise TypeError(f'the elements of {name} should be of float or numpy array or None')
+                else:
+                    for i in [0, 1]:
+                        if bounds[i] is not None and not isinstance(bounds[i], Number):
+                            raise TypeError(f'the elements of {name} should be float or None')
 
-        for i in [0, 1]:
-            if isinstance(self.weight_bounds[i], np.ndarray) and len(self.weight_bounds[i]) != self.assets.asset_nb:
-                raise ValueError(f'the weight_bounds arrays should be of size {self.assets.asset_nb}, '
-                                 f'but received {len(self.weight_bounds[i])}')
+        if (self.budget is not None
+                and self.budget_bounds is not None
+                and self.budget_bounds[0] is not None and self.budget_bounds[1] is not None):
+            raise ValueError(f'if you provide budget_bounds, you need to set budget to None')
 
-        lower_bounds, upper_bounds = self._get_lower_and_upper_bounds()
-
+        lower_bounds, upper_bounds = self._get_weights_lower_and_upper_bounds(convert_none=True)
         if not np.all(lower_bounds <= upper_bounds):
-            raise ValueError(f'All elements of the lower bounds should be less or equal than all elements of the upper '
-                             f'bound')
+            raise ValueError(f'the lower bound should be less or equal than the upper bound')
 
-        investment_target = self._get_investment_target()
-        if investment_target is not None:
-            if sum(upper_bounds) < investment_target:
-                raise ValueError(f'When investment_type is {self.investment_type.value}, the sum of all upper bounds '
-                                 f'should be greater or equal to {investment_target}')
-            if sum(lower_bounds) > investment_target:
-                raise ValueError(f'When investment_type is {self.investment_type.value}, the sum of all lower bounds '
-                                 f'should be less or equal to {investment_target}')
+        if self.budget is not None:
+            if sum(upper_bounds) < self.budget:
+                raise ValueError(f'the sum of all upper bounds should be greater or equal to the budget: {self.budget}')
+            if sum(lower_bounds) > self.budget:
+                raise ValueError(f'the sum of all lower bounds should be less or equal to the budget: {self.budget}')
         if np.isscalar(self.transaction_costs):
             if self.transaction_costs < 0:
                 raise ValueError(f'transaction_costs cannot be negative')
@@ -261,7 +280,7 @@ class Optimization:
                 raise ValueError(f'{target_name} should be a scalar, numpy.ndarray or list. '
                                  f'But received {type(target)}')
 
-        lower_bounds, upper_bounds = self._get_lower_and_upper_bounds()
+        lower_bounds, upper_bounds = self._get_weights_lower_and_upper_bounds(convert_none=True)
         for k, v in kwargs.items():
             if k.endswith('coef') and v is not None:
                 if v < 0:
@@ -331,20 +350,25 @@ class Optimization:
         portfolio_return = ret - self._portfolio_cost(w=w) - l1_regularization - l2_regularization
         return portfolio_return
 
-    def _get_lower_and_upper_bounds(self) -> tuple[np.ndarray, np.ndarray]:
+    def _get_weights_lower_and_upper_bounds(self,
+                                            convert_none: bool = False) -> tuple[np.ndarray | None, np.ndarray | None]:
         r"""
-        Convert the weights lower and upper bounds into numpy arrays
+        Convert the float lower and upper bounds into numpy arrays
 
         Returns
         -------
         Tuple of ndarray of lower and upper bounds
         """
-        # Upper and lower bounds
-        lower_bounds, upper_bounds = self.weight_bounds
-        if lower_bounds is None:
-            lower_bounds = -1
-        if upper_bounds is None:
-            upper_bounds = 1
+        if self.weight_bounds is None:
+            lower_bounds, upper_bounds = None, None
+        else:
+            lower_bounds, upper_bounds = self.weight_bounds
+
+        if convert_none:
+            if lower_bounds is None:
+                lower_bounds = -np.Inf
+            if upper_bounds is None:
+                upper_bounds = np.Inf
 
         if np.isscalar(lower_bounds):
             lower_bounds = np.array([lower_bounds] * self.assets.asset_nb)
@@ -352,20 +376,6 @@ class Optimization:
             upper_bounds = np.array([upper_bounds] * self.assets.asset_nb)
 
         return lower_bounds, upper_bounds
-
-    def _get_investment_target(self) -> int | None:
-        r"""
-        Convert the investment_target into a sum of weight constraint integer or None
-
-        Returns
-        -------
-        0, 1 or None
-        """
-        # Sum of weights
-        if self.investment_type == InvestmentType.FULLY_INVESTED:
-            return 1
-        elif self.investment_type == InvestmentType.MARKET_NEUTRAL:
-            return 0
 
     def _get_weight_constraints(self, w: cp.Variable, k: OptionalVariable = None) -> list[Constraint]:
         r"""
@@ -375,21 +385,40 @@ class Optimization:
         -------
         A list of weight constraints
         """
-        lower_bounds, upper_bounds = self._get_lower_and_upper_bounds()
+        weights_lower_bounds, weights_upper_bounds = self._get_weights_lower_and_upper_bounds()
+        constraints = []
         if k is None:
-            constraints = [w >= lower_bounds,
-                           w <= upper_bounds]
+            if weights_lower_bounds is not None:
+                constraints.append(w >= weights_lower_bounds)
+            if weights_upper_bounds is not None:
+                constraints.append(w <= weights_upper_bounds)
         else:
-            constraints = [w >= lower_bounds * k,
-                           w <= upper_bounds * k]
+            if weights_lower_bounds is not None:
+                constraints.append(w >= weights_lower_bounds * k)
+            if weights_upper_bounds is not None:
+                constraints.append(w <= weights_upper_bounds * k)
 
-        investment_target = self._get_investment_target()
-        if investment_target is not None:
+        if self.budget is not None:
             if k is None:
-                constraints.append(cp.sum(w) == investment_target)
+                constraints.append(cp.sum(w) == self.budget)
             else:
                 # noinspection PyTypeChecker
-                constraints.append(cp.sum(w) == investment_target * k)
+                constraints.append(cp.sum(w) == self.budget * k)
+
+        if self.budget_bounds is not None:
+            budget_lower_bounds, budget_upper_bounds = self.budget_bounds
+            if k is None:
+                if budget_lower_bounds is not None:
+                    constraints.append(cp.sum(w) >= budget_lower_bounds)
+                if budget_upper_bounds is not None:
+                    constraints.append(cp.sum(w) <= budget_upper_bounds)
+            else:
+                if budget_lower_bounds is not None:
+                    # noinspection PyTypeChecker
+                    constraints.append(cp.sum(w) >= budget_lower_bounds * k)
+                if budget_upper_bounds is not None:
+                    # noinspection PyTypeChecker
+                    constraints.append(cp.sum(w) <= budget_upper_bounds * k)
 
         return constraints
 
@@ -463,8 +492,8 @@ class Optimization:
                     if w.value is None:
                         raise SolverError('No solution found')
                     if problem.status != OPTIMAL:
-                        logger.warning(f'Solution is inaccurate --> try changing the scale '
-                                       f'or try another solver')
+                        logger.warning(f'Solution is inaccurate. Try changing solver settings or try another solver or'
+                                       f'change the scale')
                     break
                 except (SolverError, ArpackNoConvergence) as e:
                     logger.warning(f'Solver {solver} failed with error: {e}')
@@ -544,7 +573,7 @@ class Optimization:
         # Produces n random weights that sum to 1 with uniform distribution over the simplex
         weights = rand_weights_dirichlet(n=self.assets.asset_nb)
         # Respecting bounds
-        lower_bounds, upper_bounds = self._get_lower_and_upper_bounds()
+        lower_bounds, upper_bounds = self._get_weights_lower_and_upper_bounds(convert_none=True)
         weights = np.minimum(np.maximum(weights, lower_bounds), upper_bounds)
         weights = weights / sum(weights)
         return weights
@@ -979,54 +1008,7 @@ class Optimization:
         shape (population size, asset number) or (len(target_cvar), asset number)
         """
 
-        self._validate_args(**{k: v for k, v in locals().items() if k != 'self'})
-
-        # Variables
-        w = cp.Variable(self.assets.asset_nb)
-        alpha = cp.Variable()
-        u = cp.Variable(self.assets.date_nb)
-
-        # Parameters
-        target_cvar_param = cp.Parameter(nonneg=True)
-
-        # Objectives
-        objective = cp.Maximize(self._portfolio_expected_return(w=w, l1_coef=l1_coef, l2_coef=l2_coef))
-
-        # Constraints
-        portfolio_cvar = alpha + 1.0 / (self.assets.date_nb * (1 - beta)) * cp.sum(u)
-        lower_bounds, upper_bounds = self._get_lower_and_upper_bounds()
-        # noinspection PyTypeChecker
-        constraints = [portfolio_cvar <= target_cvar_param,
-                       self.assets.returns.T @ w + alpha + u >= 0,
-                       u >= 0,
-                       w >= lower_bounds,
-                       w <= upper_bounds]
-
-        investment_target = self._get_investment_target()
-        if investment_target is not None:
-            constraints.append(cp.sum(w) == investment_target)
-
-        # Problem
-        problem = cp.Problem(objective, constraints)
-
-        # Target
-        if target_cvar is not None:
-            if not np.isscalar(target_cvar):
-                target_cvar = np.array(target_cvar)
-        else:
-            min_cvar, _ = self.minimum_cvar(beta=beta)
-            if np.isnan(min_cvar):
-                raise OptimizationError(f'Unable to find the minimum CVaR portfolio used as the starting point '
-                                        f'of the pareto frontier --> you can input your own target_cvar array')
-            max_cvar = max(0.3, min_cvar * 10)  # 30% CVaR
-            target_cvar = np.logspace(np.log10(min_cvar), np.log10(max_cvar), num=population_size)
-
-        weights = self._solve_problem(problem=problem,
-                                      w=w,
-                                      parameter=target_cvar_param,
-                                      target=target_cvar)
-
-        return weights
+    pass
 
     def mean_cdar(self,
                   beta: float = 0.95,
@@ -1058,58 +1040,7 @@ class Optimization:
         shape (population size, asset number) or (len(target_cdar), asset number)
         """
 
-        self._validate_args(**{k: v for k, v in locals().items() if k != 'self'})
-
-        # Variables
-        w = cp.Variable(self.assets.asset_nb)
-        alpha = cp.Variable()
-        u = cp.Variable(self.assets.date_nb + 1)
-        z = cp.Variable(self.assets.date_nb)
-
-        # Parameters
-        target_cdar_param = cp.Parameter(nonneg=True)
-
-        # Objectives
-        objective = cp.Maximize(self._portfolio_expected_return(w=w, l1_coef=l1_coef, l2_coef=l2_coef))
-
-        # Constraints
-        portfolio_cdar = alpha + 1.0 / (self.assets.date_nb * (1 - beta)) * cp.sum(z)
-        lower_bounds, upper_bounds = self._get_lower_and_upper_bounds()
-        # noinspection PyTypeChecker
-        constraints = [portfolio_cdar <= target_cdar_param,
-                       z >= u[1:] - alpha,
-                       z >= 0,
-                       u[1:] >= u[:-1] - self.assets.returns.T @ w,
-                       u[0] == 0,
-                       u[1:] >= 0,
-                       w >= lower_bounds,
-                       w <= upper_bounds]
-
-        investment_target = self._get_investment_target()
-        if investment_target is not None:
-            constraints.append(cp.sum(w) == investment_target)
-
-        # Problem
-        problem = cp.Problem(objective, constraints)
-
-        # Target
-        if target_cdar is not None:
-            if not np.isscalar(target_cdar):
-                target_cdar = np.array(target_cdar)
-        else:
-            min_cdar, _ = self.minimum_cdar(beta=beta)
-            if np.isnan(min_cdar):
-                raise OptimizationError(f'Unable to find the minimum CDaR portfolio used as the starting point '
-                                        f'of the pareto frontier --> you can input your own target_cdar array')
-            max_cdar = max(0.3, min_cdar * 10)  # 30% CDaR
-            target_cdar = np.logspace(np.log10(min_cdar), np.log10(max_cdar), num=population_size)
-
-        weights = self._solve_problem(problem=problem,
-                                      w=w,
-                                      parameter=target_cdar_param,
-                                      target=target_cdar)
-
-        return weights
+        pass
 
     def maximum_sharpe(self) -> np.ndarray:
         """
@@ -1117,7 +1048,7 @@ class Optimization:
         :returns: the asset weights that maximize the portfolio sharpe ratio.
         """
 
-        if self.investment_type != InvestmentType.FULLY_INVESTED:
+        if self.budget != 1:
             raise ValueError('maximum_sharpe() can be solved only for investment_type=InvestmentType.FULLY_INVESTED'
                              '  --> you can find an approximation by computing the efficient frontier with '
                              ' mean_variance(population=30) and finding the portfolio with the highest sharpe ratio.')
