@@ -1,14 +1,13 @@
 import numpy as np
 
-__all__ = ['downside_std',
+__all__ = ['semi_std',
            'max_drawdown',
-           'max_drawdown_slow',
            'cdar',
            'cvar']
 
 
-def downside_std(returns: np.ndarray,
-                 returns_target: float | np.ndarray | None = None) -> float:
+def semi_std(returns: np.ndarray,
+             returns_target: float | np.ndarray | None = None) -> float:
     """
     Downside standard deviation with a target return of Rf=0.
     Many implementations remove positive returns then compute the std of the remaining negative returns or replace
@@ -24,34 +23,25 @@ def downside_std(returns: np.ndarray,
     return np.sqrt(np.sum(np.power(np.minimum(0, returns - returns_target), 2)) / (assets_number - 1))
 
 
-def max_drawdown(prices: np.array) -> float:
+def max_drawdown(prices: np.ndarray) -> float:
     return np.max(1 - prices / np.maximum.accumulate(prices))
 
 
-def max_drawdown_slow(prices: np.array) -> float:
-    max_dd = 0
-    max_seen = prices[0]
-    for price in prices:
-        max_seen = max(max_seen, price)
-        max_dd = max(max_dd, 1 - price / max_seen)
-    return max_dd
-
-
-def cdar(prices: np.array, beta: float = 0.95) -> float:
+def cdar(returns: np.ndarray, beta: float = 0.95) -> float:
     """
-    Calculate the Conditional Drawdown at Risk (CDaR) of a price series
-    :param prices: prices series
+    Calculate the Conditional Drawdown at Risk (CDaR) of a return series
+    :param returns: returns series
     :param beta: drawdown confidence level (expected drawdown on the worst (1-beta)% days)
     """
-    observations_number = len(prices)
-    k = int(np.ceil((1 - beta) * observations_number))
-
+    prices = np.cumsum(np.insert(returns, 0, 1))
+    k = (1 - beta) * len(returns)
+    ik = int(np.ceil(k) - 1)
     # We only need the first k elements so using partition is faster than sort (O(n) vs O(n log(n))
-    drawdowns = np.partition(prices / np.maximum.accumulate(prices) - 1, k)
-    return -np.sum(drawdowns[:k]) / k
+    drawdowns = np.partition(prices - np.maximum.accumulate(prices), ik)
+    return -np.sum(drawdowns[:ik]) / k + drawdowns[ik] * (ik / k - 1)
 
 
-def cvar(returns, beta: float = 0.95) -> float:
+def cvar(returns: np.ndarray, beta: float = 0.95) -> float:
     """
     Calculate the historical Conditional Value at Risk (CVaR) of a return series
     :param returns: returns series

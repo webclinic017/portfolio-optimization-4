@@ -8,7 +8,7 @@ import plotly.graph_objects as go
 from portfolio_optimization.meta import Metrics, AVG_TRADING_DAYS_PER_YEAR, ZERO_THRESHOLD
 from portfolio_optimization.assets import Assets
 from portfolio_optimization.utils.sorting import dominate
-from portfolio_optimization.utils.metrics import downside_std, max_drawdown, cvar, cdar
+from portfolio_optimization.utils.metrics import semi_std, max_drawdown, cvar, cdar
 
 __all__ = ['BasePortfolio',
            'Portfolio',
@@ -215,7 +215,7 @@ class BasePortfolio:
 
     @cached_property
     def semi_std(self) -> float:
-        return downside_std(returns=self.returns)
+        return semi_std(returns=self.returns)
 
     @property
     def annualized_semi_std(self) -> float:
@@ -238,7 +238,7 @@ class BasePortfolio:
         """
         Conditional Drawdown at Risk (CDaR) with a confidence level at self.cdar_beta (default 95%)
         """
-        return cdar(prices=self.cumulative_returns_uncompounded, beta=self.cdar_beta)
+        return cdar(returns=self.returns, beta=self.cdar_beta)
 
     @cached_property
     def cvar(self) -> float:

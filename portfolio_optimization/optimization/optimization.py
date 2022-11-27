@@ -1,7 +1,7 @@
 import logging
 import numpy as np
 import cvxpy as cp
-from cvxpy import SolverError
+from cvxpy import SolverError, OPTIMAL
 from cvxpy.constraints.constraint import Constraint
 from scipy.sparse.linalg import ArpackNoConvergence
 from enum import Enum
@@ -58,7 +58,8 @@ class Optimization:
                  logarithmic_returns: bool = False,
                  solvers: Solvers = None,
                  solver_params: solverParams = None,
-                 solver_verbose: bool = False):
+                 solver_verbose: bool = False,
+                 scale: float = 1):
         self.assets = assets
         r"""
         Convex portfolio optimization
@@ -170,7 +171,7 @@ class Optimization:
             solver_params = {}
         self.solver_params = {k: solver_params.get(k, {}) for k in self.solvers}
         self.solver_verbose = solver_verbose
-        self.N = 1
+        self.scale = scale
         self.loaded = True
         self._validation()
 
@@ -461,6 +462,9 @@ class Optimization:
                     problem.solve(solver=solver, verbose=self.solver_verbose, **self.solver_params[solver])
                     if w.value is None:
                         raise SolverError('No solution found')
+                    if problem.status != OPTIMAL:
+                        logger.warning(f'Solution is inaccurate --> try changing the scale '
+                                       f'or try another solver')
                     break
                 except (SolverError, ArpackNoConvergence) as e:
                     logger.warning(f'Solver {solver} failed with error: {e}')
@@ -478,7 +482,7 @@ class Optimization:
             else:
                 weights.append(np.array(w.value / k.value, dtype=float))
 
-            results.append(problem.value / self.N)
+            results.append(problem.value / self.scale)
 
         if is_scalar:
             weights = weights[0]
@@ -667,9 +671,9 @@ class Optimization:
         match objective_function:
             case ObjectiveFunction.MAX_RETURN:
                 # noinspection PyTypeChecker
-                objective = cp.Maximize(ret * self.N)
+                objective = cp.Maximize(ret * self.scale)
             case ObjectiveFunction.MIN_RISK:
-                objective = cp.Minimize(risk * self.N)
+                objective = cp.Minimize(risk * self.scale)
             case ObjectiveFunction.UTILITY:
                 objective = cp.Maximize(ret - gamma * risk)
             case ObjectiveFunction.RATIO:
@@ -677,12 +681,12 @@ class Optimization:
                     constraints += [risk <= 1,
                                     cp.constraints.ExpCone(gr, np.ones((n, 1)) @ k, k + self.assets.returns @ w)]
                     # noinspection PyTypeChecker
-                    objective = cp.Maximize(ret * self.N)
+                    objective = cp.Maximize(ret * self.scale)
                 else:
                     # noinspection PyTypeChecker
                     constraints += [self._portfolio_expected_return(w=w, l1_coef=l1_coef, l2_coef=l2_coef)
                                     - self.risk_free_rate * k == 1]
-                    objective = cp.Minimize(risk * self.N)
+                    objective = cp.Minimize(risk * self.scale)
             case _:
                 raise ValueError(f'objective_function {objective_function} is not valid')
 
@@ -736,12 +740,13 @@ class Optimization:
         z = cp.Variable(self.assets.date_nb)
         risk = alpha + 1.0 / (self.assets.date_nb * (1 - cdar_beta)) * cp.sum(z)
         # noinspection PyTypeChecker
-        constraints = [z * self.N >= v[1:] * self.N - alpha * self.N,
-                       z * self.N >= 0,
-                       v[1:] * self.N >= v[:-1] * self.N - (self.assets.returns.T @ w - self._portfolio_cost(w=w))
-                       * self.N,
-                       v[1:] * self.N >= 0,
-                       v[0] * self.N == 0]
+        constraints = [z * self.scale >= v[1:] * self.scale - alpha * self.scale,
+                       z * self.scale >= 0,
+                       v[1:] * self.scale >= v[:-1] * self.scale - (
+                               self.assets.returns.T @ w - self._portfolio_cost(w=w))
+                       * self.scale,
+                       v[1:] * self.scale >= 0,
+                       v[0] * self.scale == 0]
         return risk, constraints
 
     def minimum_variance(self, objective_values: bool = False) -> Result:

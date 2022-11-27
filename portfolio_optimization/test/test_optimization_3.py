@@ -25,7 +25,7 @@ def test_mean_variance():
         RiskMeasure.VARIANCE: 1e-7,
         RiskMeasure.SEMI_VARIANCE: 1e-7,
         RiskMeasure.CVAR: 1e-4,
-        RiskMeasure.CDAR: 1e-4
+        RiskMeasure.CDAR: 1e-3
     }
 
     assets = get_assets()
@@ -60,7 +60,8 @@ def test_mean_variance():
                                      previous_weights=previous_weights,
                                      transaction_costs=transaction_costs,
                                      investment_duration=assets.date_nb,
-                                     solvers=['ECOS'])
+                                     solvers=['ECOS'],
+                                     scale=1)
 
                 min_risk, w = model.mean_risk_optimization(risk_measure=risk_measure,
                                                            objective_function=ObjectiveFunction.MIN_RISK,
@@ -73,7 +74,7 @@ def test_mean_variance():
                 assert is_close(getattr(p, risk_measure.value), min_risk, precision[risk_measure])
                 min_risk_mean = p.mean
 
-                risk = min_risk*1.2
+                risk = min_risk * 1.2
                 mean, w = model.mean_risk_optimization(risk_measure=risk_measure,
                                                        objective_function=ObjectiveFunction.MAX_RETURN,
                                                        objective_values=True,
@@ -97,10 +98,9 @@ def test_mean_variance():
                               transaction_costs=transaction_costs)
                 assert is_close(getattr(p, risk_measure.value), min_risk, precision[risk_measure])
 
-                ret = mean
                 risk, w = model.mean_risk_optimization(risk_measure=risk_measure,
                                                        objective_function=ObjectiveFunction.MIN_RISK,
-                                                       min_return=ret,
+                                                       min_return=mean,
                                                        objective_values=True)
 
                 p = Portfolio(assets=assets,
@@ -108,7 +108,7 @@ def test_mean_variance():
                               previous_weights=previous_weights,
                               transaction_costs=transaction_costs)
                 assert is_close(getattr(p, risk_measure.value), risk, precision[risk_measure])
-                assert is_close(p.mean, mean, 1e-4)
+                assert is_close(p.mean, mean, max(precision[risk_measure], 1e-5))
 
                 mean, w = model.mean_risk_optimization(risk_measure=risk_measure,
                                                        objective_function=ObjectiveFunction.MAX_RETURN,
