@@ -31,34 +31,41 @@ class ObjectiveFunction(Enum):
     UTILITY = 'utility'
 
 
-WeightBounds = tuple[float | np.ndarray | None, float | np.ndarray | None] | None
-Costs = float | np.ndarray
+Weights = float | list | np.ndarray | None
+Costs = float | list | np.ndarray
 Duration = int | None
-PrevWeight = np.ndarray | None
+PrevWeight = np.ndarray | list | None
 Rate = float
 Budget = float | None
-BudgetBounds = tuple[float | None, float | None]
 Solvers = list[str] | None
 solverParams = dict[str, dict] | None
 Coef = float | None
-Target = float | np.ndarray | None
+Target = float | list | np.ndarray | None
 ParametersValues = list[tuple[cp.Parameter, float | np.ndarray]] | None
 PopulationSize = int | None
 OptionalVariable = cp.Variable | None
 Result = np.ndarray | tuple[float | np.ndarray, np.ndarray]
 
 
+def clean(x: float | list | np.ndarray | None) -> float | np.ndarray | None:
+    if isinstance(x, list):
+        return np.array(x)
+    return x
+
+
 class Optimization:
     def __init__(self,
                  assets: Assets,
                  budget: Budget = 1,
-                 budget_bounds: BudgetBounds = None,
-                 weight_bounds: WeightBounds = (-1, 1),
+                 min_budget: Budget = None,
+                 max_budget: Budget = None,
+                 min_weights: Weights = -1,
+                 max_weights: Weights = 1,
                  transaction_costs: Costs = 0,
                  investment_duration: Duration = None,
                  previous_weights: PrevWeight = None,
                  risk_free_rate: Rate = 0,
-                 logarithmic_returns: bool = False,
+                 is_logarithmic_returns: bool = False,
                  solvers: Solvers = None,
                  solver_params: solverParams = None,
                  solver_verbose: bool = False,
@@ -74,31 +81,44 @@ class Optimization:
 
         budget: float | None, default 1
                 The budget of the portfolio is the sum of long positions and short positions (sum of all weights).
-
+                
                 Examples:
-                      * budget=1: fully invested portfolio 
-                      * budget=0: market neutral portfolio
-                      * budget=None: no constraints on the sum of weights
+                      * budget = 1: fully invested portfolio 
+                      * budget = 0: market neutral portfolio
+                      * budget = None: no constraints on the sum of weights
                       
-                      
-        budget_bounds: tuple[float | None, float | None] | None, default None
-                       The budget bounds of the portfolio are the lower and upper levels of the sum of long positions 
-                       and short positions (sum of all weights). If at least one of the budget bounds is not None, 
-                       you have to set the budget to None because they contradict each other.
+        min_budget: float | None, default None
+                    The minimum budget of the portfolio. It's the lower bound of the sum of long and short positions 
+                    (sum of all weights). 
+                    If provided, you have to set the budget to None because they contradict each other.
+        
+        max_budget: float | None, default None
+                    The maximum budget of the portfolio. It's the upper bound of the sum of long and short positions 
+                    (sum of all weights). 
+                    If provided, you have to set the budget to None because they contradict each other.
 
-        weight_bounds: tuple[float | ndarray | None, float | ndarray | None] | None, default (-1, 1)
-                       Minimum and maximum weight of each asset OR single min/max pair if they are all identical.
-                       A value of None for the lower bound is equivalent to -Inf (no lower bound). And a value
-                       of None for the upper bound is equivalent to +Inf (no upper bound).
+        min_weights: float | list | ndarray | None, default -1
+                     The minimum weights (weights lower bounds). 
+                     If a float is provided, that value will be applied to all assets.
+                     A value of None is equivalent to -Inf (no lower bound).
 
-                       Example:
-                            * no short selling (long only portfolio): (0, None)
-                            * short only: (None, 0)
-                            * no bound (0, 0)
-                            * no short selling and maximum weight of 200%: (0, 2)
-                            * all weights between -100% and 100% of the total notional: (-1, 1)
+                     Example:
+                        * min_weights = 0: long only portfolio (no short selling)
+                        * min_weights = None: no lower bound
+                        * min_weights = -2: all weights are above -200% of the total notional
+                        
+        max_weights: float | list | ndarray | None, default 1
+                     The maximum weights (weights upper bounds). 
+                     If a float is provided, that value will be applied to all assets.
+                     A value of None is equivalent to +Inf (no upper bound).
+            
+                     Example:
+                        * max_weights = 0: no long position (short only portfolio)
+                        * max_weights = None: no upper bound
+                        * max_weights = 2: all weights are below 200% of the total notional
+                            
 
-        transaction_costs: float | ndarray, default 0
+        transaction_costs: float | list | ndarray, default 0
                            Transaction costs are fixed costs charged you buy or sell an asset.
                            When that value is different from 0, you also have to provide `investment_duration`.
                            They are used to compute the cost of rebalancing the portfolio which is:
@@ -148,7 +168,7 @@ class Optimization:
                              In order to take that into account, the costs provided are divided by the expected
                              investment duration in the optimization problem.
                              
-        previous_weights: ndarray | None, default None
+        previous_weights: ndarray | list | None, default None
                           The previous weights of the portfolio. They need to be of same size and same order as the
                           Assets. If transaction_cost is 0, it will have no impact on the portfolio allocation.
         
@@ -166,13 +186,15 @@ class Optimization:
                       that solver parameter                       
         """
         self.budget = budget
-        self.budget_bounds = budget_bounds
-        self.weight_bounds = weight_bounds
-        self.transaction_costs = transaction_costs
+        self.min_budget = min_budget
+        self.max_budget = max_budget
+        self.min_weights = clean(min_weights)
+        self.max_weights = clean(max_weights)
+        self.transaction_costs = clean(transaction_costs)
         self.risk_free_rate = risk_free_rate
-        self.logarithmic_returns = logarithmic_returns
+        self.is_logarithmic_returns = is_logarithmic_returns
         self.investment_duration = investment_duration
-        self.previous_weights = previous_weights
+        self.previous_weights = clean(previous_weights)
         if solvers is None:
             self.solvers = ['ECOS', 'SCS', 'OSQP', 'CVXOPT']
         else:
@@ -190,6 +212,29 @@ class Optimization:
             logger.warning(f'Attributes should be updated with the update() method to allow attribute validation')
         super().__setattr__(name, value)
 
+    def _convert_weights_bounds(self, convert_none: bool = False) -> tuple[np.ndarray | None, np.ndarray | None]:
+        r"""
+        Convert the float lower and upper bounds into numpy arrays
+        Returns
+        -------
+        Tuple of ndarray of lower and upper bounds
+        """
+
+        min_weights, max_weights = self.min_weights, self.max_weights
+
+        if convert_none:
+            if min_weights is None:
+                min_weights = -np.Inf
+            if max_weights is None:
+                max_weights = np.Inf
+
+        if np.isscalar(min_weights):
+            min_weights = np.array([min_weights] * self.assets.asset_nb)
+        if np.isscalar(max_weights):
+            max_weights = np.array([max_weights] * self.assets.asset_nb)
+
+        return min_weights, max_weights
+
     def _validation(self):
         r"""
         Validate the class attributes
@@ -197,37 +242,34 @@ class Optimization:
         if self.assets.asset_nb < 2:
             raise ValueError(f'assets should contains more than one asset')
 
-        for name, bounds in [('weight_bounds', self.weight_bounds, 'budget_bounds', self.budget_bounds)]:
-            if bounds is not None:
-                if not isinstance(bounds, tuple or len(bounds) != 2):
-                    raise ValueError(f'{name} should be a tuple of size 2: (lower_bound, upper_bound)')
-                if name == 'weight_bounds':
-                    for i in [0, 1]:
-                        if isinstance(bounds[i], np.ndarray):
-                            if len(bounds[i]) != self.assets.asset_nb:
-                                raise ValueError(f'the weight_bounds arrays should be of size {self.assets.asset_nb}, '
-                                                 f'but received {len(bounds[i])}')
-                        elif bounds[i] is not None and not isinstance(bounds[i], Number):
-                            raise TypeError(f'the elements of {name} should be of float or numpy array or None')
-                else:
-                    for i in [0, 1]:
-                        if bounds[i] is not None and not isinstance(bounds[i], Number):
-                            raise TypeError(f'the elements of {name} should be float or None')
+        for name in ['min_weights', 'max_weights']:
+            value = getattr(self, name)
+            if isinstance(value, np.ndarray):
+                if len(value) != self.assets.asset_nb:
+                    raise ValueError(f'if {name} is an array, it should be of size {self.assets.asset_nb}, '
+                                     f'but we received {len(value)}')
+            elif value is not None and not isinstance(value, Number):
+                raise TypeError(f'{name} should be of type float or list or numpy array or None')
 
-        if (self.budget is not None
-                and self.budget_bounds is not None
-                and self.budget_bounds[0] is not None and self.budget_bounds[1] is not None):
-            raise ValueError(f'if you provide budget_bounds, you need to set budget to None')
+        for name in ['min_budget', 'max_budget']:
+            value = getattr(self, name)
+            if value is not None and not isinstance(value, Number):
+                raise TypeError(f'{name} should be of type float or int or None')
 
-        lower_bounds, upper_bounds = self._get_weights_lower_and_upper_bounds(convert_none=True)
-        if not np.all(lower_bounds <= upper_bounds):
-            raise ValueError(f'the lower bound should be less or equal than the upper bound')
+        min_weights, max_weights = self._convert_weights_bounds(convert_none=True)
+        if not np.all(min_weights <= max_weights):
+            raise ValueError(f'min_weights should be less or equal than max_weights')
 
         if self.budget is not None:
-            if sum(upper_bounds) < self.budget:
-                raise ValueError(f'the sum of all upper bounds should be greater or equal to the budget: {self.budget}')
-            if sum(lower_bounds) > self.budget:
-                raise ValueError(f'the sum of all lower bounds should be less or equal to the budget: {self.budget}')
+            if self.max_budget is not None:
+                raise ValueError(f'if you provide max_budget, you need to set budget to None')
+            if self.min_budget is not None:
+                raise ValueError(f'if you provide min_budget, you need to set budget to None')
+            if sum(max_weights) < self.budget:
+                raise ValueError(f'the sum of all max_weights should be greater or equal to the budget: {self.budget}')
+            if sum(min_weights) > self.budget:
+                raise ValueError(f'the sum of all min_weights should be less or equal to the budget: {self.budget}')
+
         if np.isscalar(self.transaction_costs):
             if self.transaction_costs < 0:
                 raise ValueError(f'transaction_costs cannot be negative')
@@ -240,8 +282,8 @@ class Optimization:
                 raise ValueError(f'investment_duration cannot be missing when costs is different from 0')
 
         if self.previous_weights is not None:
-            if not isinstance(self.previous_weights, np.ndarray):
-                raise TypeError(f'previous_weights should be of type numpy.ndarray')
+            if not isinstance(self.previous_weights, (list, np.ndarray)):
+                raise TypeError(f'previous_weights should a list or a numpy ndarray')
             if len(self.previous_weights) != self.assets.asset_nb:
                 raise ValueError(
                     f'previous_weights should be of size {self.assets.asset_nb} '
@@ -280,7 +322,7 @@ class Optimization:
                 raise ValueError(f'{target_name} should be a scalar, numpy.ndarray or list. '
                                  f'But received {type(target)}')
 
-        lower_bounds, upper_bounds = self._get_weights_lower_and_upper_bounds(convert_none=True)
+        lower_bounds, upper_bounds = self._convert_weights_bounds(convert_none=True)
         for k, v in kwargs.items():
             if k.endswith('coef') and v is not None:
                 if v < 0:
@@ -338,7 +380,7 @@ class Optimization:
         else:
             l2_regularization = l2_coef * cp.sum_squares(w)
 
-        if self.logarithmic_returns:
+        if self.is_logarithmic_returns:
             if k is not None:
                 # noinspection PyTypeChecker
                 ret = 1 / self.assets.date_nb * cp.sum(gr) - self.risk_free_rate * k
@@ -350,33 +392,6 @@ class Optimization:
         portfolio_return = ret - self._portfolio_cost(w=w) - l1_regularization - l2_regularization
         return portfolio_return
 
-    def _get_weights_lower_and_upper_bounds(self,
-                                            convert_none: bool = False) -> tuple[np.ndarray | None, np.ndarray | None]:
-        r"""
-        Convert the float lower and upper bounds into numpy arrays
-
-        Returns
-        -------
-        Tuple of ndarray of lower and upper bounds
-        """
-        if self.weight_bounds is None:
-            lower_bounds, upper_bounds = None, None
-        else:
-            lower_bounds, upper_bounds = self.weight_bounds
-
-        if convert_none:
-            if lower_bounds is None:
-                lower_bounds = -np.Inf
-            if upper_bounds is None:
-                upper_bounds = np.Inf
-
-        if np.isscalar(lower_bounds):
-            lower_bounds = np.array([lower_bounds] * self.assets.asset_nb)
-        if np.isscalar(upper_bounds):
-            upper_bounds = np.array([upper_bounds] * self.assets.asset_nb)
-
-        return lower_bounds, upper_bounds
-
     def _get_weight_constraints(self, w: cp.Variable, k: OptionalVariable = None) -> list[Constraint]:
         r"""
         Weight constraints
@@ -385,40 +400,24 @@ class Optimization:
         -------
         A list of weight constraints
         """
-        weights_lower_bounds, weights_upper_bounds = self._get_weights_lower_and_upper_bounds()
-        constraints = []
+        min_weights, max_weights = self._convert_weights_bounds()
+
         if k is None:
-            if weights_lower_bounds is not None:
-                constraints.append(w >= weights_lower_bounds)
-            if weights_upper_bounds is not None:
-                constraints.append(w <= weights_upper_bounds)
+            factor = k
         else:
-            if weights_lower_bounds is not None:
-                constraints.append(w >= weights_lower_bounds * k)
-            if weights_upper_bounds is not None:
-                constraints.append(w <= weights_upper_bounds * k)
+            factor = 1
 
+        constraints = []
+        if min_weights is not None:
+            constraints.append(w >= min_weights * factor)
+        if max_weights is not None:
+            constraints.append(w <= max_weights * factor)
         if self.budget is not None:
-            if k is None:
-                constraints.append(cp.sum(w) == self.budget)
-            else:
-                # noinspection PyTypeChecker
-                constraints.append(cp.sum(w) == self.budget * k)
-
-        if self.budget_bounds is not None:
-            budget_lower_bounds, budget_upper_bounds = self.budget_bounds
-            if k is None:
-                if budget_lower_bounds is not None:
-                    constraints.append(cp.sum(w) >= budget_lower_bounds)
-                if budget_upper_bounds is not None:
-                    constraints.append(cp.sum(w) <= budget_upper_bounds)
-            else:
-                if budget_lower_bounds is not None:
-                    # noinspection PyTypeChecker
-                    constraints.append(cp.sum(w) >= budget_lower_bounds * k)
-                if budget_upper_bounds is not None:
-                    # noinspection PyTypeChecker
-                    constraints.append(cp.sum(w) <= budget_upper_bounds * k)
+            constraints.append(cp.sum(w) == self.budget * factor)
+        if self.min_budget is not None:
+            constraints.append(cp.sum(w) >= self.min_budget * factor)
+        if self.max_budget is not None:
+            constraints.append(cp.sum(w) <= self.max_budget * factor)
 
         return constraints
 
@@ -573,8 +572,8 @@ class Optimization:
         # Produces n random weights that sum to 1 with uniform distribution over the simplex
         weights = rand_weights_dirichlet(n=self.assets.asset_nb)
         # Respecting bounds
-        lower_bounds, upper_bounds = self._get_weights_lower_and_upper_bounds(convert_none=True)
-        weights = np.minimum(np.maximum(weights, lower_bounds), upper_bounds)
+        min_weights, max_weights = self._convert_weights_bounds(convert_none=True)
+        weights = np.minimum(np.maximum(weights, min_weights), max_weights)
         weights = weights / sum(weights)
         return weights
 
@@ -706,7 +705,7 @@ class Optimization:
             case ObjectiveFunction.UTILITY:
                 objective = cp.Maximize(ret - gamma * risk)
             case ObjectiveFunction.RATIO:
-                if self.logarithmic_returns:
+                if self.is_logarithmic_returns:
                     constraints += [risk <= 1,
                                     cp.constraints.ExpCone(gr, np.ones((n, 1)) @ k, k + self.assets.returns @ w)]
                     # noinspection PyTypeChecker
