@@ -31,10 +31,9 @@ class ObjectiveFunction(Enum):
     UTILITY = 'utility'
 
 
-Weights = float | list | np.ndarray | None
-Costs = float | list | np.ndarray
+Weights = float | np.ndarray | None
+Costs = float | np.ndarray
 Duration = int | None
-PrevWeight = np.ndarray | list | None
 Rate = float
 Budget = float | None
 Solvers = list[str] | None
@@ -56,14 +55,16 @@ def clean(x: float | list | np.ndarray | None) -> float | np.ndarray | None:
 class Optimization:
     def __init__(self,
                  assets: Assets,
+                 min_weights: Weights | list = -1,
+                 max_weights: Weights | list = 1,
                  budget: Budget = 1,
                  min_budget: Budget = None,
                  max_budget: Budget = None,
-                 min_weights: Weights = -1,
-                 max_weights: Weights = 1,
-                 transaction_costs: Costs = 0,
+                 max_short: Budget = None,
+                 max_long: Budget = None,
+                 transaction_costs: Costs | list = 0,
                  investment_duration: Duration = None,
-                 previous_weights: PrevWeight = None,
+                 previous_weights: Weights = None,
                  risk_free_rate: Rate = 0,
                  is_logarithmic_returns: bool = False,
                  solvers: Solvers = None,
@@ -72,20 +73,42 @@ class Optimization:
                  scale: float = 1):
         self.assets = assets
         r"""
-        Convex portfolio optimization
+        Convex portfolio optimization.
 
         Parameters
         ----------
         assets: Assets
-                The Assets object containing the assets market data and mean/covariance models
+                The Assets object containing the assets market data and mean/covariance models.
+        
+        min_weights: float | list | ndarray | None, default -1
+                     The minimum weights (weights lower bounds). 
+                     If a float is provided, that value will be applied to all the Assets.
+                     If a list or array is provided, it has to be of same size and same order as the Assets.
+                     A value of None is equivalent to -Inf (no lower bound).
+
+                     Example:
+                        * min_weights = 0: long only portfolio (no short selling).
+                        * min_weights = None: no lower bound.
+                        * min_weights = -2: all weights are above -200% of the total notional.
+                        
+        max_weights: float | list | ndarray | None, default 1
+                     The maximum weights (weights upper bounds). 
+                     If a float is provided, that value will be applied to the Assets.
+                     If a list or array is provided, it has to be of same size and same order as the Assets.
+                     A value of None is equivalent to +Inf (no upper bound).
+
+                     Example:
+                        * max_weights = 0: no long position (short only portfolio).
+                        * max_weights = None: no upper bound.
+                        * max_weights = 2: all weights are below 200% of the total notional.      
 
         budget: float | None, default 1
                 The budget of the portfolio is the sum of long positions and short positions (sum of all weights).
                 
                 Examples:
-                      * budget = 1: fully invested portfolio 
-                      * budget = 0: market neutral portfolio
-                      * budget = None: no constraints on the sum of weights
+                      * budget = 1: fully invested portfolio .
+                      * budget = 0: market neutral portfolio.
+                      * budget = None: no constraints on the sum of weights.
                       
         min_budget: float | None, default None
                     The minimum budget of the portfolio. It's the lower bound of the sum of long and short positions 
@@ -96,30 +119,15 @@ class Optimization:
                     The maximum budget of the portfolio. It's the upper bound of the sum of long and short positions 
                     (sum of all weights). 
                     If provided, you have to set the budget to None because they contradict each other.
-
-        min_weights: float | list | ndarray | None, default -1
-                     The minimum weights (weights lower bounds). 
-                     If a float is provided, that value will be applied to all assets.
-                     A value of None is equivalent to -Inf (no lower bound).
-
-                     Example:
-                        * min_weights = 0: long only portfolio (no short selling)
-                        * min_weights = None: no lower bound
-                        * min_weights = -2: all weights are above -200% of the total notional
+                    
+        max_short: float | None, default None
+                   The maximum value of the sum of absolute values of negative weights (short positions).
                         
-        max_weights: float | list | ndarray | None, default 1
-                     The maximum weights (weights upper bounds). 
-                     If a float is provided, that value will be applied to all assets.
-                     A value of None is equivalent to +Inf (no upper bound).
-            
-                     Example:
-                        * max_weights = 0: no long position (short only portfolio)
-                        * max_weights = None: no upper bound
-                        * max_weights = 2: all weights are below 200% of the total notional
-                            
+        max_long: float | None, default None
+                  The maximum value of the sum of positive weights (long positions).
 
         transaction_costs: float | list | ndarray, default 0
-                           Transaction costs are fixed costs charged you buy or sell an asset.
+                           Transaction costs are fixed costs charged for buying or selling an asset.
                            When that value is different from 0, you also have to provide `investment_duration`.
                            They are used to compute the cost of rebalancing the portfolio which is:
                                 * transaction_costs / investment_duration * |previous_weights - new_weights|
@@ -127,11 +135,12 @@ class Optimization:
                            for more details).
 
                       Example:
-                              * if your broker charges you 0.5% for asset A and 0.6% for Asset B on the notional amount
-                              that you buy or sell, you have to input a transaction_costs of [0.005, 0.006]
-                              * if your broker charges you 3.1 EUR per share of asset A and 4.8 EUR per share of
-                              asset B, you have to convert them into percentage on the notional amount and input a
-                              transaction_costs of [3.1 / price_asset_A, 4.8 / price_asset_B]
+                              * transaction_costs = [0.005, 0.006]: the broker transaction costs are 0.5% for asset A 
+                                    and 0.6% for Asset B expressed as % on the notional amount invested in the assets.
+                              * transaction_costs = [3.1 / price_asset_A, 4.8 / price_asset_B]: the broker transaction 
+                                    costs are 3.1 EUR for asset A and 4.8 EUR for asset B expressed in EUR per share. 
+                                    Costs per shares have to be converted to percentage on the notional amount.
+                              
 
         investment_duration: float | None, default None
                              The expected investment duration expressed in the same period as the returns.
@@ -140,61 +149,65 @@ class Optimization:
 
                              Examples:
                                 * If you expect to keep your portfolio allocation static for one month and your returns
-                                are daily, investment_duration = 21
+                                    are daily, investment_duration = 21.
                                 * If you expect to keep your portfolio allocation static for one year and your returns
-                                are daily, investment_duration = 255
+                                    are daily, investment_duration = 255.
                                 * If you expect to keep your portfolio allocation static for one year and your returns
-                                are weekly, investment_duration = 52
+                                    are weekly, investment_duration = 52.
 
                              Raison:
-                             When costs are provided, they need to be converted to an average cost per time unit over 
-                             the expected investment duration.
-                             This is because the optimization problem has no notion of investment duration.
-                             For example, lets assume that asset A has an expected daily return of 0.01%
-                             with a transaction cost of 1% and asset B has an expected daily return of 0.005%
-                             with no transaction cost. Let's also assume that both have same volatility and
-                             a correlation of 1. If the investment duration is only one month, we should allocate all
-                             the weights to asset B whereas if the investment duration is one year, we should allocate
-                             all the weights to asset A.
+                                 When costs are provided, they need to be converted to an average cost per time unit 
+                                 over the expected investment duration.
+                                 This is because the optimization problem has no notion of investment duration.
+                                 For example, lets assume that asset A has an expected daily return of 0.01%
+                                 with a transaction cost of 1% and asset B has an expected daily return of 0.005%
+                                 with no transaction cost. Let's assume that both have same volatility and
+                                 a correlation of 1. If the investment duration is only one month, we should allocate 
+                                 all the weights to asset B whereas if the investment duration is one year, we should 
+                                 allocate all the weights to asset A.
                              
                              Proof:
-                             Duration = 1 months (21 business days):
-                                    * expected return A = (1+0.01%)^21 - 1 - 1% ≈ 0.01% * 21 - 1% ≈ -0.8%
-                                    * expected return B ≈ 0.005% * 21 - 0% ≈ 0.1%
-                             Duration = 1 year (255 business days):
-                                    * expected return A ≈ 0.01% * 255 - 1% ≈ 1.5%
-                                    * expected return B ≈ 0.005% * 21 - 0% ≈ 1.3%
+                                 Duration = 1 months (21 business days):
+                                        * expected return A = (1+0.01%)^21 - 1 - 1% ≈ 0.01% * 21 - 1% ≈ -0.8%
+                                        * expected return B ≈ 0.005% * 21 - 0% ≈ 0.1%
+                                 Duration = 1 year (255 business days):
+                                        * expected return A ≈ 0.01% * 255 - 1% ≈ 1.5%
+                                        * expected return B ≈ 0.005% * 21 - 0% ≈ 1.3%
                              
-                             In order to take that into account, the costs provided are divided by the expected
-                             investment duration in the optimization problem.
+                             In order to take that duration into account, the costs provided are divided by the 
+                             expected investment duration.
                              
-        previous_weights: ndarray | list | None, default None
-                          The previous weights of the portfolio. They need to be of same size and same order as the
+        previous_weights: float | ndarray | list | None, default None
+                          The previous weights of the portfolio. 
+                          If a float is provided, that value will be applied to all the Assets.
+                          If a list or array is provided, it has to be of same size and same order as the
                           Assets. If transaction_cost is 0, it will have no impact on the portfolio allocation.
         
         risk_free_rate: float, default 0
-                        The risk free interest rate to use in the portfolio optimization
+                        The risk free interest rate to use in the portfolio optimization.
         
-        logarithmic_returns: bool, default False
-                             If True, the optimization uses logarithmic returns instead of simple returns
+        is_logarithmic_returns: bool, default False
+                                If True, the optimization uses logarithmic returns instead of simple returns.
         
         solvers: list[str] | None, default None
-                 The list of cvxpy solver to try. If None, then the default list is ['ECOS', 'SCS', 'OSQP', 'CVXOPT'].
+                 The list of cvxpy solver to try. 
+                 If None, then the default list is ['ECOS', 'SCS', 'OSQP', 'CVXOPT'].
         
         solverParams: dict[str, dict] | None, default None
                       Dictionary of solver parameters with key being the solver name and value the dictionary of 
-                      that solver parameter                       
+                      that solver parameter.
+                      
+        scale: float, default 1
+               The optimization data are scaled by this value. 
+               It can be used to increase the optimization accuracies in specific cases.
+                                         
         """
         self.budget = budget
         self.min_budget = min_budget
         self.max_budget = max_budget
-        self.min_weights = clean(min_weights)
-        self.max_weights = clean(max_weights)
-        self.transaction_costs = clean(transaction_costs)
         self.risk_free_rate = risk_free_rate
         self.is_logarithmic_returns = is_logarithmic_returns
         self.investment_duration = investment_duration
-        self.previous_weights = clean(previous_weights)
         if solvers is None:
             self.solvers = ['ECOS', 'SCS', 'OSQP', 'CVXOPT']
         else:
@@ -205,11 +218,49 @@ class Optimization:
         self.solver_verbose = solver_verbose
         self.scale = scale
         self.loaded = True
+
+        self._min_weights = min_weights
+        self._max_weights = max_weights
+        self._transaction_costs = transaction_costs
+        self._previous_weights = previous_weights
+
         self._validation()
+
+    @property
+    def min_weights(self) -> Weights:
+        return self._min_weights
+
+    @min_weights.setter
+    def min_weights(self, value: Weights | list) -> None:
+        self._min_weights = clean(value)
+
+    @property
+    def max_weights(self) -> Weights:
+        return self._max_weights
+
+    @max_weights.setter
+    def max_weights(self, value: Weights | list) -> None:
+        self.max_weights = clean(value)
+
+    @property
+    def previous_weights(self) -> Weights:
+        return self._previous_weights
+
+    @previous_weights.setter
+    def previous_weights(self, value: Weights | list) -> None:
+        self._previous_weights = clean(value)
+
+    @property
+    def transaction_costs(self) -> Costs:
+        return self._transaction_costs
+
+    @transaction_costs.setter
+    def transaction_costs(self, value: Costs | list) -> None:
+        self._transaction_costs = clean(value)
 
     def __setattr__(self, name, value):
         if name != 'loaded' and self.__dict__.get('loaded'):
-            logger.warning(f'Attributes should be updated with the update() method to allow attribute validation')
+            logger.warning(f'Attributes should be updated with the update() method to allow validation')
         super().__setattr__(name, value)
 
     def _convert_weights_bounds(self, convert_none: bool = False) -> tuple[np.ndarray | None, np.ndarray | None]:
@@ -330,7 +381,7 @@ class Optimization:
                 elif v > 0 and np.all(lower_bounds >= 0):
                     logger.warning(f'Positive {k} will have no impact with positive or null lower bounds')
 
-    def _portfolio_cost(self, w: cp.Variable) -> cp.Expression:
+    def _portfolio_cost(self, w: cp.Variable) -> cp.Expression | float:
         r"""
         Portfolio cost.
 
@@ -338,18 +389,26 @@ class Optimization:
         -------
         CVXPY Expression of the portfolio cost
         """
-        if self.transaction_costs is None or (np.isscalar(self.transaction_costs) and self.transaction_costs == 0):
-            portfolio_cost = 0
+        if self.previous_weights is None:
+            return 0
+
+        if self.transaction_costs is None:
+            return 0
+
+        if np.isscalar(self.transaction_costs) and self.transaction_costs == 0:
+            return 0
+
+        if np.isscalar(self.previous_weights):
+            prev_w = self.previous_weights * np.ones(self.assets.asset_nb)
         else:
-            if self.previous_weights is None:
-                prev_w = np.zeros(self.assets.asset_nb)
-            else:
-                prev_w = self.previous_weights
-            daily_costs = self.transaction_costs / self.investment_duration
-            if np.isscalar(daily_costs):
-                portfolio_cost = daily_costs * cp.norm(prev_w - w, 1)
-            else:
-                portfolio_cost = cp.norm(cp.multiply(daily_costs, (prev_w - w)), 1)
+            prev_w = self.previous_weights
+
+        daily_costs = self.transaction_costs / self.investment_duration
+
+        if np.isscalar(daily_costs):
+            portfolio_cost = daily_costs * cp.norm(prev_w - w, 1)
+        else:
+            portfolio_cost = cp.norm(cp.multiply(daily_costs, (prev_w - w)), 1)
 
         return portfolio_cost
 
