@@ -52,6 +52,9 @@ def clean(x: float | list | np.ndarray | None) -> float | np.ndarray | None:
     return x
 
 
+
+
+
 class Optimization:
     def __init__(self,
                  assets: Assets,
@@ -205,6 +208,8 @@ class Optimization:
         self.budget = budget
         self.min_budget = min_budget
         self.max_budget = max_budget
+        self.max_short = max_short
+        self.max_long = max_long
         self.risk_free_rate = risk_free_rate
         self.is_logarithmic_returns = is_logarithmic_returns
         self.investment_duration = investment_duration
@@ -306,6 +311,11 @@ class Optimization:
             value = getattr(self, name)
             if value is not None and not isinstance(value, Number):
                 raise TypeError(f'{name} should be of type float or int or None')
+
+        for name in ['max_short', 'max_long']:
+            value = getattr(self, name)
+            if value is not None and value <= 0:
+                raise ValueError(f'{name} has to be strictly positif')
 
         min_weights, max_weights = self._convert_weights_bounds(convert_none=True)
         if not np.all(min_weights <= max_weights):
@@ -477,6 +487,10 @@ class Optimization:
             constraints.append(cp.sum(w) >= self.min_budget * factor)
         if self.max_budget is not None:
             constraints.append(cp.sum(w) <= self.max_budget * factor)
+        if self.max_long is not None:
+            constraints.append(cp.sum(cp.pos(w)) * self.scale <= self.max_long * factor * self.scale)
+        if self.max_short is not None:
+            constraints.append(cp.sum(cp.neg(w)) * self.scale <= self.max_short * factor * self.scale)
 
         return constraints
 
