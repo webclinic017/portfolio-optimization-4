@@ -9,6 +9,7 @@ from numbers import Number
 from portfolio_optimization.assets import Assets
 from portfolio_optimization.exception import OptimizationError
 from portfolio_optimization.utils.tools import args_names, rand_weights_dirichlet
+from portfolio_optimization.optimization.group_constraints import group_constraints_to_matrix
 
 __all__ = ['Optimization',
            'RiskMeasure',
@@ -32,6 +33,8 @@ class ObjectiveFunction(Enum):
 
 
 Weights = float | np.ndarray | None
+AssetGroup = np.ndarray | None
+GroupConstraints = list[str] | None
 Costs = float | np.ndarray
 Duration = int | None
 Rate = float
@@ -46,13 +49,11 @@ OptionalVariable = cp.Variable | None
 Result = np.ndarray | tuple[float | np.ndarray, np.ndarray]
 
 
-def clean(x: float | list | np.ndarray | None) -> float | np.ndarray | None:
+def clean(x: float | list | np.ndarray | None,
+          dtype: type | str | None = None) -> float | np.ndarray | None:
     if isinstance(x, list):
-        return np.array(x)
+        return np.array(x, dtype=dtype)
     return x
-
-
-
 
 
 class Optimization:
@@ -68,6 +69,8 @@ class Optimization:
                  transaction_costs: Costs | list = 0,
                  investment_duration: Duration = None,
                  previous_weights: Weights = None,
+                 asset_groups: AssetGroup = None,
+                 group_constraints: GroupConstraints = None,
                  risk_free_rate: Rate = 0,
                  is_logarithmic_returns: bool = False,
                  solvers: Solvers = None,
@@ -185,6 +188,33 @@ class Optimization:
                           If a float is provided, that value will be applied to all the Assets.
                           If a list or array is provided, it has to be of same size and same order as the
                           Assets. If transaction_cost is 0, it will have no impact on the portfolio allocation.
+                          
+        asset_groups: list[list[str]] | np.ndarray
+                      The list of asset groups. Each group should be a list of same size and order as the Assets. 
+
+            Examples (for 4 assets):
+                asset_groups = [['Equity', 'Equity', 'Bond', 'Fund'],
+                                ['US', 'Europe', 'Japan', 'US']]
+
+        group_constraints: list[str]
+                 The list of constraints applied to the asset groups.
+                 They need to respect the following patterns:
+                    * 'group_1 <= factor * group_2'
+                    * 'group_1 >= factor * group_2'
+                    * 'group_1 <= factor'
+                    * 'group_1 >= factor'
+
+                factor can be a float or an int.
+                group_1 and group_2 are the group names defined in asset_groups.
+                The first expression means that the sum of all assets in group_1 should be less or equal to 'factor'
+                times the sum of all assets in group_2.
+
+                 Examples:
+                    constraints = ['Equity' <= 3 * 'Bond',
+                                   'US' >= 1.5,
+                                   'Europe' >= 0.5 * Fund',
+                                   'Japan' <= 1]
+
         
         risk_free_rate: float, default 0
                         The risk free interest rate to use in the portfolio optimization.
@@ -213,6 +243,7 @@ class Optimization:
         self.risk_free_rate = risk_free_rate
         self.is_logarithmic_returns = is_logarithmic_returns
         self.investment_duration = investment_duration
+        self.group_constraints = group_constraints
         if solvers is None:
             self.solvers = ['ECOS', 'SCS', 'OSQP', 'CVXOPT']
         else:
@@ -228,6 +259,7 @@ class Optimization:
         self._max_weights = max_weights
         self._transaction_costs = transaction_costs
         self._previous_weights = previous_weights
+        self._asset_groups = asset_groups
 
         self._validation()
 
@@ -237,7 +269,7 @@ class Optimization:
 
     @min_weights.setter
     def min_weights(self, value: Weights | list) -> None:
-        self._min_weights = clean(value)
+        self._min_weights = clean(value, dtype=float)
 
     @property
     def max_weights(self) -> Weights:
@@ -245,7 +277,7 @@ class Optimization:
 
     @max_weights.setter
     def max_weights(self, value: Weights | list) -> None:
-        self.max_weights = clean(value)
+        self.max_weights = clean(value, dtype=float)
 
     @property
     def previous_weights(self) -> Weights:
@@ -253,7 +285,7 @@ class Optimization:
 
     @previous_weights.setter
     def previous_weights(self, value: Weights | list) -> None:
-        self._previous_weights = clean(value)
+        self._previous_weights = clean(value, dtype=float)
 
     @property
     def transaction_costs(self) -> Costs:
@@ -261,7 +293,15 @@ class Optimization:
 
     @transaction_costs.setter
     def transaction_costs(self, value: Costs | list) -> None:
-        self._transaction_costs = clean(value)
+        self._transaction_costs = clean(value, dtype=float)
+
+    @property
+    def asset_groups(self) -> AssetGroup:
+        return self._asset_groups
+
+    @asset_groups.setter
+    def asset_groups(self, value: AssetGroup | list[list[str]]) -> None:
+        self._asset_groups = clean(value, dtype=str)
 
     def __setattr__(self, name, value):
         if name != 'loaded' and self.__dict__.get('loaded'):
@@ -349,6 +389,17 @@ class Optimization:
                 raise ValueError(
                     f'previous_weights should be of size {self.assets.asset_nb} '
                     f'but received {len(self.previous_weights)}')
+
+        if self.asset_groups is not None:
+            if len(self.asset_groups.shape) != 2:
+                raise ValueError(f'asset_groups should be a 2d array or a list of list')
+            if self.asset_groups.shape[1] != self.assets.asset_nb:
+                raise ValueError(f'each list or array of asset_groups should be have same size as the number of assets')
+            if self.group_constraints is None:
+                raise ValueError('if you provide asset_groups, you also need to provide group_constraints')
+
+        if self.group_constraints is not None and self.asset_groups is None:
+            raise ValueError('if you provide group_constraints, you also need to provide asset_groups')
 
     def _validate_args(self, **kwargs):
         r"""
@@ -490,7 +541,10 @@ class Optimization:
         if self.max_long is not None:
             constraints.append(cp.sum(cp.pos(w)) * self.scale <= self.max_long * factor * self.scale)
         if self.max_short is not None:
-            constraints.append(cp.sum(cp.neg(w)) * self.scale <= self.max_short * factor * self.scale)
+            constraints.append(cp.sum(cp.neg(w)) * self.scale <= self.max_short * self.scale)
+        if self.asset_groups is not None and self.group_constraints is not None:
+            a, b = group_constraints_to_matrix(groups=self.asset_groups, constraints=self.group_constraints)
+            constraints.append(a * self.scale - b * factor * self.scale <= 0)
 
         return constraints
 
