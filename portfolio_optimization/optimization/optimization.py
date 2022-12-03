@@ -6,31 +6,15 @@ from cvxpy.constraints.constraint import Constraint
 from scipy.sparse.linalg import ArpackNoConvergence
 from enum import Enum
 from numbers import Number
+from portfolio_optimization.meta import RiskMeasure, ObjectiveFunction
 from portfolio_optimization.assets import Assets
 from portfolio_optimization.exception import OptimizationError
-from portfolio_optimization.utils.tools import args_names, rand_weights_dirichlet
+from portfolio_optimization.utils.tools import args_names, rand_weights_dirichlet, clean
 from portfolio_optimization.optimization.group_constraints import group_constraints_to_matrix
 
-__all__ = ['Optimization',
-           'RiskMeasure',
-           'ObjectiveFunction']
+__all__ = ['Optimization']
 
 logger = logging.getLogger('portfolio_optimization.optimization')
-
-
-class RiskMeasure(Enum):
-    VARIANCE = 'variance'
-    SEMI_VARIANCE = 'semi_variance'
-    CVAR = 'cvar'
-    CDAR = 'cdar'
-
-
-class ObjectiveFunction(Enum):
-    MIN_RISK = 'min_risk'
-    MAX_RETURN = 'max_return'
-    RATIO = 'ratio'
-    UTILITY = 'utility'
-
 
 Weights = float | np.ndarray | None
 AssetGroup = np.ndarray | None
@@ -47,13 +31,6 @@ ParametersValues = list[tuple[cp.Parameter, float | np.ndarray]] | None
 PopulationSize = int | None
 OptionalVariable = cp.Variable | None
 Result = np.ndarray | tuple[float | np.ndarray, np.ndarray]
-
-
-def clean(x: float | list | np.ndarray | None,
-          dtype: type | str | None = None) -> float | np.ndarray | None:
-    if isinstance(x, list):
-        return np.array(x, dtype=dtype)
-    return x
 
 
 class Optimization:
@@ -210,10 +187,10 @@ class Optimization:
                 times the sum of all assets in group_2.
 
                  Examples:
-                    constraints = ['Equity' <= 3 * 'Bond',
-                                   'US' >= 1.5,
-                                   'Europe' >= 0.5 * Fund',
-                                   'Japan' <= 1]
+                    constraints = ['Equity <= 3 * Bond',
+                                   'US >= 1.5',
+                                   'Europe >= 0.5 * Fund',
+                                   'Japan <= 1']
 
         
         risk_free_rate: float, default 0
@@ -235,15 +212,22 @@ class Optimization:
                It can be used to increase the optimization accuracies in specific cases.
                                          
         """
+        self.min_weights = min_weights
+        self.max_weights = max_weights
+
         self.budget = budget
         self.min_budget = min_budget
         self.max_budget = max_budget
         self.max_short = max_short
         self.max_long = max_long
+        self.transaction_costs = transaction_costs
+        self.previous_weights = previous_weights
+        self.group_constraints = group_constraints
+        self.asset_groups = asset_groups
         self.risk_free_rate = risk_free_rate
         self.is_logarithmic_returns = is_logarithmic_returns
         self.investment_duration = investment_duration
-        self.group_constraints = group_constraints
+
         if solvers is None:
             self.solvers = ['ECOS', 'SCS', 'OSQP', 'CVXOPT']
         else:
@@ -253,15 +237,9 @@ class Optimization:
         self.solver_params = {k: solver_params.get(k, {}) for k in self.solvers}
         self.solver_verbose = solver_verbose
         self.scale = scale
-        self.loaded = True
-
-        self._min_weights = min_weights
-        self._max_weights = max_weights
-        self._transaction_costs = transaction_costs
-        self._previous_weights = previous_weights
-        self._asset_groups = asset_groups
 
         self._validation()
+        self.loaded = True
 
     @property
     def min_weights(self) -> Weights:
@@ -277,7 +255,7 @@ class Optimization:
 
     @max_weights.setter
     def max_weights(self, value: Weights | list) -> None:
-        self.max_weights = clean(value, dtype=float)
+        self._max_weights = clean(value, dtype=float)
 
     @property
     def previous_weights(self) -> Weights:
@@ -301,6 +279,13 @@ class Optimization:
 
     @asset_groups.setter
     def asset_groups(self, value: AssetGroup | list[list[str]]) -> None:
+        if isinstance(value, list) and len(value) != 0:
+            g1 = value[0]
+            if not isinstance(g1, list):
+                raise ValueError(f'asset_groups should be a 2d array or a list of list')
+            for g in value:
+                if len(g) != len(g1):
+                    raise ValueError(f'All groups from asset_groups should be of same size')
         self._asset_groups = clean(value, dtype=str)
 
     def __setattr__(self, name, value):
@@ -394,7 +379,7 @@ class Optimization:
             if len(self.asset_groups.shape) != 2:
                 raise ValueError(f'asset_groups should be a 2d array or a list of list')
             if self.asset_groups.shape[1] != self.assets.asset_nb:
-                raise ValueError(f'each list or array of asset_groups should be have same size as the number of assets')
+                raise ValueError(f'each list or array of asset_groups should have same size as the number of assets')
             if self.group_constraints is None:
                 raise ValueError('if you provide asset_groups, you also need to provide group_constraints')
 
@@ -522,7 +507,7 @@ class Optimization:
         """
         min_weights, max_weights = self._convert_weights_bounds()
 
-        if k is None:
+        if k is not None:
             factor = k
         else:
             factor = 1
@@ -544,7 +529,7 @@ class Optimization:
             constraints.append(cp.sum(cp.neg(w)) * self.scale <= self.max_short * self.scale)
         if self.asset_groups is not None and self.group_constraints is not None:
             a, b = group_constraints_to_matrix(groups=self.asset_groups, constraints=self.group_constraints)
-            constraints.append(a * self.scale - b * factor * self.scale <= 0)
+            constraints.append(a @ w * self.scale - b * factor * self.scale <= 0)
 
         return constraints
 
@@ -618,8 +603,8 @@ class Optimization:
                     if w.value is None:
                         raise SolverError('No solution found')
                     if problem.status != OPTIMAL:
-                        logger.warning(f'Solution is inaccurate. Try changing solver settings or try another solver or'
-                                       f'change the scale')
+                        logger.warning(f'Solution is inaccurate. Try changing the solver settings, try another solver '
+                                       f'or change the scale')
                     break
                 except (SolverError, ArpackNoConvergence) as e:
                     logger.warning(f'Solver {solver} failed with error: {e}')

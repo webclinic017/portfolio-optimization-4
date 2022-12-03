@@ -49,6 +49,53 @@ def test_mean_variance():
                                   7.73299012e-03, 5.38849221e-03, 1.51744779e-02, 5.22349873e-03,
                                   8.18506176e-03, 1.34491053e-02, 9.20145325e-03])
 
+    asset_groups = [['Equity'] * 5 + ['Fund'] * 5 + ['Bond'] * 25,
+                    ['US'] * 5 + ['Europe'] * 15 + ['Japan'] * 15]
+    group_constraints = ['Equity <= 0.5 * Bond',
+                         'US >= 0.1',
+                         'Europe >= 0.5 * Fund',
+                         'Japan <= 1']
+
+    params = [dict(min_weights=-1,
+                   max_weights=1,
+                   previous_weights=previous_weights,
+                   transaction_costs=transaction_costs,
+                   investment_duration=assets.date_nb),
+              dict(min_weights=0,
+                   max_weights=None,
+                   budget=0.5,
+                   previous_weights=previous_weights,
+                   transaction_costs=transaction_costs,
+                   investment_duration=assets.date_nb),
+              dict(min_weights=-0.2,
+                   max_weights=10,
+                   budget=None,
+                   min_budget=-1,
+                   max_budget=1,
+                   previous_weights=previous_weights,
+                   transaction_costs=transaction_costs,
+                   investment_duration=assets.date_nb),
+              dict(min_weights=-1,
+                   max_weights=1,
+                   min_budget=-1,
+                   budget=None,
+                   max_budget=1,
+                   max_short=0.5,
+                   max_long=2,
+                   previous_weights=previous_weights,
+                   transaction_costs=transaction_costs,
+                   investment_duration=assets.date_nb),
+              dict(min_weights=-1,
+                   max_weights=1,
+                   max_short=0.5,
+                   max_long=2,
+                   previous_weights=previous_weights,
+                   transaction_costs=transaction_costs,
+                   investment_duration=assets.date_nb,
+                   asset_groups=asset_groups,
+                   group_constraints=group_constraints)
+              ]
+
     for risk_measure in RiskMeasure:
         print(risk_measure)
         max_risk_arg = f'max_{risk_measure.value}'
@@ -58,71 +105,66 @@ def test_mean_variance():
         else:
             solvers = ['ECOS']
 
-        for weight_bounds in [(-1, 1), (0, None)]:
-            for budget in [1, 0, None]:
-                model = Optimization(assets=assets,
-                                     budget=budget,
-                                     weight_bounds=weight_bounds,
-                                     previous_weights=previous_weights,
-                                     transaction_costs=transaction_costs,
-                                     investment_duration=assets.date_nb,
-                                     solvers=solvers)
+        for param in params:
+            model = Optimization(assets=assets,
+                                 solvers=solvers,
+                                 **param)
 
-                min_risk, w = model.mean_risk_optimization(risk_measure=risk_measure,
-                                                           objective_function=ObjectiveFunction.MIN_RISK,
-                                                           objective_values=True)
-
-                p = Portfolio(assets=assets,
-                              weights=w,
-                              previous_weights=previous_weights,
-                              transaction_costs=transaction_costs)
-                assert is_close(getattr(p, risk_measure.value), min_risk, precision[risk_measure])
-                min_risk_mean = p.mean
-
-                risk = min_risk * 1.2
-                mean, w = model.mean_risk_optimization(risk_measure=risk_measure,
-                                                       objective_function=ObjectiveFunction.MAX_RETURN,
-                                                       objective_values=True,
-                                                       **{max_risk_arg: risk})
-
-                p = Portfolio(assets=assets,
-                              weights=w,
-                              previous_weights=previous_weights,
-                              transaction_costs=transaction_costs)
-                assert is_close(getattr(p, risk_measure.value), risk, precision[risk_measure])
-                assert is_close(p.mean, mean)
-                assert mean >= min_risk_mean - 1e-6
-
-                w = model.mean_risk_optimization(risk_measure=risk_measure,
-                                                 objective_function=ObjectiveFunction.MIN_RISK,
-                                                 **{max_risk_arg: risk})
-
-                p = Portfolio(assets=assets,
-                              weights=w,
-                              previous_weights=previous_weights,
-                              transaction_costs=transaction_costs)
-                assert is_close(getattr(p, risk_measure.value), min_risk, precision[risk_measure])
-
-                risk, w = model.mean_risk_optimization(risk_measure=risk_measure,
+            min_risk, w = model.mean_risk_optimization(risk_measure=risk_measure,
                                                        objective_function=ObjectiveFunction.MIN_RISK,
-                                                       min_return=mean,
                                                        objective_values=True)
 
-                p = Portfolio(assets=assets,
-                              weights=w,
-                              previous_weights=previous_weights,
-                              transaction_costs=transaction_costs)
-                assert is_close(getattr(p, risk_measure.value), risk, precision[risk_measure])
-                assert is_close(p.mean, mean, max(precision[risk_measure], 1e-5))
+            p = Portfolio(assets=assets,
+                          weights=w,
+                          previous_weights=previous_weights,
+                          transaction_costs=transaction_costs)
+            assert is_close(getattr(p, risk_measure.value), min_risk, precision[risk_measure])
+            min_risk_mean = p.mean
 
-                mean, w = model.mean_risk_optimization(risk_measure=risk_measure,
-                                                       objective_function=ObjectiveFunction.MAX_RETURN,
-                                                       objective_values=True,
-                                                       **{max_risk_arg: risk})
+            risk = min_risk * 1.2
+            mean, w = model.mean_risk_optimization(risk_measure=risk_measure,
+                                                   objective_function=ObjectiveFunction.MAX_RETURN,
+                                                   objective_values=True,
+                                                   **{max_risk_arg: risk})
 
-                p = Portfolio(assets=assets,
-                              weights=w,
-                              previous_weights=previous_weights,
-                              transaction_costs=transaction_costs)
-                assert is_close(getattr(p, risk_measure.value), risk, precision[risk_measure])
-                assert is_close(p.mean, mean)
+            p = Portfolio(assets=assets,
+                          weights=w,
+                          previous_weights=previous_weights,
+                          transaction_costs=transaction_costs)
+            assert is_close(getattr(p, risk_measure.value), risk, precision[risk_measure])
+            assert is_close(p.mean, mean)
+            assert mean >= min_risk_mean - 1e-6
+
+            w = model.mean_risk_optimization(risk_measure=risk_measure,
+                                             objective_function=ObjectiveFunction.MIN_RISK,
+                                             **{max_risk_arg: risk})
+
+            p = Portfolio(assets=assets,
+                          weights=w,
+                          previous_weights=previous_weights,
+                          transaction_costs=transaction_costs)
+            assert is_close(getattr(p, risk_measure.value), min_risk, precision[risk_measure])
+
+            risk, w = model.mean_risk_optimization(risk_measure=risk_measure,
+                                                   objective_function=ObjectiveFunction.MIN_RISK,
+                                                   min_return=mean,
+                                                   objective_values=True)
+
+            p = Portfolio(assets=assets,
+                          weights=w,
+                          previous_weights=previous_weights,
+                          transaction_costs=transaction_costs)
+            assert is_close(getattr(p, risk_measure.value), risk, precision[risk_measure])
+            assert is_close(p.mean, mean, max(precision[risk_measure], 1e-5))
+
+            mean, w = model.mean_risk_optimization(risk_measure=risk_measure,
+                                                   objective_function=ObjectiveFunction.MAX_RETURN,
+                                                   objective_values=True,
+                                                   **{max_risk_arg: risk})
+
+            p = Portfolio(assets=assets,
+                          weights=w,
+                          previous_weights=previous_weights,
+                          transaction_costs=transaction_costs)
+            assert is_close(getattr(p, risk_measure.value), risk, precision[risk_measure])
+            assert is_close(p.mean, mean)

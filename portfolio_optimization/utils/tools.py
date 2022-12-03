@@ -9,7 +9,15 @@ __all__ = ['prices_rebased',
            'rand_weights_dirichlet',
            'walk_forward',
            'load_prices',
-           'args_names']
+           'args_names',
+           'clean']
+
+
+def clean(x: float | list | np.ndarray | None,
+          dtype: type | str | None = None) -> float | np.ndarray | None:
+    if isinstance(x, list):
+        return np.array(x, dtype=dtype)
+    return x
 
 
 def prices_rebased(returns: np.array) -> np.array:

@@ -3,7 +3,9 @@ from enum import Enum
 __all__ = ['AVG_TRADING_DAYS_PER_YEAR',
            'ZERO_THRESHOLD',
            'Metrics',
-           'InvestmentType']
+           'InvestmentType',
+           'RiskMeasure',
+           'ObjectiveFunction']
 
 AVG_TRADING_DAYS_PER_YEAR = 255
 ZERO_THRESHOLD = 1e-4
@@ -40,3 +42,15 @@ class Metrics(Enum):
         return self.value[-5:] == 'ratio'
 
 
+class RiskMeasure(Enum):
+    VARIANCE = 'variance'
+    SEMI_VARIANCE = 'semi_variance'
+    CVAR = 'cvar'
+    CDAR = 'cdar'
+
+
+class ObjectiveFunction(Enum):
+    MIN_RISK = 'min_risk'
+    MAX_RETURN = 'max_return'
+    RATIO = 'ratio'
+    UTILITY = 'utility'
