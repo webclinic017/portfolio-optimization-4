@@ -18,6 +18,7 @@ logger = logging.getLogger('portfolio_optimization.optimization')
 
 Weights = float | np.ndarray | None
 AssetGroup = np.ndarray | None
+Inequality = np.ndarray | None
 GroupConstraints = list[str] | None
 Costs = float | np.ndarray
 Duration = int | None
@@ -48,6 +49,8 @@ class Optimization:
                  previous_weights: Weights = None,
                  asset_groups: AssetGroup = None,
                  group_constraints: GroupConstraints = None,
+                 left_inequality: Inequality = None,
+                 right_inequality: Inequality = None,
                  risk_free_rate: Rate = 0,
                  is_logarithmic_returns: bool = False,
                  solvers: Solvers = None,
@@ -227,6 +230,8 @@ class Optimization:
         self.risk_free_rate = risk_free_rate
         self.is_logarithmic_returns = is_logarithmic_returns
         self.investment_duration = investment_duration
+        self.left_inequality = left_inequality
+        self.right_inequality = right_inequality
 
         if solvers is None:
             self.solvers = ['ECOS', 'SCS', 'OSQP', 'CVXOPT']
@@ -386,6 +391,27 @@ class Optimization:
         if self.group_constraints is not None and self.asset_groups is None:
             raise ValueError('if you provide group_constraints, you also need to provide asset_groups')
 
+        if self.left_inequality is not None:
+            if not isinstance(self.left_inequality, np.ndarray):
+                raise ValueError(f'left_inequality should be of type numpy array')
+            if len(self.left_inequality.shape) != 2:
+                raise ValueError(f'left_inequality should be a 2d array')
+            if self.left_inequality.shape != (self.assets.asset_nb, self.assets.asset_nb):
+                raise ValueError(f'left_inequality should be an array of shape '
+                                 f'({self.assets.asset_nb}, {self.assets.asset_nb})')
+            if self.right_inequality is None:
+                raise ValueError(f'right_inequality should be provided when left_inequality is provided')
+
+        if self.right_inequality is not None:
+            if not isinstance(self.right_inequality, np.ndarray):
+                raise ValueError(f'right_inequality should be of type numpy array')
+            if len(self.right_inequality.shape) != 1:
+                raise ValueError(f'right_inequality should be a 1d array')
+            if self.right_inequality.shape != (self.assets.asset_nb,):
+                raise ValueError(f'right_inequality should be an array of shape ({self.assets.asset_nb},')
+            if self.left_inequality is None:
+                raise ValueError(f'left_inequality should be provided when right_inequality is provided')
+
     def _validate_args(self, **kwargs):
         r"""
         Validate method arguments
@@ -530,6 +556,8 @@ class Optimization:
         if self.asset_groups is not None and self.group_constraints is not None:
             a, b = group_constraints_to_matrix(groups=self.asset_groups, constraints=self.group_constraints)
             constraints.append(a @ w * self.scale - b * factor * self.scale <= 0)
+        if self.left_inequality is not None and self.right_inequality is not None:
+            constraints.append(self.left_inequality @ w * self.scale - self.right_inequality * factor * self.scale <= 0)
 
         return constraints
 
