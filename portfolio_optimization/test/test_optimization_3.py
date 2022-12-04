@@ -2,6 +2,7 @@ import numpy as np
 
 from portfolio_optimization import (Assets, load_prices, load_assets, Optimization, RiskMeasure, InvestmentType,
                                     EXAMPLE_PRICES_PATH, ObjectiveFunction, Portfolio, OptimizationError)
+from portfolio_optimization.optimization.group_constraints import group_constraints_to_matrix
 
 
 def is_close(a: float, b: float, precision: float = 1e-7):
@@ -10,7 +11,7 @@ def is_close(a: float, b: float, precision: float = 1e-7):
 
 def get_assets() -> Assets:
     prices = load_prices(file=EXAMPLE_PRICES_PATH)
-    prices = prices.iloc[:, 50:100].copy()
+    prices = prices.iloc[:, 50:80].copy()
     assets = load_assets(prices=prices,
                          asset_missing_threshold=0.1,
                          dates_missing_threshold=0.1,
@@ -29,32 +30,30 @@ def test_mean_variance():
     }
 
     assets = get_assets()
+    print(assets.asset_nb)
     # previous_weights = np.random.randn(assets.asset_nb) / 10
     previous_weights = np.array([0.06663786, -0.02609581, -0.12200097, -0.03729676, -0.18604607,
                                  -0.09291357, -0.22839449, -0.08750029, 0.01262641, 0.08712638,
                                  -0.15731865, 0.14594815, 0.11637876, 0.02163102, 0.03458678,
-                                 -0.1106219, -0.05892651, 0.05990245, -0.11428092, -0.06343284,
-                                 0.0423514, 0.1394012, 0.00185886, 0.00799553, 0.02767036,
-                                 -0.1706394, 0.07544119, -0.06341742, -0.0254911, -0.07081295,
-                                 0.02034429, -0.03295023, 0.09833698, 0.0489829, -0.13253346])
+                                 -0.1106219, -0.05892651, 0.05990245])
 
     # transaction_costs = abs(np.random.randn(assets.asset_nb))/100
     transaction_costs = np.array([3.07368300e-03, 1.22914659e-02, 1.31012389e-02, 5.11069233e-03,
                                   3.14226164e-03, 1.38225267e-02, 1.01730423e-02, 1.60753223e-02,
                                   2.16640987e-04, 1.14058494e-02, 8.94785339e-03, 7.30764696e-03,
-                                  1.82260135e-02, 2.00042452e-02, 8.56386327e-03, 4.53884918e-03,
-                                  1.00539220e-02, 3.53354996e-04, 6.15081648e-03, 1.16504714e-02,
-                                  5.66981399e-03, 1.33982849e-02, 2.77254069e-03, 5.52234266e-03,
-                                  1.52447716e-05, 6.58091620e-03, 1.25069156e-02, 1.32262548e-02,
-                                  7.73299012e-03, 5.38849221e-03, 1.51744779e-02, 5.22349873e-03,
-                                  8.18506176e-03, 1.34491053e-02, 9.20145325e-03])
+                                  1.82260135e-02, 2.00042452e-02, 8.56386327e-03, 1.38225267e-02,
+                                  1.01730423e-02, 1.01730423e-02])
 
-    asset_groups = [['Equity'] * 5 + ['Fund'] * 5 + ['Bond'] * 25,
-                    ['US'] * 5 + ['Europe'] * 15 + ['Japan'] * 15]
+    asset_groups = [['Equity'] * 3 + ['Fund'] * 3 + ['Bond'] * 12,
+                    ['US'] * 2 + ['Europe'] * 6 + ['Japan'] * 10]
+
     group_constraints = ['Equity <= 0.5 * Bond',
                          'US >= 0.1',
                          'Europe >= 0.5 * Fund',
                          'Japan <= 1']
+
+    left_inequality, right_inequality = group_constraints_to_matrix(groups=np.array(asset_groups),
+                                                                    constraints=group_constraints)
 
     params = [dict(min_weights=-1,
                    max_weights=1,
@@ -93,22 +92,30 @@ def test_mean_variance():
                    transaction_costs=transaction_costs,
                    investment_duration=assets.date_nb,
                    asset_groups=asset_groups,
-                   group_constraints=group_constraints)
+                   group_constraints=group_constraints),
+              dict(min_weights=-1,
+                   max_weights=1,
+                   max_short=0.5,
+                   max_long=2,
+                   previous_weights=previous_weights,
+                   transaction_costs=transaction_costs,
+                   investment_duration=assets.date_nb,
+                   left_inequality=left_inequality,
+                   right_inequality=right_inequality)
               ]
 
     for risk_measure in RiskMeasure:
         print(risk_measure)
         max_risk_arg = f'max_{risk_measure.value}'
-        if risk_measure == RiskMeasure.CDAR:
-            solvers = ['CVXOPT']
-            continue
-        else:
-            solvers = ['ECOS']
+        solvers = ['ECOS']
 
         for param in params:
             model = Optimization(assets=assets,
                                  solvers=solvers,
                                  **param)
+
+            if risk_measure in [RiskMeasure.CDAR]:
+                model.update(scale=0.1)
 
             min_risk, w = model.mean_risk_optimization(risk_measure=risk_measure,
                                                        objective_function=ObjectiveFunction.MIN_RISK,
@@ -168,3 +175,41 @@ def test_mean_variance():
                           transaction_costs=transaction_costs)
             assert is_close(getattr(p, risk_measure.value), risk, precision[risk_measure])
             assert is_close(p.mean, mean)
+
+            # utility
+            model.update(scale=1)
+            gamma = 3
+            utility, w = model.mean_risk_optimization(risk_measure=risk_measure,
+                                                      objective_function=ObjectiveFunction.UTILITY,
+                                                      gamma=gamma,
+                                                      objective_values=True)
+            p = Portfolio(assets=assets,
+                          weights=w,
+                          previous_weights=previous_weights,
+                          transaction_costs=transaction_costs)
+            p_utility = p.mean - gamma * getattr(p, risk_measure.value)
+            assert is_close(p_utility, utility, precision[risk_measure])
+
+            utility, w = model.mean_risk_optimization(risk_measure=risk_measure,
+                                                      objective_function=ObjectiveFunction.UTILITY,
+                                                      gamma=gamma,
+                                                      objective_values=True,
+                                                      **{max_risk_arg: risk})
+            p = Portfolio(assets=assets,
+                          weights=w,
+                          previous_weights=previous_weights,
+                          transaction_costs=transaction_costs)
+            p_utility = p.mean - gamma * getattr(p, risk_measure.value)
+            assert is_close(p_utility, utility, precision[risk_measure])
+
+            # ratio
+            model = Optimization(assets=assets,
+                                 solvers=solvers,
+                                 **param)
+            model.update(transaction_costs=0)
+            (mean, risk), w = model.mean_risk_optimization(risk_measure=risk_measure,
+                                                           objective_function=ObjectiveFunction.RATIO,
+                                                           objective_values=True)
+            p = Portfolio(assets=assets, weights=w)
+            assert is_close(mean, p.mean, precision[risk_measure])
+            assert is_close(risk, getattr(p, risk_measure.value), precision[risk_measure])

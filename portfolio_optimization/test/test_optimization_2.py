@@ -14,26 +14,43 @@ def t():
     population = Population()
     Y = prices.pct_change().dropna().iloc[-200:]
 
-    val=0.01
-    port = rp.Portfolio(returns=Y, uppersdev=val)
+    # val=0.01
+    port = rp.Portfolio(returns=Y, sht=True, budget=0.5)
     port.assets_stats(method_mu='hist', method_cov='hist', d=0.94)
     m = 'Classic'  # Could be Classic (historical), BL (Black Litterman) or FM (Factor Model)
-    rm = 'SMV'  # Risk measure used, this time will be variance
-    obj = 'MaxRet'  # Objective function, could be MinRisk, MaxRet, Utility or Sharpe
+    rm = 'CVaR'  # Risk measure used, this time will be variance
+    obj = 'Sharpe'  # Objective function, could be MinRisk, MaxRet, Utility or Sharpe
     hist = True  # Use historical scenarios for risk measures that depend on scenarios
     rf = 0  # Risk free rate
     l = 0  # Risk aversion factor, only useful when obj is 'Utility'
     w = port.optimization(model=m, rm=rm, obj=obj, rf=rf, l=l, hist=hist)
     d = w.to_dict()['weights']
     w1 = np.array([d[c] for c in stocks])
+    sum(w1)
+    sum(abs(w1))
+    sum(np.maximum(w1, 0))
+    sum(np.minimum(w1, 0))
 
-    model = Optimization(assets=assets, weight_bounds=(0, None))
-    w2 = model.optimize(risk_measure=RiskMeasure.SEMI_VARIANCE,
-                        objective_function=ObjectiveFunction.MAX_RETURN,
-                        max_semi_variance=val**2)
+    model = Optimization(assets=assets,
+                         min_weights=-1,
+                         max_weights=1,
+                         max_short=0.2,
+                         max_long=1,
+                         budget=0.5)
+    r , w2 = model.mean_risk_optimization(risk_measure=RiskMeasure.CVAR,
+                                      objective_function=ObjectiveFunction.RATIO,
+                                      objective_values=True)
+    sum(w2)
+    sum(abs(w2))
+    sum(np.maximum(w2, 0))
+    sum(np.minimum(w2, 0))
+    print(Portfolio(assets=assets,weights=w1).sharpe_ratio)
+    print(Portfolio(assets=assets,weights=w2).sharpe_ratio)
+    print(Portfolio(assets=assets,weights=w2).mean)
+    print(Portfolio(assets=assets,weights=w2).cvar)
+
+
     np.testing.assert_array_almost_equal(w1, w2, decimal=3)
-
-
 
     for upperdev in np.linspace(0.008, 0.015, num=10):
         for upperCDaR in np.linspace(0.03, 0.11, num=10):
@@ -54,7 +71,6 @@ def t():
                                 max_cdar=upperCDaR)
             np.testing.assert_array_almost_equal(w1, w2, decimal=3)
 
-
     for uppersdev in np.linspace(0.008, 0.015, num=10):
         for upperCDaR in np.linspace(0.03, 0.11, num=10):
             port = rp.Portfolio(returns=Y, uppersdev=uppersdev, upperCDaR=upperCDaR)
@@ -74,15 +90,14 @@ def t():
                                 max_cdar=upperCDaR)
             np.testing.assert_array_almost_equal(w1, w2, decimal=3)
 
-
-    s=time.time()
+    s = time.time()
     model = Optimization(assets=assets, weight_bounds=(0, None))
     w2 = model.optimize(risk_measure=RiskMeasure.VARIANCE,
                         objective_function=ObjectiveFunction.MAX_RETURN,
                         max_semi_variance=uppersdev ** 2,
                         max_cdar=upperCDaR)
-    e=time.time()
-    print((e-s)*1000)
+    e = time.time()
+    print((e - s) * 1000)
 
     s = time.time()
     port = rp.Portfolio(returns=Y, upperdev=uppersdev, upperCDaR=upperCDaR)
@@ -99,7 +114,7 @@ def t():
 
     population.plot_metrics(x=Metrics.ANNUALIZED_STD, y=Metrics.CDAR, z=Metrics.ANNUALIZED_MEAN, to_surface=True)
 
-    self=model
+    self = model
 
 
 def get_assets() -> Assets:

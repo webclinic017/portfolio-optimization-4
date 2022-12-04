@@ -4,7 +4,6 @@ import cvxpy as cp
 from cvxpy import SolverError, OPTIMAL
 from cvxpy.constraints.constraint import Constraint
 from scipy.sparse.linalg import ArpackNoConvergence
-from enum import Enum
 from numbers import Number
 from portfolio_optimization.meta import RiskMeasure, ObjectiveFunction
 from portfolio_optimization.assets import Assets
@@ -31,7 +30,8 @@ Target = float | list | np.ndarray | None
 ParametersValues = list[tuple[cp.Parameter, float | np.ndarray]] | None
 PopulationSize = int | None
 OptionalVariable = cp.Variable | None
-Result = np.ndarray | tuple[float | np.ndarray, np.ndarray]
+Scale = float | None
+Result = np.ndarray | tuple[float | tuple[float, float] | np.ndarray, np.ndarray]
 
 
 class Optimization:
@@ -56,7 +56,7 @@ class Optimization:
                  solvers: Solvers = None,
                  solver_params: solverParams = None,
                  solver_verbose: bool = False,
-                 scale: float = 1):
+                 scale: Scale = None):
         self.assets = assets
         r"""
         Convex portfolio optimization.
@@ -169,7 +169,7 @@ class Optimization:
                           If a list or array is provided, it has to be of same size and same order as the
                           Assets. If transaction_cost is 0, it will have no impact on the portfolio allocation.
                           
-        asset_groups: list[list[str]] | np.ndarray
+        asset_groups: list[list[str]] | ndarray
                       The list of asset groups. Each group should be a list of same size and order as the Assets. 
 
             Examples (for 4 assets):
@@ -194,8 +194,15 @@ class Optimization:
                                    'US >= 1.5',
                                    'Europe >= 0.5 * Fund',
                                    'Japan <= 1']
-
+                                   
+        left_inequality: ndarray | None, default None
+                         A 2d numpy array of shape (number of constraints, number of assets) representing
+                         the matrix :math:`A` of the linear constraint :math:`A \geq B`.
         
+        right_inequality: ndarray | None, default None
+                          A 1d numpy array of shape (number of constraints,) representing 
+                          the matrix :math:`B` of the linear constraint :math:`A \geq B`.
+                         
         risk_free_rate: float, default 0
                         The risk free interest rate to use in the portfolio optimization.
         
@@ -210,14 +217,13 @@ class Optimization:
                       Dictionary of solver parameters with key being the solver name and value the dictionary of 
                       that solver parameter.
                       
-        scale: float, default 1
+        scale: float, default None
                The optimization data are scaled by this value. 
                It can be used to increase the optimization accuracies in specific cases.
-                                         
+               If None, 1000 is used for ObjectiveFunction.Ratio and 1 otherwise                  
         """
         self.min_weights = min_weights
         self.max_weights = max_weights
-
         self.budget = budget
         self.min_budget = min_budget
         self.max_budget = max_budget
@@ -232,19 +238,25 @@ class Optimization:
         self.investment_duration = investment_duration
         self.left_inequality = left_inequality
         self.right_inequality = right_inequality
-
-        if solvers is None:
-            self.solvers = ['ECOS', 'SCS', 'OSQP', 'CVXOPT']
-        else:
-            self.solvers = solvers
+        self.solvers = ['ECOS', 'SCS', 'OSQP', 'CVXOPT'] if solvers is None else solvers
         if solver_params is None:
             solver_params = {}
         self.solver_params = {k: solver_params.get(k, {}) for k in self.solvers}
         self.solver_verbose = solver_verbose
-        self.scale = scale
-
+        self._scale = scale
         self._validation()
         self.loaded = True
+        self._default_scale = 1
+
+    @property
+    def scale(self) -> float:
+        if self._scale is None:
+            return self._default_scale
+        return self._scale
+
+    @scale.setter
+    def scale(self, value: Scale) -> None:
+        self._scale = value
 
     @property
     def min_weights(self) -> Weights:
@@ -294,7 +306,7 @@ class Optimization:
         self._asset_groups = clean(value, dtype=str)
 
     def __setattr__(self, name, value):
-        if name != 'loaded' and self.__dict__.get('loaded'):
+        if name != 'loaded' and self.__dict__.get('loaded') and name[:8] != '_default':
             logger.warning(f'Attributes should be updated with the update() method to allow validation')
         super().__setattr__(name, value)
 
@@ -345,7 +357,7 @@ class Optimization:
         for name in ['max_short', 'max_long']:
             value = getattr(self, name)
             if value is not None and value <= 0:
-                raise ValueError(f'{name} has to be strictly positif')
+                raise ValueError(f'{name} must be strictly positif')
 
         min_weights, max_weights = self._convert_weights_bounds(convert_none=True)
         if not np.all(min_weights <= max_weights):
@@ -361,16 +373,19 @@ class Optimization:
             if sum(min_weights) > self.budget:
                 raise ValueError(f'the sum of all min_weights should be less or equal to the budget: {self.budget}')
 
-        if np.isscalar(self.transaction_costs):
-            if self.transaction_costs < 0:
-                raise ValueError(f'transaction_costs cannot be negative')
-        else:
-            if np.any(self.transaction_costs < 0):
-                raise ValueError(f'transaction_costs cannot have negative values')
+        if self.transaction_costs is not None:
+            if np.isscalar(self.transaction_costs):
+                if self.transaction_costs < 0:
+                    raise ValueError(f'transaction_costs cannot be negative')
+            else:
+                if self.transaction_costs.shape[0] != self.assets.asset_nb:
+                    raise ValueError(f'transaction_costs should be of same size as the number of assets')
+                if np.any(self.transaction_costs < 0):
+                    raise ValueError(f'transaction_costs cannot have negative values')
 
-        if not np.isscalar(self.transaction_costs) or self.transaction_costs != 0:
-            if self.investment_duration is None:
-                raise ValueError(f'investment_duration cannot be missing when costs is different from 0')
+            if not np.isscalar(self.transaction_costs) or self.transaction_costs != 0:
+                if self.investment_duration is None:
+                    raise ValueError(f'investment_duration cannot be missing when costs is different from 0')
 
         if self.previous_weights is not None:
             if not isinstance(self.previous_weights, (list, np.ndarray)):
@@ -396,9 +411,9 @@ class Optimization:
                 raise ValueError(f'left_inequality should be of type numpy array')
             if len(self.left_inequality.shape) != 2:
                 raise ValueError(f'left_inequality should be a 2d array')
-            if self.left_inequality.shape != (self.assets.asset_nb, self.assets.asset_nb):
-                raise ValueError(f'left_inequality should be an array of shape '
-                                 f'({self.assets.asset_nb}, {self.assets.asset_nb})')
+            if self.left_inequality.shape[1] != self.assets.asset_nb:
+                raise ValueError(f'left_inequality should be a 2d array with number of columns equal to the number'
+                                 f' of assets: {self.assets.asset_nb}')
             if self.right_inequality is None:
                 raise ValueError(f'right_inequality should be provided when left_inequality is provided')
 
@@ -407,13 +422,14 @@ class Optimization:
                 raise ValueError(f'right_inequality should be of type numpy array')
             if len(self.right_inequality.shape) != 1:
                 raise ValueError(f'right_inequality should be a 1d array')
-            if self.right_inequality.shape != (self.assets.asset_nb,):
-                raise ValueError(f'right_inequality should be an array of shape ({self.assets.asset_nb},')
             if self.left_inequality is None:
                 raise ValueError(f'left_inequality should be provided when right_inequality is provided')
+            if self.right_inequality.shape[0] != self.left_inequality.shape[0]:
+                raise ValueError(f'right_inequality should be an 1d array with number of rows equal to the number'
+                                 f'of columns of left_inequality')
 
     def _validate_args(self, **kwargs):
-        r"""
+        r"""1
         Validate method arguments
         """
         population_size = kwargs.get('population_size')
@@ -552,7 +568,7 @@ class Optimization:
         if self.max_long is not None:
             constraints.append(cp.sum(cp.pos(w)) * self.scale <= self.max_long * factor * self.scale)
         if self.max_short is not None:
-            constraints.append(cp.sum(cp.neg(w)) * self.scale <= self.max_short * self.scale)
+            constraints.append(cp.sum(cp.neg(w)) * self.scale <= self.max_short * factor * self.scale)
         if self.asset_groups is not None and self.group_constraints is not None:
             a, b = group_constraints_to_matrix(groups=self.asset_groups, constraints=self.group_constraints)
             constraints.append(a @ w * self.scale - b * factor * self.scale <= 0)
@@ -562,6 +578,7 @@ class Optimization:
         return constraints
 
     def _solve_problem(self,
+                       risk_measure: RiskMeasure,
                        problem: cp.Problem,
                        w: cp.Variable,
                        parameters_values: ParametersValues = None,
@@ -572,6 +589,9 @@ class Optimization:
 
         Parameters
         ----------
+        risk_measure: RiskMeasure
+                      The problem risk measure
+
         problem: cvxpy.Problem
                  CVXPY Problem.
 
@@ -593,6 +613,7 @@ class Optimization:
         -------
         If objective_values is True:
             tuple (objective values of the optimization problem, weights)
+            if k is not None (Ratio): the objective values are the tuple (mean, risk)
         else:
             weights
 
@@ -632,7 +653,7 @@ class Optimization:
                         raise SolverError('No solution found')
                     if problem.status != OPTIMAL:
                         logger.warning(f'Solution is inaccurate. Try changing the solver settings, try another solver '
-                                       f'or change the scale')
+                                       f', change the problem scale or or solve with solver_verbose=True')
                     break
                 except (SolverError, ArpackNoConvergence) as e:
                     logger.warning(f'Solver {solver} failed with error: {e}')
@@ -647,10 +668,16 @@ class Optimization:
 
             if k is None:
                 weights.append(np.array(w.value, dtype=float))
+                results.append(problem.value / self.scale)
+
             else:
                 weights.append(np.array(w.value / k.value, dtype=float))
-
-            results.append(problem.value / self.scale)
+                mean = 1 / k.value
+                if risk_measure in [RiskMeasure.CVAR, RiskMeasure.CDAR]:
+                    risk = problem.value / k.value / self.scale
+                else:
+                    risk = problem.value / k.value ** 2 / self.scale
+                results.append((mean, risk))
 
         if is_scalar:
             weights = weights[0]
@@ -748,6 +775,9 @@ class Optimization:
             * CDaR
 
         Some combination of objective function /  risk measure(s) may have no solutions.
+        Optimizing the ratio ret(w)/risk(w) (which is not convex), belong to the class of fractional programming (FP).
+        To solve FP problems, we introduce additional variables. However, ret(w) cannot include costs or L1 or L2
+        normalization because they make it non-linear.
 
         Parameters
         ----------
@@ -775,6 +805,11 @@ class Optimization:
             raise TypeError('risk_measure should be of type RiskMeasure')
         if not isinstance(objective_function, ObjectiveFunction):
             raise TypeError('objective_function should be of type ObjectiveFunction')
+
+        if objective_function == ObjectiveFunction.RATIO:
+            self._default_scale = 1000
+        else:
+            self._default_scale = 1
 
         w = cp.Variable(self.assets.asset_nb)
         n = self.assets.date_nb
@@ -811,7 +846,6 @@ class Optimization:
         parameters_values = []
         for r_m in RiskMeasure:
             risk_limit = locals()[f'max_{r_m.value}']
-            # risk_limit = {'max_semi_variance': max_semi_variance}.get(f'max_{r_m.value}')
             if risk_measure == r_m or risk_limit is not None:
                 risk_func = getattr(self, f'_{r_m.value}_risk')
                 args = {}
@@ -845,6 +879,7 @@ class Optimization:
             case ObjectiveFunction.UTILITY:
                 objective = cp.Maximize(ret - gamma * risk)
             case ObjectiveFunction.RATIO:
+                # noinspection PyTypeChecker
                 if self.is_logarithmic_returns:
                     constraints += [risk <= 1,
                                     cp.constraints.ExpCone(gr, np.ones((n, 1)) @ k, k + self.assets.returns @ w)]
@@ -862,7 +897,8 @@ class Optimization:
         problem = cp.Problem(objective, constraints)
 
         # results
-        return self._solve_problem(problem=problem,
+        return self._solve_problem(risk_measure=risk_measure,
+                                   problem=problem,
                                    w=w,
                                    k=k,
                                    parameters_values=parameters_values,
