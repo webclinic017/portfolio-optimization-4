@@ -21,7 +21,7 @@ def get_assets() -> Assets:
     return assets
 
 
-def test_mean_variance():
+def test_mean_risk_optimization():
     precision = {
         RiskMeasure.VARIANCE: 1e-7,
         RiskMeasure.SEMI_VARIANCE: 1e-7,
@@ -30,7 +30,6 @@ def test_mean_variance():
     }
 
     assets = get_assets()
-    print(assets.asset_nb)
     # previous_weights = np.random.randn(assets.asset_nb) / 10
     previous_weights = np.array([0.06663786, -0.02609581, -0.12200097, -0.03729676, -0.18604607,
                                  -0.09291357, -0.22839449, -0.08750029, 0.01262641, 0.08712638,
@@ -107,15 +106,14 @@ def test_mean_variance():
     for risk_measure in RiskMeasure:
         print(risk_measure)
         max_risk_arg = f'max_{risk_measure.value}'
-        solvers = ['ECOS']
 
         for param in params:
             model = Optimization(assets=assets,
-                                 solvers=solvers,
+                                 solvers=['ECOS'],
                                  **param)
 
             if risk_measure in [RiskMeasure.CDAR]:
-                model.update(scale=0.1)
+                model.update(scale=0.01)
 
             min_risk, w = model.mean_risk_optimization(risk_measure=risk_measure,
                                                        objective_function=ObjectiveFunction.MIN_RISK,
@@ -177,7 +175,6 @@ def test_mean_variance():
             assert is_close(p.mean, mean)
 
             # utility
-            model.update(scale=1)
             gamma = 3
             utility, w = model.mean_risk_optimization(risk_measure=risk_measure,
                                                       objective_function=ObjectiveFunction.UTILITY,
@@ -203,9 +200,10 @@ def test_mean_variance():
             assert is_close(p_utility, utility, precision[risk_measure])
 
             # ratio
-            model = Optimization(assets=assets,
-                                 solvers=solvers,
-                                 **param)
+            if risk_measure in [RiskMeasure.CDAR]:
+                model.update(scale=10)
+            else:
+                model.update(scale=1000)
             model.update(transaction_costs=0)
             (mean, risk), w = model.mean_risk_optimization(risk_measure=risk_measure,
                                                            objective_function=ObjectiveFunction.RATIO,
@@ -213,3 +211,11 @@ def test_mean_variance():
             p = Portfolio(assets=assets, weights=w)
             assert is_close(mean, p.mean, precision[risk_measure])
             assert is_close(risk, getattr(p, risk_measure.value), precision[risk_measure])
+
+
+def test_mean_risk_methods():
+    assets = get_assets()
+    model = Optimization(assets=assets, solvers=['ECOS'])
+    w = model.mean_variance()
+    w = model.mean_variance(target_variance=0.1)
+    w = model.mean_variance(target_return=-0.1)

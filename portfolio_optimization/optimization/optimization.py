@@ -96,20 +96,20 @@ class Optimization:
                       * budget = 0: market neutral portfolio.
                       * budget = None: no constraints on the sum of weights.
                       
-        min_budget: float | None, default None
+        min_budget: float, optional
                     The minimum budget of the portfolio. It's the lower bound of the sum of long and short positions 
                     (sum of all weights). 
                     If provided, you have to set the budget to None because they contradict each other.
         
-        max_budget: float | None, default None
+        max_budget: float, optional
                     The maximum budget of the portfolio. It's the upper bound of the sum of long and short positions 
                     (sum of all weights). 
                     If provided, you have to set the budget to None because they contradict each other.
                     
-        max_short: float | None, default None
+        max_short: float, optional
                    The maximum value of the sum of absolute values of negative weights (short positions).
                         
-        max_long: float | None, default None
+        max_long: float, optional
                   The maximum value of the sum of positive weights (long positions).
 
         transaction_costs: float | list | ndarray, default 0
@@ -128,7 +128,7 @@ class Optimization:
                                     Costs per shares have to be converted to percentage on the notional amount.
                               
 
-        investment_duration: float | None, default None
+        investment_duration: float, optional
                              The expected investment duration expressed in the same period as the returns.
                              It needs to be provided when transaction_costs is different from 0.
                              If the returns are daily, then it is the expected investment duration in business days.
@@ -163,7 +163,7 @@ class Optimization:
                              In order to take that duration into account, the costs provided are divided by the 
                              expected investment duration.
                              
-        previous_weights: float | ndarray | list | None, default None
+        previous_weights: float | ndarray | list, optional
                           The previous weights of the portfolio. 
                           If a float is provided, that value will be applied to all the Assets.
                           If a list or array is provided, it has to be of same size and same order as the
@@ -195,11 +195,11 @@ class Optimization:
                                    'Europe >= 0.5 * Fund',
                                    'Japan <= 1']
                                    
-        left_inequality: ndarray | None, default None
+        left_inequality: ndarray, optional
                          A 2d numpy array of shape (number of constraints, number of assets) representing
                          the matrix :math:`A` of the linear constraint :math:`A \geq B`.
         
-        right_inequality: ndarray | None, default None
+        right_inequality: ndarray, optional
                           A 1d numpy array of shape (number of constraints,) representing 
                           the matrix :math:`B` of the linear constraint :math:`A \geq B`.
                          
@@ -209,11 +209,11 @@ class Optimization:
         is_logarithmic_returns: bool, default False
                                 If True, the optimization uses logarithmic returns instead of simple returns.
         
-        solvers: list[str] | None, default None
+        solvers: list[str], optional
                  The list of cvxpy solver to try. 
                  If None, then the default list is ['ECOS', 'SCS', 'OSQP', 'CVXOPT'].
         
-        solverParams: dict[str, dict] | None, default None
+        solverParams: dict[str, dict], optional
                       Dictionary of solver parameters with key being the solver name and value the dictionary of 
                       that solver parameter.
                       
@@ -428,8 +428,9 @@ class Optimization:
                 raise ValueError(f'right_inequality should be an 1d array with number of rows equal to the number'
                                  f'of columns of left_inequality')
 
-    def _validate_args(self, **kwargs):
-        r"""1
+    @staticmethod
+    def _validate_args(**kwargs):
+        r"""
         Validate method arguments
         """
         population_size = kwargs.get('population_size')
@@ -438,36 +439,21 @@ class Optimization:
         if len(not_none_targets_names) > 1:
             raise ValueError(f'Only one target has to be provided but received {" AND ".join(not_none_targets_names)}')
         elif len(not_none_targets_names) == 1:
-            target_name = targets_names[0]
+            target_name = not_none_targets_names[0]
         else:
             target_name = None
 
-        if ((population_size is None and target_name is None) or
-                (population_size is not None and target_name is not None)):
-            raise ValueError(f'You have to provide population_size OR {" OR ".join(not_none_targets_names)}')
+        if population_size is not None and target_name is not None:
+            raise ValueError(f'You have to provide population_size OR {" OR ".join(targets_names)}')
 
         if population_size is not None and population_size <= 1:
             raise ValueError('f population_size should be strictly greater than one')
 
         if target_name is not None:
             target = kwargs[target_name]
-            if np.isscalar(target):
-                if target < 0:
-                    raise ValueError(f'{target_name} should be positive')
-            elif isinstance(target, np.ndarray) or isinstance(target, list):
-                if np.any(np.array(target) < 0):
-                    raise ValueError(f'All values of {target_name} should be positive')
-            else:
-                raise ValueError(f'{target_name} should be a scalar, numpy.ndarray or list. '
-                                 f'But received {type(target)}')
-
-        lower_bounds, upper_bounds = self._convert_weights_bounds(convert_none=True)
-        for k, v in kwargs.items():
-            if k.endswith('coef') and v is not None:
-                if v < 0:
-                    raise ValueError(f'{k} cannot be negative')
-                elif v > 0 and np.all(lower_bounds >= 0):
-                    logger.warning(f'Positive {k} will have no impact with positive or null lower bounds')
+            if not (np.isscalar(target) or isinstance(target, (list, np.ndarray))):
+                raise ValueError(f'{target_name} should be a scalar, ndarray or list '
+                                 f'but received {type(target)}')
 
     def _portfolio_cost(self, w: cp.Variable) -> cp.Expression | float:
         r"""
@@ -598,12 +584,12 @@ class Optimization:
         w: cvxpy.Variable
            Weights variable.
 
-        parameters_values: list[tuple[cvxpy.Parameter, float | ndarray]] | None, default None
+        parameters_values: list[tuple[cvxpy.Parameter, float | ndarray]], optional
                            A list of tuple of CVXPY Parameter and there values.
                            If The values are ndarray instead of float, the optimization is solved for
                            each element of the array.
 
-        k: cvxpy.Variable | None, default None
+        k: cvxpy.Variable, optional
            CVXPY Variable used for Ratio optimization problems
 
         objective_values: bool, default False
@@ -753,7 +739,7 @@ class Optimization:
                                min_return: Target = None,
                                max_variance: Target = None,
                                max_semi_variance: Target = None,
-                               semi_variance_returns_target: Target = None,
+                               min_acceptable_returns: Target = None,
                                max_cvar: Target = None,
                                cvar_beta: float = 0.95,
                                max_cdar: Target = None,
@@ -789,7 +775,7 @@ class Optimization:
         min_return
         max_variance
         max_semi_variance
-        semi_variance_returns_target
+        min_acceptable_returns
         max_cvar
         cvar_beta
         max_cdar
@@ -877,7 +863,8 @@ class Optimization:
             case ObjectiveFunction.MIN_RISK:
                 objective = cp.Minimize(risk * self.scale)
             case ObjectiveFunction.UTILITY:
-                objective = cp.Maximize(ret - gamma * risk)
+                # noinspection PyTypeChecker
+                objective = cp.Maximize(ret * self.scale - gamma * risk * self.scale)
             case ObjectiveFunction.RATIO:
                 # noinspection PyTypeChecker
                 if self.is_logarithmic_returns:
@@ -912,19 +899,19 @@ class Optimization:
         return risk, constraints
 
     def _semi_variance_risk(self, w: cp.Variable,
-                            semi_variance_returns_target: Target = None):
-        if semi_variance_returns_target is None:
-            semi_variance_returns_target = self.assets.expected_returns
+                            min_acceptable_returns: Target = None):
+        if min_acceptable_returns is None:
+            min_acceptable_returns = self.assets.expected_returns
 
             # Additional matrix
-        if (not np.isscalar(semi_variance_returns_target)
-                and semi_variance_returns_target.shape != (len(semi_variance_returns_target), 1)):
-            semi_variance_returns_target = semi_variance_returns_target[:, np.newaxis]
+        if (not np.isscalar(min_acceptable_returns)
+                and min_acceptable_returns.shape != (len(min_acceptable_returns), 1)):
+            semi_variance_returns_target = min_acceptable_returns[:, np.newaxis]
 
         v = cp.Variable(self.assets.date_nb)
         risk = cp.sum_squares(v) / (self.assets.date_nb - 1)
         # noinspection PyTypeChecker
-        constraints = [(self.assets.returns - semi_variance_returns_target).T @ w >= -v,
+        constraints = [(self.assets.returns - min_acceptable_returns).T @ w >= -v,
                        v >= 0]
         return risk, constraints
 
@@ -954,40 +941,66 @@ class Optimization:
         return risk, constraints
 
     def minimum_variance(self, objective_values: bool = False) -> Result:
-        """
-        Find the asset weights that minimize the portfolio semivariance (downside variance) and the value of the minimum
-        semivariance
-        :param returns_target: the target(s) to distinguish "downside" and "upside" returns
-        :type returns_target: float or np.ndarray of shape(Number of Assets)
-        :returns: the tuple (minimum semivariance, weights of the minimum semivariance portfolio)
+        r"""
+        Minimum Variance Portfolio
+
+        Parameters
+        ----------
+        objective_values: bool, default False
+                          If true, the minimum variance is also returned with the weights.
+
+        Returns
+        -------
+        If objective_values is True, the tuple (minimum variance, weights) of the optimal portfolio is returned,
+        otherwise only the weights are returned.
         """
         return self.mean_risk_optimization(risk_measure=RiskMeasure.VARIANCE,
                                            objective_function=ObjectiveFunction.MIN_RISK,
                                            objective_values=objective_values)
 
     def minimum_semivariance(self,
-                             semi_variance_returns_target: Target = None,
+                             min_acceptable_returns: Target = None,
                              objective_values: bool = False) -> Result:
-        """
-        Find the asset weights that minimize the portfolio semivariance (downside variance) and the value of the minimum
-        semivariance
-        :param returns_target: the target(s) to distinguish "downside" and "upside" returns
-        :type returns_target: float or np.ndarray of shape(Number of Assets)
-        :returns: the tuple (minimum semivariance, weights of the minimum semivariance portfolio)
+        r"""
+        Minimum Semivariance Portfolio
+
+        Parameters
+        ----------
+        min_acceptable_returns: float | list | ndarray, optional
+                                Minimum acceptable returns, in the same periodicity as the returns to distinguish
+                                "downside" and "upside" returns.
+                                If an array is provided, it needs to be of same size as the number of assets.
+
+        objective_values: bool, default False
+                          If true, the minimum semi_variance is also returned with the weights.
+
+        Returns
+        -------
+        If objective_values is True, the tuple (minimum semi_variance, weights) of the optimal portfolio is returned,
+        otherwise only the weights are returned.
         """
         return self.mean_risk_optimization(risk_measure=RiskMeasure.SEMI_VARIANCE,
                                            objective_function=ObjectiveFunction.MIN_RISK,
-                                           semi_variance_returns_target=semi_variance_returns_target,
+                                           min_acceptable_returns=min_acceptable_returns,
                                            objective_values=objective_values)
 
     def minimum_cvar(self, beta: float = 0.95, objective_values: bool = False) -> Result:
-        """
-        Find the asset weights that minimize the portfolio CVaR (Conditional Value-at-Risk or Expected Shortfall)
-        and the value of the minimum CVaR.
+        r"""
+        Minimum CVaR (Conditional Value-at-Risk or Expected Shortfall) Portfolio.
         The CVaR is the average of the “extreme” losses beyond the VaR threshold
-        :param beta: VaR confidence level (expected VaR on the worst (1-beta)% days)
-        :type beta: float
-        :returns: the tuple (minimum CVaR, weights of the minimum CVaR portfolio)
+
+        Parameters
+        ----------
+        beta: float, default 0.95
+              The VaR (Value At Risk) confidence level (expected VaR on the worst (1-beta)% days)
+
+        objective_values: bool, default False
+                          If true, the minimum CVaR is also returned with the weights.
+
+        Returns
+        -------
+        If objective_values is True, the tuple (minimum CVaR, weights) of the optimal portfolio is returned,
+        otherwise only the weights are returned.
         """
 
         return self.mean_risk_optimization(risk_measure=RiskMeasure.CVAR,
@@ -996,14 +1009,23 @@ class Optimization:
                                            objective_values=objective_values)
 
     def minimum_cdar(self, beta: float = 0.95, objective_values: bool = False) -> Result:
-        """
-        Find the asset weights that minimize the portfolio CDaR (Conditional Drawdown-at-Risk)
-        and the value of the minimum CDaR.
+        r"""
+        Minimum CDaR (Conditional Drawdown-at-Risk) Portfolio.
         The CDaR is the average drawdown for all the days that drawdown exceeds a threshold
-        :param beta: drawdown confidence level (expected drawdown on the worst (1-beta)% days)
-        :type beta: float
-        :returns: the tuple (minimum CDaR, weights of the minimum CDaR portfolio)
-       """
+
+        Parameters
+        ----------
+        beta: float, default 0.95
+               he DaR (Drawdown at Risk) confidence level (DaR on the worst (1-beta)% days)
+
+        objective_values: bool, default False
+                        If true, the minimum CDaR is also returned with the weights.
+
+        Returns
+        -------
+        If objective_values is True, the tuple (minimum CDaR, weights) of the optimal portfolio is returned,
+        otherwise only the weights are returned.
+        """
 
         return self.mean_risk_optimization(risk_measure=RiskMeasure.CDAR,
                                            objective_function=ObjectiveFunction.MIN_RISK,
@@ -1024,11 +1046,11 @@ class Optimization:
         ----------
         target_variance: float | list | ndarray, optional
                          The targeted variance of the portfolio: the portfolio return is maximized
-                         under this target constraint.
+                         under this lower constraint.
 
         target_return: float | list | ndarray, optional
                        The target return of the portfolio: the portfolio variance is minimized under
-                       this target constraint.
+                       this upper constraint.
 
         population_size: int, optional
                          Number of pareto optimal portfolio weights to compute along the mean-variance efficient
@@ -1048,11 +1070,12 @@ class Optimization:
 
         Returns
         -------
-        numpy.ndarray of shape (asset number,) if target is a scalar,
-                otherwise numpy.ndarray of shape (population size, asset number) or (len(target_variance), asset number)
-        the portfolio weights that are in the efficient frontier.
+        If objective_values is True:
+            tuple (objective values of the optimization problem, weights)
+        else:
+            weights
         """
-        # self._validate_args(**{k: v for k, v in locals().items() if k != 'self'})
+        self._validate_args(**locals())
 
         kwargs = dict(risk_measure=RiskMeasure.VARIANCE,
                       l1_coef=l1_coef,
@@ -1087,49 +1110,70 @@ class Optimization:
     def mean_semivariance(self,
                           target_semivariance: Target = None,
                           target_return: Target = None,
-                          population_size: int | None = None,
-                          l1_coef: float | None = None,
-                          l2_coef: float | None = None,
-                          semi_variance_returns_target: Target = None,
+                          population_size: PopulationSize = None,
+                          min_acceptable_returns: Target = None,
+                          l1_coef: Coef = None,
+                          l2_coef: Coef = None,
                           objective_values: bool = False) -> Result:
         """
-         Optimization along the mean-semivariance frontier
-        :param returns_target: the target(s) to distinguish "downside" and "upside" returns
-        :type returns_target: float or np.ndarray of shape(Number of Assets)
-        :param target_semivariance: the targeted daily semivariance (downside variance) of the portfolio:
-        the portfolio expected return is maximized under this target constraint
-        :type target_semivariance: float or list or numpy.ndarray optional
-        :param population_size: number of pareto optimal portfolio weights to compute along the efficient frontier
-        :type population_size: int, optional
-        :param l1_coef: L1 regularisation coefficient. Increasing this coef will reduce the number of non-zero weights.
-                        It is similar to the L1 regularisation in Lasso.
-                        If both l1_coef and l2_coef are strictly positive, it is similar to the regularisation
-                        in Elastic-Net
-        :type l1_coef: float, default to None
-        :param l2_coef: L2 regularisation coefficient. It is similar to the L2 regularisation in Ridge.
-                        If both l1_coef and l2_coef are strictly positive, it is similar to the regularisation in
-                        Elastic-Net
-        :type l1_coef: float, default to None
-        :returns: the portfolio weights that are in the efficient frontier.
-        :rtype: numpy.ndarray of shape (asset number,) if the target is a scalar, otherwise numpy.ndarray of
-        shape (population size, asset number) or (len(target_semivariance), asset number)
+        Optimization along the mean-semivariance frontier
+
+        Parameters
+        ----------
+        target_semivariance: float | list | ndarray, optional
+                         The targeted semivariance (downside variance) of the portfolio: the portfolio return is
+                         maximized under this lower constraint.
+
+        target_return: float | list | ndarray, optional
+                       The target return of the portfolio: the portfolio variance is minimized under
+                       this upper constraint.
+
+        population_size: int, optional
+                         Number of pareto optimal portfolio weights to compute along the mean-variance efficient
+                         frontier.
+
+
+        min_acceptable_returns: float | list | ndarray, optional
+                                Minimum acceptable returns, in the same periodicity as the returns to distinguish
+                                "downside" and "upside" returns.
+                                If an array is provided, it needs to be of same size as the number of assets.
+
+        l1_coef: float, optional
+                 L1 regularisation coefficient. Increasing this coef will reduce the number of non-zero weights.
+                 It is similar to the L1 regularisation in Lasso.
+                 If both l1_coef and l2_coef are strictly positive, it is similar to the regularisation in Elastic-Net.
+
+        l2_coef: float, optional
+                 L2 regularisation coefficient. It is similar to the L2 regularisation in Ridge.
+                 If both l1_coef and l2_coef are strictly positive, it is similar to the regularisation in Elastic-Net.
+
+        objective_values: bool, default False
+                          If true, the optimization objective values are also returned with the weights.
+
+        Returns
+        -------
+        If objective_values is True:
+            tuple (objective values of the optimization problem, weights)
+        else:
+            weights
         """
-        # self._validate_args(**{k: v for k, v in locals().items() if k != 'self'})
+        self._validate_args(**locals())
+
+        kwargs = dict(risk_measure=RiskMeasure.SEMI_VARIANCE,
+                      min_acceptable_returns=min_acceptable_returns,
+                      l1_coef=l1_coef,
+                      l2_coef=l2_coef)
 
         if population_size is not None:
             min_semi_variance, _ = self.minimum_semivariance(objective_values=True)
-            max_semi_variance_weight = self.mean_risk_optimization(risk_measure=RiskMeasure.SEMI_VARIANCE,
-                                                                   semi_variance_returns_target=semi_variance_returns_target,
-                                                                   objective_function=ObjectiveFunction.MAX_RETURN)
+            max_semi_variance_weight = self.mean_risk_optimization(objective_function=ObjectiveFunction.MAX_RETURN,
+                                                                   **kwargs)
             # TODO: max_semi_variance
             target = np.logspace(np.log10(min_semi_variance) + 0.01, np.log10(0.4 ** 2), num=population_size)
-            return self.mean_risk_optimization(risk_measure=RiskMeasure.SEMI_VARIANCE,
-                                               objective_function=ObjectiveFunction.MAX_RETURN,
-                                               l1_coef=l1_coef,
-                                               l2_coef=l2_coef,
+            return self.mean_risk_optimization(objective_function=ObjectiveFunction.MAX_RETURN,
                                                max_semi_variance=target,
-                                               semi_variance_returns_target=semi_variance_returns_target,
-                                               objective_values=objective_values)
+                                               objective_values=objective_values,
+                                               **kwargs)
 
         elif target_semivariance is not None:
             return self.mean_risk_optimization(risk_measure=RiskMeasure.SEMI_VARIANCE,
@@ -1137,7 +1181,7 @@ class Optimization:
                                                l1_coef=l1_coef,
                                                l2_coef=l2_coef,
                                                max_semi_variance=target_semivariance,
-                                               semi_variance_returns_target=semi_variance_returns_target,
+                                               min_acceptable_returns=min_acceptable_returns,
                                                objective_values=objective_values)
 
         elif target_semivariance is not None:
@@ -1146,12 +1190,12 @@ class Optimization:
                                                l1_coef=l1_coef,
                                                l2_coef=l2_coef,
                                                min_return=target_return,
-                                               semi_variance_returns_target=semi_variance_returns_target,
+                                               min_acceptable_returns=min_acceptable_returns,
                                                objective_values=objective_values)
 
         else:
             return self.minimum_semivariance(objective_values=objective_values,
-                                             semi_variance_returns_target=semi_variance_returns_target)
+                                             min_acceptable_returns=min_acceptable_returns)
 
     def mean_cvar(self,
                   beta: float = 0.95,
