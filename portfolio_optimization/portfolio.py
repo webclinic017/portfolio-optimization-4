@@ -8,7 +8,7 @@ import plotly.graph_objects as go
 from portfolio_optimization.meta import Metrics, AVG_TRADING_DAYS_PER_YEAR, ZERO_THRESHOLD
 from portfolio_optimization.assets import Assets
 from portfolio_optimization.utils.sorting import dominate
-from portfolio_optimization.utils.metrics import semi_std, max_drawdown, cvar, cdar
+from portfolio_optimization.utils.metrics import semivariance, max_drawdown, cvar, cdar
 
 __all__ = ['BasePortfolio',
            'Portfolio',
@@ -24,7 +24,8 @@ class BasePortfolio:
                  fitness_metrics: list[Metrics] | None = None,
                  validate: bool = True,
                  cvar_beta: float = 0.95,
-                 cdar_beta: float = 0.95):
+                 cdar_beta: float = 0.95,
+                 min_acceptable_return: float | None = None):
         r"""
         Base Portfolio
 
@@ -50,6 +51,10 @@ class BasePortfolio:
 
         validate: bool, default True
                   If True, the Class attributes are validated
+
+        min_acceptable_return: float, optional
+                               Minimum acceptable return, in the same periodicity as the returns to distinguish
+                                "downside" and "upside" returns for the computation of the semivariance and semistd.
         """
 
         self._name = name if name is not None else str(id(self))
@@ -60,6 +65,7 @@ class BasePortfolio:
         self.tag = tag if tag is not None else self._name
         self._cvar_beta = cvar_beta
         self._cdar_beta = cdar_beta
+        self._min_acceptable_return = min_acceptable_return
 
         if validate:
             self._validation()
@@ -117,24 +123,34 @@ class BasePortfolio:
         self._name = value
 
     @property
-    def cvar_beta(self):
+    def cvar_beta(self) -> float:
         return self._cvar_beta
 
     @cvar_beta.setter
-    def cvar_beta(self, value: str) -> None:
+    def cvar_beta(self, value: float) -> None:
         for attr in ['cvar', 'cvar_ratio']:
             self.__dict__.pop(attr, None)
         self._cvar_beta = value
 
     @property
-    def cdar_beta(self):
+    def cdar_beta(self) -> float:
         return self._cdar_beta
 
     @cdar_beta.setter
-    def cdar_beta(self, value: str) -> None:
+    def cdar_beta(self, value: float) -> None:
         for attr in ['cdar', 'cdar_ratio']:
             self.__dict__.pop(attr, None)
         self._cdar_beta = value
+
+    @property
+    def min_acceptable_return(self) -> float | None:
+        return self._min_acceptable_return
+
+    @min_acceptable_return.setter
+    def min_acceptable_return(self, value: float | None) -> None:
+        for attr in ['semivariance', 'annualized_semivariance', 'semistd', 'annualized_semistd', 'sortino_ratio']:
+            self.__dict__.pop(attr, None)
+        self._min_acceptable_return = value
 
     @property
     def returns(self):
@@ -197,37 +213,37 @@ class BasePortfolio:
         return self.mean * AVG_TRADING_DAYS_PER_YEAR
 
     # risks measures
-    @cached_property
-    def std(self) -> float:
-        return self.returns.std(ddof=1)
-
-    @property
-    def annualized_std(self) -> float:
-        return self.std * np.sqrt(AVG_TRADING_DAYS_PER_YEAR)
-
     @property
     def variance(self) -> float:
-        return self.std ** 2
+        return self.returns.var(ddof=1)
 
     @property
     def annualized_variance(self) -> float:
-        return self.annualized_std ** 2
+        return self.variance * AVG_TRADING_DAYS_PER_YEAR
 
     @cached_property
-    def semi_std(self) -> float:
-        return semi_std(returns=self.returns)
+    def std(self) -> float:
+        return np.sqrt(self.variance)
 
     @property
-    def annualized_semi_std(self) -> float:
-        return self.semi_std * np.sqrt(AVG_TRADING_DAYS_PER_YEAR)
+    def annualized_std(self) -> float:
+        return np.sqrt(self.annualized_variance)
 
     @property
-    def semi_variance(self) -> float:
-        return self.semi_std ** 2
+    def semivariance(self) -> float:
+        return semivariance(returns=self.returns, min_acceptable_return=self.min_acceptable_return)
 
     @property
-    def annualized_semi_variance(self) -> float:
-        return self.annualized_semi_std ** 2
+    def annualized_semivariance(self) -> float:
+        return self.semivariance * AVG_TRADING_DAYS_PER_YEAR
+
+    @cached_property
+    def semistd(self) -> float:
+        return np.sqrt(self.semivariance)
+
+    @property
+    def annualized_semistd(self) -> float:
+        return np.sqrt(self.annualized_semivariance)
 
     @cached_property
     def max_drawdown(self) -> float:
@@ -253,7 +269,7 @@ class BasePortfolio:
 
     @property
     def sortino_ratio(self) -> float:
-        return self.annualized_mean / self.annualized_semi_std
+        return self.annualized_mean / self.annualized_semistd
 
     @property
     def calmar_ratio(self) -> float:
@@ -396,13 +412,13 @@ class BasePortfolio:
             'Annualized Mean': (self.annualized_mean, '0.2%'),
             'Std (Volatility)': (self.std, '0.3%'),
             'Annualized Std': (self.annualized_std, '0.2%'),
-            'Downside Std': (self.semi_std, '0.3%'),
-            'Annualized Downside Std': (self.annualized_semi_std, '0.2%'),
+            'Downside Std': (self.semistd, '0.3%'),
+            'Annualized Downside Std': (self.annualized_semistd, '0.2%'),
             'Max Drawdown': (self.max_drawdown, '0.2%'),
             'CDaR at 95%': (self.cdar, '0.2%'),
             'CVaR at 95%': (self.cvar, '0.2%'),
             'Variance': (self.variance, '0.6%'),
-            'Downside Variance': (self.semi_variance, '0.6%'),
+            'Downside Variance': (self.semivariance, '0.6%'),
             'Sharpe Ratio': (self.sharpe_ratio, '0.2f'),
             'Sortino Ratio': (self.sortino_ratio, '0.2f'),
             'Calmar Ratio': (self.calmar_ratio, '0.2f'),
@@ -426,7 +442,10 @@ class Portfolio(BasePortfolio):
                  transaction_costs: float | np.ndarray = 0,
                  name: str | None = None,
                  tag: str | None = None,
-                 fitness_metrics: list[Metrics] | None = None):
+                 fitness_metrics: list[Metrics] | None = None,
+                 cvar_beta: float = 0.95,
+                 cdar_beta: float = 0.95,
+                 min_acceptable_return: float | None = None):
         r"""
         Portfolio
 
@@ -484,7 +503,10 @@ class Portfolio(BasePortfolio):
                          name=name,
                          tag=tag,
                          fitness_metrics=fitness_metrics,
-                         validate=False)
+                         validate=False,
+                         cvar_beta=cvar_beta,
+                         cdar_beta=cdar_beta,
+                         min_acceptable_return=min_acceptable_return)
 
     @cache
     def __len__(self) -> int:
@@ -624,7 +646,10 @@ class MultiPeriodPortfolio(BasePortfolio):
                  portfolios: list[Portfolio] | None = None,
                  name: str | None = None,
                  tag: str | None = None,
-                 fitness_metrics: list[Metrics] | None = None):
+                 fitness_metrics: list[Metrics] | None = None,
+                 cvar_beta: float = 0.95,
+                 cdar_beta: float = 0.95,
+                 min_acceptable_return: float | None = None):
         r"""
         Multi Period Portfolio
 
@@ -654,7 +679,10 @@ class MultiPeriodPortfolio(BasePortfolio):
                          name=name,
                          tag=tag,
                          fitness_metrics=fitness_metrics,
-                         validate=False)
+                         validate=False,
+                         cvar_beta=cvar_beta,
+                         cdar_beta=cdar_beta,
+                         min_acceptable_return=min_acceptable_return)
 
     @staticmethod
     def _initialize(portfolios: list[Portfolio] | None = None) -> tuple[list[Portfolio], np.ndarray, np.ndarray]:

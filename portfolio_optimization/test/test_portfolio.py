@@ -30,16 +30,16 @@ def test_portfolio_metrics():
     assert abs(returns.mean() - portfolio.mean) < 1e-10
     assert abs(returns.std(ddof=1) - portfolio.std) < 1e-10
     assert abs(np.sqrt(np.sum(np.minimum(0, returns - returns.mean()) ** 2) / (len(returns) - 1))
-               - portfolio.semi_std) < 1e-10
+               - portfolio.semistd) < 1e-10
     assert abs(portfolio.annualized_mean / portfolio.annualized_std - portfolio.sharpe_ratio) < 1e-10
-    assert abs(portfolio.annualized_mean / portfolio.annualized_semi_std - portfolio.sortino_ratio) < 1e-10
+    assert abs(portfolio.annualized_mean / portfolio.annualized_semistd - portfolio.sortino_ratio) < 1e-10
     assert max_drawdown_slow(portfolio.cumulative_returns) == portfolio.max_drawdown
     assert np.array_equal(portfolio.fitness, np.array([portfolio.mean, -portfolio.std]))
     portfolio.fitness_metrics = [Metrics.MEAN, Metrics.DOWNSIDE_STD]
-    assert np.array_equal(portfolio.fitness, np.array([portfolio.mean, -portfolio.semi_std]))
+    assert np.array_equal(portfolio.fitness, np.array([portfolio.mean, -portfolio.semistd]))
     portfolio.fitness_metrics = [Metrics.MEAN, Metrics.DOWNSIDE_STD, Metrics.MAX_DRAWDOWN]
     assert np.array_equal(portfolio.fitness,
-                          np.array([portfolio.mean, -portfolio.semi_std, -portfolio.max_drawdown]))
+                          np.array([portfolio.mean, -portfolio.semistd, -portfolio.max_drawdown]))
     assert len(portfolio.assets_index) == n
     assert len(portfolio.assets_names) == n
     assert len(portfolio.composition) == n

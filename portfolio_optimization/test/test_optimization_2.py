@@ -84,9 +84,9 @@ def t():
             w = port.optimization(model=m, rm=rm, obj=obj, rf=rf, l=l, hist=hist)
             d = w.to_dict()['weights']
             w1 = np.array([d[c] for c in stocks])
-            w2 = model.optimize(risk_measure=RiskMeasure.SEMI_VARIANCE,
+            w2 = model.optimize(risk_measure=RiskMeasure.SEMIVARIANCE,
                                 objective_function=ObjectiveFunction.MAX_RETURN,
-                                max_semi_variance=uppersdev ** 2,
+                                max_semivariance=uppersdev ** 2,
                                 max_cdar=upperCDaR)
             np.testing.assert_array_almost_equal(w1, w2, decimal=3)
 
@@ -94,7 +94,7 @@ def t():
     model = Optimization(assets=assets, weight_bounds=(0, None))
     w2 = model.optimize(risk_measure=RiskMeasure.VARIANCE,
                         objective_function=ObjectiveFunction.MAX_RETURN,
-                        max_semi_variance=uppersdev ** 2,
+                        max_semivariance=uppersdev ** 2,
                         max_cdar=upperCDaR)
     e = time.time()
     print((e - s) * 1000)

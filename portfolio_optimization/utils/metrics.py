@@ -1,26 +1,26 @@
 import numpy as np
 
-__all__ = ['semi_std',
+__all__ = ['semivariance',
            'max_drawdown',
            'cdar',
            'cvar']
 
 
-def semi_std(returns: np.ndarray,
-             returns_target: float | np.ndarray | None = None) -> float:
+def semivariance(returns: np.ndarray,
+             min_acceptable_return: float | None = None) -> float:
     """
-    Downside standard deviation with a target return of Rf=0.
+    Downside standard deviation with a target return equal to the mean.
     Many implementations remove positive returns then compute the std of the remaining negative returns or replace
     the positive returns by 0 then compute the std. Both are incorrect
     :param returns: expected returns for each asset
     :type returns: np.ndarray of shape(Number of Assets)
-    :param returns_target: the return target to distinguish "downside" and "upside"
-    :type returns_target: float or np.ndarray of shape(Number of Assets)
+    :param min_acceptable_return: the return target to distinguish "downside" and "upside"
+    :type min_acceptable_return: float
     """
-    assets_number = returns.shape[0]
-    if returns_target is None:
-        returns_target = np.mean(returns, axis=0)
-    return np.sqrt(np.sum(np.power(np.minimum(0, returns - returns_target), 2)) / (assets_number - 1))
+    dates_nb = returns.shape[0]
+    if min_acceptable_return is None:
+        min_acceptable_return = np.mean(returns, axis=0)
+    return np.sum(np.power(np.minimum(0, returns - min_acceptable_return), 2)) / (dates_nb - 1)
 
 
 def max_drawdown(prices: np.ndarray) -> float:

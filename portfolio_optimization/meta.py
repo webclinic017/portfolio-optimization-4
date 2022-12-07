@@ -44,7 +44,7 @@ class Metrics(Enum):
 
 class RiskMeasure(Enum):
     VARIANCE = 'variance'
-    SEMI_VARIANCE = 'semi_variance'
+    SEMIVARIANCE = 'semivariance'
     CVAR = 'cvar'
     CDAR = 'cdar'
 
