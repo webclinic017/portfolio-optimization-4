@@ -738,6 +738,7 @@ class Optimization:
                                max_variance: Target = None,
                                max_semivariance: Target = None,
                                min_acceptable_returns: Target = None,
+                               max_mad: Target = None,
                                max_cvar: Target = None,
                                cvar_beta: float = 0.95,
                                max_cdar: Target = None,
@@ -958,9 +959,17 @@ class Optimization:
                                            **kwargs)
 
     def __maximum_ratio(self, risk_measure: RiskMeasure, **kwargs) -> Result:
-        return self.mean_risk_optimization(risk_measure=risk_measure,
-                                           objective_function=ObjectiveFunction.RATIO,
-                                           **kwargs)
+        res = self.mean_risk_optimization(risk_measure=risk_measure,
+                                          objective_function=ObjectiveFunction.RATIO,
+                                          **kwargs)
+        if not kwargs.get('objective_values'):
+            return res
+
+        (ret, risk), weights = res
+        if risk_measure in [RiskMeasure.VARIANCE, RiskMeasure.SEMIVARIANCE]:
+            risk = np.sqrt(risk)
+
+        return ret / risk, weights
 
     def __mean_risk(self, risk_measure: RiskMeasure, **kwargs) -> Result:
         self._validate_args(**kwargs)
@@ -1043,7 +1052,7 @@ class Optimization:
         Parameters
         ----------
         cvar_beta: float, default 0.95
-              The VaR (Value At Risk) confidence level (expected VaR on the worst (1-beta)% days)
+              The VaR (Value At Risk) confidence level (expected VaR on the worst (1-beta)% observations)
 
         objective_values: bool, default False
                           If true, the minimum CVaR is also returned with the weights.
@@ -1063,7 +1072,7 @@ class Optimization:
         Parameters
         ----------
         cdar_beta: float, default 0.95
-               he DaR (Drawdown at Risk) confidence level (DaR on the worst (1-beta)% days)
+               he DaR (Drawdown at Risk) confidence level (DaR on the worst (1-beta)% observations)
 
         objective_values: bool, default False
                         If true, the minimum CDaR is also returned with the weights.
@@ -1201,7 +1210,7 @@ class Optimization:
                          frontier.
 
         cvar_beta: float, default = 0.95
-                   The VaR confidence level (expected VaR on the worst (1-beta)% periods)
+                   The VaR confidence level (expected VaR on the worst (1-beta)% observations)
 
         l1_coef: float, optional
                  L1 regularisation coefficient. Increasing this coef will reduce the number of non-zero weights.
@@ -1252,7 +1261,7 @@ class Optimization:
                          frontier.
 
         cdar_beta: float, default = 0.95
-                   The drawdown confidence level (expected drawdown on the worst (1-beta)% periods)
+                   The drawdown confidence level (expected drawdown on the worst (1-beta)% observations)
 
         l1_coef: float, optional
                  L1 regularisation coefficient. Increasing this coef will reduce the number of non-zero weights.
@@ -1283,15 +1292,15 @@ class Optimization:
         Parameters
         ----------
         objective_values: bool, default False
-                          If true, the optimization objective values are also returned with the weights.
+                          If true, the optimization objective values (sharpe ratio) are also returned with the weights.
 
         Returns
         -------
         If objective_values is True:
-            tuple (objective values of the optimization problem, weights)
+            tuple (sharpe ratio in the same periodicity as the returns, weights)
+            (if the returns are daily, you need to multiply the sharpe by 255/sqrt(255) to annualize it)
         else:
             weights
-
         """
         return self.__maximum_ratio(risk_measure=RiskMeasure.VARIANCE, **clean_locals(locals()))
 
@@ -1310,15 +1319,15 @@ class Optimization:
                                 If an array is provided, it needs to be of same size as the number of assets.
 
         objective_values: bool, default False
-                          If true, the optimization objective values are also returned with the weights.
+                          If true, the optimization objective values (sortino ratio) are also returned with the weights.
 
         Returns
         -------
         If objective_values is True:
-            tuple (objective values of the optimization problem, weights)
+            tuple (sortino ratio in the same periodicity as the returns, weights)
+            (if the returns are daily, you need to multiply the sortino by 255/sqrt(255) to annualize it)
         else:
             weights
-
         """
         return self.__maximum_ratio(risk_measure=RiskMeasure.SEMIVARIANCE, **clean_locals(locals()))
 
@@ -1328,14 +1337,50 @@ class Optimization:
         """
         return self.__maximum_ratio(risk_measure=RiskMeasure.MAX_DRAWDOWN, **clean_locals(locals()))
 
-    def maximum_mean_cvar_ratio(self, objective_values: bool = False) -> np.ndarray:
+    def maximum_mean_cvar_ratio(self,
+                                objective_values: bool = False,
+                                cvar_beta: float = 0.95, ) -> np.ndarray:
         r"""
         Minimum CVaR Ratio Portfolio.
+
+        Parameters
+        ----------
+
+        cvar_beta: float, default = 0.95
+                   The VaR confidence level (expected VaR on the worst (1-beta)% observations)
+
+        objective_values: bool, default False
+                          If true, the optimization objective values (CVaR ratio) are also returned with the weights.
+
+        Returns
+        -------
+        If objective_values is True:
+            tuple (CVaR ratio in the same periodicity as the returns, weights)
+        else:
+            weights
         """
         return self.__maximum_ratio(risk_measure=RiskMeasure.CVAR, **clean_locals(locals()))
 
-    def maximum_mean_cdar_ratio(self, objective_values: bool = False) -> np.ndarray:
+    def maximum_mean_cdar_ratio(self,
+                                objective_values: bool = False,
+                                cdar_beta: float = 0.95, ) -> np.ndarray:
         r"""
         Minimum CDaR Ratio Portfolio.
+
+         Parameters
+        ----------
+
+        cdar_beta: float, default = 0.95
+                   The drawdown confidence level (expected drawdown on the worst (1-beta)% observations)
+
+        objective_values: bool, default False
+                          If true, the optimization objective values (CDaR ratio) are also returned with the weights.
+
+        Returns
+        -------
+        If objective_values is True:
+            tuple (CDaR ratio in the same periodicity as the returns, weights)
+        else:
+            weights
         """
         return self.__maximum_ratio(risk_measure=RiskMeasure.CDAR, **clean_locals(locals()))

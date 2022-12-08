@@ -43,10 +43,10 @@ def test_mpp_metrics():
     assert max_drawdown_slow(mpp.cumulative_returns) == mpp.max_drawdown
     assert np.array_equal(mpp.fitness,
                           np.array([mpp.mean, -mpp.std]))
-    mpp.fitness_metrics= [Metrics.MEAN, Metrics.DOWNSIDE_STD]
+    mpp.fitness_metrics= [Metrics.MEAN, Metrics.SEMISTD]
     assert np.array_equal(mpp.fitness,
                           np.array([mpp.mean, -mpp.semistd]))
-    mpp.fitness_metrics= [Metrics.MEAN, Metrics.DOWNSIDE_STD, Metrics.MAX_DRAWDOWN]
+    mpp.fitness_metrics= [Metrics.MEAN, Metrics.SEMISTD, Metrics.MAX_DRAWDOWN]
     assert np.array_equal(mpp.fitness,
                           np.array([mpp.mean,
                                     -mpp.semistd,

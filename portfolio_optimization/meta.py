@@ -17,6 +17,14 @@ class InvestmentType(Enum):
     UNCONSTRAINED = 'unconstrained'
 
 
+class RiskMeasure(Enum):
+    VARIANCE = 'variance'
+    SEMIVARIANCE = 'semivariance'
+    CVAR = 'cvar'
+    CDAR = 'cdar'
+    MAD = 'mad'
+
+
 class Metrics(Enum):
     MEAN = 'mean'
     ANNUALIZED_MEAN = 'annualized_mean'
@@ -24,13 +32,14 @@ class Metrics(Enum):
     ANNUALIZED_STD = 'annualized_std'
     VARIANCE = 'variance'
     ANNUALIZED_VARIANCE = 'annualized_variance'
-    DOWNSIDE_STD = 'downside_std'
-    ANNUALIZED_DOWNSIDE_STD = 'annualized_downside_std'
-    DOWNSIDE_VARIANCE = 'downside_variance'
-    ANNUALIZED_DOWNSIDE_VARIANCE = 'annualized_downside_variance'
+    SEMISTD = 'semistd'
+    ANNUALIZED_SEMISTD = 'annualized_semistd'
+    SEMIVARIANCE = 'semivariance'
+    ANNUALIZED_SEMIVARIANCE = 'annualized_semivariance'
     MAX_DRAWDOWN = 'max_drawdown'
     CDAR = 'cdar'
     CVAR = 'cvar'
+    MAD = 'mad'
     SHARPE_RATIO = 'sharpe_ratio'
     SORTINO_RATIO = 'sortino_ratio'
     CALMAR_RATIO = 'calmar_ratio'
@@ -40,13 +49,6 @@ class Metrics(Enum):
     @property
     def is_ration(self) -> bool:
         return self.value[-5:] == 'ratio'
-
-
-class RiskMeasure(Enum):
-    VARIANCE = 'variance'
-    SEMIVARIANCE = 'semivariance'
-    CVAR = 'cvar'
-    CDAR = 'cdar'
 
 
 class ObjectiveFunction(Enum):

@@ -35,9 +35,9 @@ def test_portfolio_metrics():
     assert abs(portfolio.annualized_mean / portfolio.annualized_semistd - portfolio.sortino_ratio) < 1e-10
     assert max_drawdown_slow(portfolio.cumulative_returns) == portfolio.max_drawdown
     assert np.array_equal(portfolio.fitness, np.array([portfolio.mean, -portfolio.std]))
-    portfolio.fitness_metrics = [Metrics.MEAN, Metrics.DOWNSIDE_STD]
+    portfolio.fitness_metrics = [Metrics.MEAN, Metrics.SEMISTD]
     assert np.array_equal(portfolio.fitness, np.array([portfolio.mean, -portfolio.semistd]))
-    portfolio.fitness_metrics = [Metrics.MEAN, Metrics.DOWNSIDE_STD, Metrics.MAX_DRAWDOWN]
+    portfolio.fitness_metrics = [Metrics.MEAN, Metrics.SEMISTD, Metrics.MAX_DRAWDOWN]
     assert np.array_equal(portfolio.fitness,
                           np.array([portfolio.mean, -portfolio.semistd, -portfolio.max_drawdown]))
     assert len(portfolio.assets_index) == n
@@ -122,10 +122,10 @@ def test_portfolio_dominate():
         weights_1 = rand_weights(n=assets.asset_nb)
         weights_2 = rand_weights(n=assets.asset_nb)
         portfolio_1 = Portfolio(weights=weights_1,
-                                fitness_metrics=[Metrics.MEAN, Metrics.DOWNSIDE_STD, Metrics.MAX_DRAWDOWN],
+                                fitness_metrics=[Metrics.MEAN, Metrics.SEMISTD, Metrics.MAX_DRAWDOWN],
                                 assets=assets)
         portfolio_2 = Portfolio(weights=weights_2,
-                                fitness_metrics=[Metrics.MEAN, Metrics.DOWNSIDE_STD, Metrics.MAX_DRAWDOWN],
+                                fitness_metrics=[Metrics.MEAN, Metrics.SEMISTD, Metrics.MAX_DRAWDOWN],
                                 assets=assets)
 
         # Doesn't dominate itself (same front)

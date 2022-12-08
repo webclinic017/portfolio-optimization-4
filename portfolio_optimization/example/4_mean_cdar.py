@@ -40,7 +40,7 @@ if __name__ == '__main__':
                             y=Metrics.ANNUALIZED_MEAN,
                             color_scale=Metrics.SHARPE_RATIO,
                             hover_metrics=[Metrics.SHARPE_RATIO])
-    population.plot_metrics(x=Metrics.ANNUALIZED_DOWNSIDE_STD,
+    population.plot_metrics(x=Metrics.ANNUALIZED_SEMISTD,
                             y=Metrics.ANNUALIZED_MEAN,
                             color_scale=Metrics.SORTINO_RATIO,
                             hover_metrics=[Metrics.SHARPE_RATIO])

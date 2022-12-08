@@ -8,7 +8,7 @@ import plotly.graph_objects as go
 from portfolio_optimization.meta import Metrics, AVG_TRADING_DAYS_PER_YEAR, ZERO_THRESHOLD
 from portfolio_optimization.assets import Assets
 from portfolio_optimization.utils.sorting import dominate
-from portfolio_optimization.utils.metrics import semivariance, max_drawdown, cvar, cdar
+from portfolio_optimization.utils.metrics import semivariance, max_drawdown, cvar, cdar, mad
 
 __all__ = ['BasePortfolio',
            'Portfolio',
@@ -263,6 +263,13 @@ class BasePortfolio:
         """
         return cvar(returns=self.returns, beta=self.cvar_beta)
 
+    @cached_property
+    def mad(self) -> float:
+        """
+        Mean Absolute Deviation (MAD)
+        """
+        return mad(returns=self.returns)
+
     @property
     def sharpe_ratio(self) -> float:
         return self.annualized_mean / self.annualized_std
@@ -281,7 +288,7 @@ class BasePortfolio:
 
     @property
     def cvar_ratio(self) -> float:
-        return self.annualized_mean / self.cvar
+        return self.mean / self.cvar
 
     @property
     def composition(self) -> pd.DataFrame:
