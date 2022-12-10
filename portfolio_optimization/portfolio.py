@@ -291,6 +291,10 @@ class BasePortfolio:
         return self.mean / self.cvar
 
     @property
+    def mad_ratio(self) -> float:
+        return self.mean / self.mad
+
+    @property
     def composition(self) -> pd.DataFrame:
         raise NotImplementedError
 

@@ -25,8 +25,9 @@ def test_mean_risk_optimization():
     precision = {
         RiskMeasure.VARIANCE: 1e-7,
         RiskMeasure.SEMIVARIANCE: 1e-7,
-        RiskMeasure.CVAR: 1e-4,
-        RiskMeasure.CDAR: 1e-4
+        RiskMeasure.CVAR: 1e-5,
+        RiskMeasure.CDAR: 1e-5,
+        RiskMeasure.MAD: 1e-7
     }
 
     assets = get_assets()
@@ -395,6 +396,49 @@ def test_mean_cdar():
         p = p1
 
 
+def test_mean_mad():
+    precision = 1e-8
+
+    assets = get_assets()
+
+    model = Optimization(assets=assets, solvers=['ECOS'], min_weights=0)
+
+    min_risk, w = model.mean_mad(objective_values=True)
+
+    risk = min_risk * 2
+    ret, w = model.mean_mad(target_mad=risk, objective_values=True)
+    p = Portfolio(assets=assets, weights=w)
+    assert is_close(risk, p.mad, precision)
+
+    w = model.mean_mad(target_mad=risk)
+    p = Portfolio(assets=assets, weights=w)
+    assert is_close(risk, p.mad, precision)
+
+    w = model.mean_mad(target_return=ret)
+    p = Portfolio(assets=assets, weights=w)
+    assert is_close(ret, p.mean, precision)
+
+    w = model.mean_mad(target_mad=risk, l1_coef=0.1, l2_coef=0.1)
+    assert np.all(w)
+
+    risks = [risk, risk * 1.5]
+    o, w = model.mean_mad(target_mad=risks, objective_values=True)
+    assert o.shape == (2,)
+    assert w.shape == (2, assets.asset_nb)
+    p0 = Portfolio(assets=assets, weights=w[0])
+    p1 = Portfolio(assets=assets, weights=w[1])
+    assert is_close(risks[0], p0.mad, precision)
+    assert is_close(risks[1], p1.mad, precision)
+
+    o, w = model.mean_variance(population_size=5, objective_values=True)
+    assert o.shape == (5,)
+    assert w.shape == (5, assets.asset_nb)
+    p = Portfolio(assets=assets, weights=w[0])
+    for i in range(1, 5):
+        pi = Portfolio(assets=assets, weights=w[i])
+        assert pi.mad > p.mad
+        p = p1
+
 def test_maximum_sharpe_ratio():
     precision = 1e-7
 
@@ -423,31 +467,43 @@ def test_maximum_sortino_ratio():
     assert is_close(sortino * 255 / np.sqrt(255), p.sortino_ratio, precision)
 
 
-def test_maximum_mean_cvar_ratio():
+def test_maximum_cvar_ratio():
     precision = 1e-7
 
     assets = get_assets()
 
     model = Optimization(assets=assets, solvers=['ECOS'], min_weights=0)
-    r, w = model.maximum_mean_cvar_ratio(objective_values=True)
+    r, w = model.maximum_cvar_ratio(objective_values=True)
     p = Portfolio(assets=assets, weights=w)
     assert is_close(r, p.cvar_ratio, precision)
 
-    r, w = model.maximum_mean_cvar_ratio(objective_values=True, cvar_beta=0.5)
+    r, w = model.maximum_cvar_ratio(objective_values=True, cvar_beta=0.5)
     p = Portfolio(assets=assets, weights=w, cvar_beta=0.5)
     assert is_close(r, p.cvar_ratio, precision)
 
 
-def test_maximum_mean_cdar_ratio():
+
+def test_maximum_cdar_ratio():
     precision = 1e-7
 
     assets = get_assets()
 
     model = Optimization(assets=assets, solvers=['ECOS'], min_weights=0)
-    r, w = model.maximum_mean_cdar_ratio(objective_values=True)
+    r, w = model.maximum_cdar_ratio(objective_values=True)
     p = Portfolio(assets=assets, weights=w)
     assert is_close(r * 255, p.cdar_ratio, precision)
 
-    r, w = model.maximum_mean_cdar_ratio(objective_values=True, cdar_beta=0.5)
+    r, w = model.maximum_cdar_ratio(objective_values=True, cdar_beta=0.5)
     p = Portfolio(assets=assets, weights=w, cdar_beta=0.5)
     assert is_close(r * 255, p.cdar_ratio, precision)
+
+
+def test_maximum_mad_ratio():
+    precision = 1e-7
+
+    assets = get_assets()
+
+    model = Optimization(assets=assets, solvers=['ECOS'], min_weights=0)
+    r, w = model.maximum_mad_ratio(objective_values=True)
+    p = Portfolio(assets=assets, weights=w)
+    assert is_close(r, p.mad_ratio, precision)

@@ -657,10 +657,10 @@ class Optimization:
             else:
                 weights.append(np.array(w.value / k.value, dtype=float))
                 mean = 1 / k.value
-                if risk_measure in [RiskMeasure.CVAR, RiskMeasure.CDAR]:
-                    risk = problem.value / k.value / self.scale
+                if risk_measure in [RiskMeasure.VARIANCE, RiskMeasure.SEMIVARIANCE]:
+                    risk = problem.value / k.value**2 / self.scale
                 else:
-                    risk = problem.value / k.value ** 2 / self.scale
+                    risk = problem.value / k.value / self.scale
                 results.append((mean, risk))
 
         if is_scalar:
@@ -948,6 +948,14 @@ class Optimization:
                        v[0] * self.scale == 0]
         return risk, constraints
 
+    def _mad_risk(self, w: cp.Variable):
+        mu = self.assets.expected_returns[:, np.newaxis]
+        v = cp.Variable(self.assets.date_nb, nonneg=True)
+        risk = 2 * cp.sum(v) / self.assets.date_nb
+        # noinspection PyTypeChecker
+        constraints = [(self.assets.returns - mu).T @ w >= -v]
+        return risk, constraints
+
     def __minimum_risk(self, risk_measure: RiskMeasure, **kwargs) -> Result:
         return self.mean_risk_optimization(risk_measure=risk_measure,
                                            objective_function=ObjectiveFunction.MIN_RISK,
@@ -1084,6 +1092,22 @@ class Optimization:
         """
         return self.__minimum_risk(risk_measure=RiskMeasure.CDAR, **clean_locals(locals()))
 
+    def minimum_mad(self, objective_values: bool = False) -> Result:
+        r"""
+        Minimum  MAD (Mean Absolute Deviation) Portfolio.
+
+        Parameters
+        ----------
+        objective_values: bool, default False
+                        If true, the minimum MAD ( is also returned with the weights.
+
+        Returns
+        -------
+        If objective_values is True, the tuple (minimum MAD, weights) of the optimal portfolio is returned,
+        otherwise only the weights are returned.
+        """
+        return self.__minimum_risk(risk_measure=RiskMeasure.MAD, **clean_locals(locals()))
+
     def mean_variance(self,
                       target_variance: Target = None,
                       target_return: Target = None,
@@ -1097,7 +1121,7 @@ class Optimization:
         Parameters
         ----------
         target_variance: float | list | ndarray, optional
-                         The targeted variance of the portfolio: the portfolio return is maximized
+                         The target variance of the portfolio: the portfolio return is maximized
                          under this lower constraint.
 
         target_return: float | list | ndarray, optional
@@ -1145,8 +1169,8 @@ class Optimization:
         Parameters
         ----------
         target_semivariance: float | list | ndarray, optional
-                         The targeted semivariance (downside variance) of the portfolio: the portfolio return is
-                         maximized under this lower constraint.
+                             The target semivariance (downside variance) of the portfolio: the portfolio return is
+                             maximized under this lower constraint.
 
         target_return: float | list | ndarray, optional
                        The target return of the portfolio: the portfolio semivariance is minimized under
@@ -1199,7 +1223,7 @@ class Optimization:
         Parameters
         ----------
         target_cvar: float | list | ndarray, optional
-                     The targeted CVaR of the portfolio: the portfolio return is maximized under this lower constraint.
+                     The target CVaR of the portfolio: the portfolio return is maximized under this lower constraint.
 
         target_return: float | list | ndarray, optional
                        The target return of the portfolio: the portfolio CVaR is minimized under
@@ -1250,7 +1274,7 @@ class Optimization:
         Parameters
         ----------
         target_cdar: float | list | ndarray, optional
-                     The targeted CDaR of the portfolio: the portfolio return is maximized under this lower constraint.
+                     The target CDaR of the portfolio: the portfolio return is maximized under this lower constraint.
 
         target_return: float | list | ndarray, optional
                        The target return of the portfolio: the portfolio CDaR is minimized under
@@ -1285,9 +1309,53 @@ class Optimization:
 
         return self.__mean_risk(risk_measure=RiskMeasure.CDAR, **clean_locals(locals()))
 
+    def mean_mad(self,
+                 target_mad: Target = None,
+                 target_return: Target = None,
+                 population_size: PopulationSize = None,
+                 l1_coef: Coef = None,
+                 l2_coef: Coef = None,
+                 objective_values: bool = False) -> Result:
+        r"""
+        Optimization along the mean-semivariance frontier.
+        The semivariance (downside variance) is the variance of returns bellow the
+
+        Parameters
+        ----------
+        target_mad: float | list | ndarray, optional
+                    The target MAD of the portfolio: the portfolio return is maximized under this lower constraint.
+
+        target_return: float | list | ndarray, optional
+                       The target return of the portfolio: the portfolio semivariance is minimized under
+                       this upper constraint.
+
+        population_size: int, optional
+                         Number of pareto optimal portfolio weights to compute along the mean-mad efficient frontier.
+
+        l1_coef: float, optional
+                 L1 regularisation coefficient. Increasing this coef will reduce the number of non-zero weights.
+                 It is similar to the L1 regularisation in Lasso.
+                 If both l1_coef and l2_coef are strictly positive, it is similar to the regularisation in Elastic-Net.
+
+        l2_coef: float, optional
+                 L2 regularisation coefficient. It is similar to the L2 regularisation in Ridge.
+                 If both l1_coef and l2_coef are strictly positive, it is similar to the regularisation in Elastic-Net.
+
+        objective_values: bool, default False
+                          If true, the optimization objective values are also returned with the weights.
+
+        Returns
+        -------
+        If objective_values is True:
+            tuple (objective values of the optimization problem, weights)
+        else:
+            weights
+        """
+        return self.__mean_risk(risk_measure=RiskMeasure.MAD, **clean_locals(locals()))
+
     def maximum_sharpe_ratio(self, objective_values: bool = False) -> np.ndarray:
         r"""
-        Minimum Sharpe Ratio Portfolio.
+        Maximum Sharpe (Mean/Std) Ratio Portfolio.
 
         Parameters
         ----------
@@ -1308,7 +1376,7 @@ class Optimization:
                               objective_values: bool = False,
                               min_acceptable_returns: Target = None) -> np.ndarray:
         r"""
-        Minimum Sortino Ratio Portfolio.
+        Maximum Sortino (Mean/SemiStd) Ratio Portfolio.
 
         Parameters
         ----------
@@ -1333,15 +1401,15 @@ class Optimization:
 
     def maximum_calmar_ratio(self, objective_values: bool = False) -> np.ndarray:
         r"""
-        Minimum Calmar Ratio Portfolio.
+        Maximum Calmar (Mean/MaxDrawdown) Ratio Portfolio.
         """
         return self.__maximum_ratio(risk_measure=RiskMeasure.MAX_DRAWDOWN, **clean_locals(locals()))
 
-    def maximum_mean_cvar_ratio(self,
-                                objective_values: bool = False,
-                                cvar_beta: float = 0.95, ) -> np.ndarray:
+    def maximum_cvar_ratio(self,
+                           objective_values: bool = False,
+                           cvar_beta: float = 0.95, ) -> np.ndarray:
         r"""
-        Minimum CVaR Ratio Portfolio.
+        Maximum Mean/CVaR Ratio Portfolio.
 
         Parameters
         ----------
@@ -1361,11 +1429,11 @@ class Optimization:
         """
         return self.__maximum_ratio(risk_measure=RiskMeasure.CVAR, **clean_locals(locals()))
 
-    def maximum_mean_cdar_ratio(self,
-                                objective_values: bool = False,
-                                cdar_beta: float = 0.95, ) -> np.ndarray:
+    def maximum_cdar_ratio(self,
+                           objective_values: bool = False,
+                           cdar_beta: float = 0.95) -> np.ndarray:
         r"""
-        Minimum CDaR Ratio Portfolio.
+        Maximum Mean/CDaR Ratio Portfolio.
 
          Parameters
         ----------
@@ -1379,8 +1447,26 @@ class Optimization:
         Returns
         -------
         If objective_values is True:
-            tuple (CDaR ratio in the same periodicity as the returns, weights)
+            tuple (CDaR ratio, weights)
         else:
             weights
         """
         return self.__maximum_ratio(risk_measure=RiskMeasure.CDAR, **clean_locals(locals()))
+
+    def maximum_mad_ratio(self, objective_values: bool = False) -> np.ndarray:
+        r"""
+        Maximum Mean/MAD Ratio Portfolio.
+
+        Parameters
+        ----------
+        objective_values: bool, default False
+                          If true, the optimization objective values (MAD ratio) are also returned with the weights.
+
+        Returns
+        -------
+        If objective_values is True:
+            tuple (MAD ratio, weights)
+        else:
+            weights
+        """
+        return self.__maximum_ratio(risk_measure=RiskMeasure.MAD, **clean_locals(locals()))
