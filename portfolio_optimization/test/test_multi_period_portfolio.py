@@ -54,7 +54,7 @@ def test_mpp_metrics():
     assert len(mpp.assets_index) == len(periods)
     assert len(mpp.assets_names) == len(periods)
     assert mpp.composition.shape[1] == len(periods)
-    mpp.reset()
+    mpp._reset()
     assert mpp.__dict__.get('mean') is None
     assert mpp.__dict__.get('str') is None
     assert mpp.plot_returns(show=False)

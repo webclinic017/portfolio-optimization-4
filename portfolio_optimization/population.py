@@ -76,7 +76,7 @@ class Population:
                 if set(p.fitness_metrics) != fitness_metrics:
                     raise ValueError(f'Cannot have a Population of Portfolios with mixed fitness_metrics')
                 hashmap[p.name] = p
-                p.freeze()
+                p._freeze()
         return hashmap
 
     @property
@@ -96,7 +96,7 @@ class Population:
             raise ValueError(f'Cannot have a Population of Portfolios with mixed fitness_metrics')
 
         self.hashmap[value.name] = value
-        value.freeze()
+        value._freeze()
 
     def get(self, name: str) -> Portfolio | MultiPeriodPortfolio:
         try:

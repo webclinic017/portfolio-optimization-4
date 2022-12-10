@@ -52,7 +52,7 @@ def test_portfolio_metrics():
     names_1.sort()
     assert np.array_equal(names_1, names_2)
     portfolio.summary()
-    portfolio.reset()
+    portfolio._reset()
     assert portfolio.__dict__.get('mean') is None
     assert portfolio.__dict__.get('std') is None
     assert portfolio.plot_returns(show=False)

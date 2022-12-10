@@ -23,6 +23,7 @@ class BasePortfolio:
                  tag: str | None = None,
                  fitness_metrics: list[Metrics] | None = None,
                  validate: bool = True,
+                 annualized_factor: float = 1,
                  cvar_beta: float = 0.95,
                  cdar_beta: float = 0.95,
                  min_acceptable_return: float | None = None):
@@ -63,6 +64,7 @@ class BasePortfolio:
         self._dates = dates
         self.fitness_metrics = fitness_metrics if fitness_metrics is not None else [Metrics.MEAN, Metrics.STD]
         self.tag = tag if tag is not None else self._name
+        self._annualized_factor = annualized_factor
         self._cvar_beta = cvar_beta
         self._cdar_beta = cdar_beta
         self._min_acceptable_return = min_acceptable_return
@@ -100,8 +102,14 @@ class BasePortfolio:
         cls = self.__class__
         result = cls.__new__(cls)
         result.__dict__.update(self.__dict__)
-        result.unfreeze()
+        result._unfreeze()
         return result
+
+    def _freeze(self):
+        self._frozen = True
+
+    def _unfreeze(self):
+        self._frozen = False
 
     def _validation(self) -> None:
         if len(self.returns) != len(self.dates):
@@ -110,6 +118,12 @@ class BasePortfolio:
             raise TypeError('returns should be of type numpy.ndarray')
         if np.any(np.isnan(self.returns)):
             raise TypeError('returns should not contain nan')
+
+    def _reset(self) -> None:
+        attrs = list(self.__dict__.keys())
+        for attr in attrs:
+            if attr[0] != '_' and attr not in ['tag', 'validate']:
+                self.__dict__.pop(attr, None)
 
     @property
     def name(self):
@@ -143,6 +157,15 @@ class BasePortfolio:
         self._cdar_beta = value
 
     @property
+    def annualized_factor(self) -> float:
+        return self._annualized_factor
+
+    @annualized_factor.setter
+    def annualized_factor(self, value: float) -> None:
+        self._reset()
+        self._annualized_factor = value
+
+    @property
     def min_acceptable_return(self) -> float | None:
         return self._min_acceptable_return
 
@@ -151,14 +174,6 @@ class BasePortfolio:
         for attr in ['semivariance', 'annualized_semivariance', 'semistd', 'annualized_semistd', 'sortino_ratio']:
             self.__dict__.pop(attr, None)
         self._min_acceptable_return = value
-
-    @property
-    def returns(self):
-        return self._returns
-
-    @property
-    def dates(self):
-        return self._dates
 
     @property
     def fitness_metrics(self) -> list[Metrics]:
@@ -171,11 +186,13 @@ class BasePortfolio:
         self._fitness_metrics = [Metrics(v) for v in value]
         self.__dict__.pop('fitness', None)
 
-    def freeze(self):
-        self._frozen = True
+    @property
+    def returns(self):
+        return self._returns
 
-    def unfreeze(self):
-        self._frozen = False
+    @property
+    def dates(self):
+        return self._dates
 
     @cached_property
     def cumulative_returns(self) -> np.ndarray:
@@ -188,62 +205,44 @@ class BasePortfolio:
         returns = np.insert(self.returns, 0, 1)
         return np.cumsum(returns)
 
-    @cached_property
+    @property
     def returns_df(self) -> pd.Series:
         return pd.Series(index=self.dates, data=self.returns, name='returns')
 
-    @cached_property
+    @property
     def cumulative_returns_df(self) -> pd.Series:
         init_date = self.dates[0] - (self.dates[1] - self.dates[0])
         index = np.insert(self.dates, 0, init_date)
         return pd.Series(index=index, data=self.cumulative_returns, name='prices_compounded')
 
-    @cached_property
+    @property
     def cumulative_returns_uncompounded_df(self) -> pd.Series:
         init_date = self.dates[0] - (self.dates[1] - self.dates[0])
         index = np.insert(self.dates, 0, init_date)
         return pd.Series(index=index, data=self.cumulative_returns_uncompounded, name='prices_uncompounded')
 
+    # Mean
     @cached_property
     def mean(self) -> float:
-        return self.returns.mean()
+        return self.returns.mean() * self.annualized_factor
 
-    @property
-    def annualized_mean(self) -> float:
-        return self.mean * AVG_TRADING_DAYS_PER_YEAR
-
-    # risks measures
-    @property
-    def variance(self) -> float:
-        return self.returns.var(ddof=1)
-
-    @property
-    def annualized_variance(self) -> float:
-        return self.variance * AVG_TRADING_DAYS_PER_YEAR
-
+    # Risk Measures
     @cached_property
+    def variance(self) -> float:
+        return self.returns.var(ddof=1) * self.annualized_factor
+
+    @property
     def std(self) -> float:
         return np.sqrt(self.variance)
 
-    @property
-    def annualized_std(self) -> float:
-        return np.sqrt(self.annualized_variance)
-
-    @property
-    def semivariance(self) -> float:
-        return semivariance(returns=self.returns, min_acceptable_return=self.min_acceptable_return)
-
-    @property
-    def annualized_semivariance(self) -> float:
-        return self.semivariance * AVG_TRADING_DAYS_PER_YEAR
-
     @cached_property
+    def semivariance(self) -> float:
+        return (semivariance(returns=self.returns, min_acceptable_return=self.min_acceptable_return)
+                * self.annualized_factor)
+
+    @property
     def semistd(self) -> float:
         return np.sqrt(self.semivariance)
-
-    @property
-    def annualized_semistd(self) -> float:
-        return np.sqrt(self.annualized_semivariance)
 
     @cached_property
     def max_drawdown(self) -> float:
@@ -268,23 +267,23 @@ class BasePortfolio:
         """
         Mean Absolute Deviation (MAD)
         """
-        return mad(returns=self.returns)
+        return mad(returns=self.returns) * self.annualized_factor
 
     @property
     def sharpe_ratio(self) -> float:
-        return self.annualized_mean / self.annualized_std
+        return self.mean / self.std
 
     @property
     def sortino_ratio(self) -> float:
-        return self.annualized_mean / self.annualized_semistd
+        return self.mean / self.semistd
 
     @property
     def calmar_ratio(self) -> float:
-        return self.annualized_mean / self.max_drawdown
+        return self.mean / self.max_drawdown
 
     @property
     def cdar_ratio(self) -> float:
-        return self.annualized_mean / self.cdar
+        return self.mean / self.cdar
 
     @property
     def cvar_ratio(self) -> float:
@@ -333,12 +332,6 @@ class BasePortfolio:
                     every objective.
         """
         return dominate(self.fitness[obj], other.fitness[obj])
-
-    def reset(self) -> None:
-        attrs = list(self.__dict__.keys())
-        for attr in attrs:
-            if attr[0] != '_' and attr not in ['tag', 'validate']:
-                self.__dict__.pop(attr, None)
 
     def metrics(self) -> pd.DataFrame:
         idx = [e.value for e in Metrics]
@@ -420,11 +413,8 @@ class BasePortfolio:
     def summary(self, formatted: bool = True) -> pd.Series:
         summary_fmt = {
             'Mean (Expected Return)': (self.mean, '0.3%'),
-            'Annualized Mean': (self.annualized_mean, '0.2%'),
             'Std (Volatility)': (self.std, '0.3%'),
-            'Annualized Std': (self.annualized_std, '0.2%'),
             'Downside Std': (self.semistd, '0.3%'),
-            'Annualized Downside Std': (self.annualized_semistd, '0.2%'),
             'Max Drawdown': (self.max_drawdown, '0.2%'),
             'CDaR at 95%': (self.cdar, '0.2%'),
             'CVaR at 95%': (self.cvar, '0.2%'),
@@ -633,8 +623,8 @@ class Portfolio(BasePortfolio):
         df.set_index('asset', inplace=True)
         return df
 
-    def reset(self) -> None:
-        super().reset()
+    def _reset(self) -> None:
+        super()._reset()
         self.__len__.cache_clear()
 
     def summary(self, formatted: bool = True) -> pd.Series:
@@ -722,7 +712,7 @@ class MultiPeriodPortfolio(BasePortfolio):
         self._portfolios = portfolios
         self._returns = returns
         self._dates = dates
-        self.reset()
+        self._reset()
 
     def __len__(self) -> int:
         return len(self._portfolios)
@@ -739,7 +729,7 @@ class MultiPeriodPortfolio(BasePortfolio):
         self._portfolios = portfolios
         self._returns = returns
         self._dates = dates
-        self.reset()
+        self._reset()
 
     def __delitem__(self, key: int) -> None:
         new_portfolios = self._portfolios.copy()
@@ -748,7 +738,7 @@ class MultiPeriodPortfolio(BasePortfolio):
         self._portfolios = portfolios
         self._returns = returns
         self._dates = dates
-        self.reset()
+        self._reset()
 
     def __iter__(self) -> Iterator[Portfolio]:
         return iter(self._portfolios)
@@ -825,7 +815,7 @@ class MultiPeriodPortfolio(BasePortfolio):
         self._portfolios.append(portfolio)
         self._returns = np.concatenate([self.returns, portfolio.returns], axis=0)
         self._dates = np.concatenate([self.dates, portfolio.dates], axis=0)
-        self.reset()
+        self._reset()
 
     @property
     def assets_index(self) -> np.ndarray:

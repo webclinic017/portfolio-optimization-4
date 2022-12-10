@@ -439,6 +439,7 @@ def test_mean_mad():
         assert pi.mad > p.mad
         p = p1
 
+
 def test_maximum_sharpe_ratio():
     precision = 1e-7
 
@@ -448,7 +449,7 @@ def test_maximum_sharpe_ratio():
 
     sharpe, w = model.maximum_sharpe_ratio(objective_values=True)
     p = Portfolio(assets=assets, weights=w)
-    assert is_close(sharpe * 255 / np.sqrt(255), p.sharpe_ratio, precision)
+    assert is_close(sharpe, p.sharpe_ratio, precision)
 
 
 def test_maximum_sortino_ratio():
@@ -460,11 +461,11 @@ def test_maximum_sortino_ratio():
 
     sortino, w = model.maximum_sortino_ratio(objective_values=True)
     p = Portfolio(assets=assets, weights=w)
-    assert is_close(sortino * 255 / np.sqrt(255), p.sortino_ratio, precision)
+    assert is_close(sortino, p.sortino_ratio, precision)
 
     sortino, w = model.maximum_sortino_ratio(objective_values=True, min_acceptable_returns=0)
     p = Portfolio(assets=assets, weights=w, min_acceptable_return=0)
-    assert is_close(sortino * 255 / np.sqrt(255), p.sortino_ratio, precision)
+    assert is_close(sortino, p.sortino_ratio, precision)
 
 
 def test_maximum_cvar_ratio():
@@ -482,7 +483,6 @@ def test_maximum_cvar_ratio():
     assert is_close(r, p.cvar_ratio, precision)
 
 
-
 def test_maximum_cdar_ratio():
     precision = 1e-7
 
@@ -495,7 +495,7 @@ def test_maximum_cdar_ratio():
 
     r, w = model.maximum_cdar_ratio(objective_values=True, cdar_beta=0.5)
     p = Portfolio(assets=assets, weights=w, cdar_beta=0.5)
-    assert is_close(r * 255, p.cdar_ratio, precision)
+    assert is_close(r, p.cdar_ratio, precision)
 
 
 def test_maximum_mad_ratio():
