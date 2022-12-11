@@ -1,20 +1,19 @@
 import numpy as np
 
-__all__ = ['semivariance',
+__all__ = ['semi_variance',
+           'kurtosis',
+           'semi_kurtosis',
            'max_drawdown',
            'cdar',
            'cvar',
            'mad']
 
 
-def semivariance(returns: np.ndarray,
-                 min_acceptable_return: float | None = None) -> float:
+def semi_variance(returns: np.ndarray,
+                  min_acceptable_return: float | None = None) -> float:
     r"""
-    Calculate the Semi Variance.
-    The Semi Variance is the variance of the returns below the min_acceptable_return.
-
-    Many implementations remove positive returns then compute the std of the remaining negative returns or replace
-    the positive returns by 0 then compute the std. Both are incorrect.
+    Calculate the Semi Variance (Second Lower Partial Moment).
+    The Semi Variance is the variance of the returns below a minimum acceptable return.
 
     Parameters
     ----------
@@ -33,6 +32,52 @@ def semivariance(returns: np.ndarray,
     if min_acceptable_return is None:
         min_acceptable_return = np.mean(returns, axis=0)
     return np.sum(np.power(np.minimum(0, returns - min_acceptable_return), 2)) / (len(returns) - 1)
+
+
+def kurtosis(returns: np.ndarray) -> float:
+    r"""
+    Calculate the Kurtosis (Fourth Central Moment).
+    The Kurtosis is a measure of the heaviness of the tail of the distribution.
+    Higher kurtosis corresponds to greater extremity of deviations (fat tails).
+
+    Parameters
+    ----------
+    returns : 1d-array
+              The returns array
+    Returns
+    -------
+    value : float
+            The Kurtosis
+    """
+
+    return np.sum(np.power(returns - np.mean(returns, axis=0), 4)) / len(returns)
+
+
+def semi_kurtosis(returns: np.ndarray,
+                  min_acceptable_return: float | None = None) -> float:
+    r"""
+    Calculate the Semi Kurtosis (Fourth Lower Partial Moment).
+    The Semi Kurtosis is a measure of the heaviness of the downside tail of the returns below a minimum acceptable
+    return.
+    Higher Semi Kurtosis corresponds to greater extremity of downside deviations (downside fat tail).
+
+    Parameters
+    ----------
+    returns : 1d-array
+              The returns array
+
+    min_acceptable_return: float, optional
+                           The minimum acceptable return which is the return target to distinguish "downside" and
+                           "upside" returns. If not provided, the returns mean will be used.
+
+    Returns
+    -------
+    value : float
+            The Semi Kurtosis
+    """
+    if min_acceptable_return is None:
+        min_acceptable_return = np.mean(returns, axis=0)
+    return np.sum(np.power(np.minimum(0, returns - min_acceptable_return), 4)) / len(returns)
 
 
 def cvar(returns: np.ndarray, beta: float = 0.95) -> float:

@@ -171,7 +171,7 @@ def test_minimum_risk():
     ref_weight = ref['CDaR'].to_numpy()
     np.testing.assert_array_almost_equal(weight, ref_weight, decimal=2)
 
-    minimum, weight = model.minimum_semivariance()
+    minimum, weight = model.minimum_semi_variance()
     ref_weight = ref['MSV'].to_numpy()
     np.testing.assert_array_almost_equal(weight, ref_weight, decimal=2)
 

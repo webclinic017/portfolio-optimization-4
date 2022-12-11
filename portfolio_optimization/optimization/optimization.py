@@ -658,7 +658,7 @@ class Optimization:
                 weights.append(np.array(w.value / k.value, dtype=float))
                 mean = 1 / k.value
                 if risk_measure in [RiskMeasure.VARIANCE, RiskMeasure.SEMIVARIANCE]:
-                    risk = problem.value / k.value**2 / self.scale
+                    risk = problem.value / k.value ** 2 / self.scale
                 else:
                     risk = problem.value / k.value / self.scale
                 results.append((mean, risk))
@@ -736,7 +736,7 @@ class Optimization:
                                l2_coef: Coef = None,
                                min_return: Target = None,
                                max_variance: Target = None,
-                               max_semivariance: Target = None,
+                               max_semi_variance: Target = None,
                                min_acceptable_returns: Target = None,
                                max_mad: Target = None,
                                max_cvar: Target = None,
@@ -773,7 +773,7 @@ class Optimization:
         l2_coef
         min_return
         max_variance
-        max_semivariance
+        max_semi_variance
         min_acceptable_returns
         max_cvar
         cvar_beta
@@ -910,7 +910,7 @@ class Optimization:
         constraints = [cp.SOC(v, z.T @ w)]
         return risk, constraints
 
-    def _semivariance_risk(self, w: cp.Variable, min_acceptable_returns: Target = None):
+    def _semi_variance_risk(self, w: cp.Variable, min_acceptable_returns: Target = None):
         if min_acceptable_returns is None:
             min_acceptable_returns = self.assets.expected_returns
 
@@ -922,6 +922,13 @@ class Optimization:
         risk = cp.sum_squares(v) / (self.assets.date_nb - 1)
         # noinspection PyTypeChecker
         constraints = [(self.assets.returns - min_acceptable_returns).T @ w >= -v]
+        return risk, constraints
+
+    def _kurtosis_risk(self, w: cp.Variable):
+        v = cp.Variable(nonneg=True)  # nonneg=True instead of constraint v>=0 is preferred for better DCP analysis
+        z = np.linalg.cholesky(self.assets.expected_cov)
+        risk = v ** 2
+        constraints = [cp.SOC(v, z.T @ w)]
         return risk, constraints
 
     def _cvar_risk(self, w: cp.Variable, cvar_beta: float):
@@ -1029,11 +1036,13 @@ class Optimization:
         """
         return self.__minimum_risk(risk_measure=RiskMeasure.VARIANCE, **clean_locals(locals()))
 
-    def minimum_semivariance(self,
-                             min_acceptable_returns: Target = None,
-                             objective_values: bool = False) -> Result:
+    def minimum_semi_variance(self,
+                              min_acceptable_returns: Target = None,
+                              objective_values: bool = False) -> Result:
         r"""
         Minimum Semivariance Portfolio
+        The Semi-Variance (Second Lower Partial Moment) is the variance of the returns below a minimum acceptable
+        return.
 
         Parameters
         ----------
@@ -1154,17 +1163,18 @@ class Optimization:
 
         return self.__mean_risk(risk_measure=RiskMeasure.VARIANCE, **clean_locals(locals()))
 
-    def mean_semivariance(self,
-                          target_semivariance: Target = None,
-                          target_return: Target = None,
-                          population_size: PopulationSize = None,
-                          min_acceptable_returns: Target = None,
-                          l1_coef: Coef = None,
-                          l2_coef: Coef = None,
-                          objective_values: bool = False) -> Result:
+    def mean_semi_variance(self,
+                           target_semivariance: Target = None,
+                           target_return: Target = None,
+                           population_size: PopulationSize = None,
+                           min_acceptable_returns: Target = None,
+                           l1_coef: Coef = None,
+                           l2_coef: Coef = None,
+                           objective_values: bool = False) -> Result:
         r"""
         Optimization along the mean-semivariance frontier.
-        The semivariance (downside variance) is the variance of returns bellow the
+        The Semi-Variance (Second Lower Partial Moment) is the variance of the returns below a minimum acceptable
+        return.
 
         Parameters
         ----------
@@ -1377,6 +1387,8 @@ class Optimization:
                               min_acceptable_returns: Target = None) -> np.ndarray:
         r"""
         Maximum Sortino (Mean/SemiStd) Ratio Portfolio.
+        The Sortino ration is the Mean divided by the square root of the Semi-Variance (Second Lower Partial Moment)
+        which is the variance of the returns below a minimum acceptable return.
 
         Parameters
         ----------

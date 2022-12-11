@@ -8,7 +8,7 @@ import plotly.graph_objects as go
 from portfolio_optimization.meta import Metrics, AVG_TRADING_DAYS_PER_YEAR, ZERO_THRESHOLD
 from portfolio_optimization.assets import Assets
 from portfolio_optimization.utils.sorting import dominate
-from portfolio_optimization.utils.metrics import semivariance, max_drawdown, cvar, cdar, mad
+from portfolio_optimization.utils.metrics import *
 
 __all__ = ['BasePortfolio',
            'Portfolio',
@@ -52,6 +52,16 @@ class BasePortfolio:
 
         validate: bool, default True
                   If True, the Class attributes are validated
+
+        annualized_factor: float, default 1
+                           This factor is used to annualize the risk metrics.
+                           Per default (annualized_factor=1), the risk metrics are expressed in the same periodicity
+                           as the returns.
+
+                           Example for daily returns:
+                                * annualized_factor = 1 (default): the metrics are daily (mean, std, sharpe etc...).
+                                * annualized_factor = 255 (average number of trading day in a year): the metrics are
+                                annualized.
 
         min_acceptable_return: float, optional
                                Minimum acceptable return, in the same periodicity as the returns to distinguish
@@ -236,13 +246,22 @@ class BasePortfolio:
         return np.sqrt(self.variance)
 
     @cached_property
-    def semivariance(self) -> float:
-        return (semivariance(returns=self.returns, min_acceptable_return=self.min_acceptable_return)
+    def semi_variance(self) -> float:
+        return (semi_variance(returns=self.returns, min_acceptable_return=self.min_acceptable_return)
                 * self.annualized_factor)
 
     @property
-    def semistd(self) -> float:
-        return np.sqrt(self.semivariance)
+    def semi_std(self) -> float:
+        return np.sqrt(self.semi_variance)
+
+    @cached_property
+    def kurtosis(self) -> float:
+        return kurtosis(returns=self.returns) * self.annualized_factor
+
+    @property
+    def semi_kurtosis(self) -> float:
+        return (semi_kurtosis(returns=self.returns, min_acceptable_return=self.min_acceptable_return)
+                * self.annualized_factor)
 
     @cached_property
     def max_drawdown(self) -> float:
@@ -275,7 +294,7 @@ class BasePortfolio:
 
     @property
     def sortino_ratio(self) -> float:
-        return self.mean / self.semistd
+        return self.mean / self.semi_std
 
     @property
     def calmar_ratio(self) -> float:
@@ -414,12 +433,12 @@ class BasePortfolio:
         summary_fmt = {
             'Mean (Expected Return)': (self.mean, '0.3%'),
             'Std (Volatility)': (self.std, '0.3%'),
-            'Downside Std': (self.semistd, '0.3%'),
+            'Downside Std': (self.semi_std, '0.3%'),
             'Max Drawdown': (self.max_drawdown, '0.2%'),
             'CDaR at 95%': (self.cdar, '0.2%'),
             'CVaR at 95%': (self.cvar, '0.2%'),
             'Variance': (self.variance, '0.6%'),
-            'Downside Variance': (self.semivariance, '0.6%'),
+            'Downside Variance': (self.semi_variance, '0.6%'),
             'Sharpe Ratio': (self.sharpe_ratio, '0.2f'),
             'Sortino Ratio': (self.sortino_ratio, '0.2f'),
             'Calmar Ratio': (self.calmar_ratio, '0.2f'),
@@ -444,6 +463,7 @@ class Portfolio(BasePortfolio):
                  name: str | None = None,
                  tag: str | None = None,
                  fitness_metrics: list[Metrics] | None = None,
+                 annualized_factor: float = 1,
                  cvar_beta: float = 0.95,
                  cdar_beta: float = 0.95,
                  min_acceptable_return: float | None = None):
@@ -483,6 +503,16 @@ class Portfolio(BasePortfolio):
                          A list of Fitness metrics used compute portfolio domination.
                          It is used the comparison of `Portfolios` and compute the `Population` pareto front.
 
+        annualized_factor: float, default 1
+                       This factor is used to annualize the risk metrics.
+                       Per default (annualized_factor=1), the risk metrics are expressed in the same periodicity
+                       as the returns.
+
+                       Example for daily returns:
+                            * annualized_factor = 1 (default): the metrics are daily (mean, std, sharpe etc...).
+                            * annualized_factor = 255 (average number of trading day in a year): the metrics are
+                            annualized.
+
         """
         self._assets = assets
         self._weights = weights
@@ -505,6 +535,7 @@ class Portfolio(BasePortfolio):
                          tag=tag,
                          fitness_metrics=fitness_metrics,
                          validate=False,
+                         annualized_factor=annualized_factor,
                          cvar_beta=cvar_beta,
                          cdar_beta=cdar_beta,
                          min_acceptable_return=min_acceptable_return)
@@ -648,6 +679,7 @@ class MultiPeriodPortfolio(BasePortfolio):
                  name: str | None = None,
                  tag: str | None = None,
                  fitness_metrics: list[Metrics] | None = None,
+                 annualized_factor: float = 1,
                  cvar_beta: float = 0.95,
                  cdar_beta: float = 0.95,
                  min_acceptable_return: float | None = None):
@@ -668,9 +700,19 @@ class MultiPeriodPortfolio(BasePortfolio):
         tag: str | None, default None
              A tag that can be used to manipulate group of `Portfolios` from a `Population`.
 
-         fitness_metrics: list[Metrics] | None
+        fitness_metrics: list[Metrics] | None
                           A list of Fitness metrics used compute portfolio domination.
                           It is used the comparison of `Portfolios` and compute the `Population` pareto front.
+
+        annualized_factor: float, default 1
+                       This factor is used to annualize the risk metrics.
+                       Per default (annualized_factor=1), the risk metrics are expressed in the same periodicity
+                       as the returns.
+
+                       Example for daily returns:
+                            * annualized_factor = 1 (default): the metrics are daily (mean, std, sharpe etc...).
+                            * annualized_factor = 255 (average number of trading day in a year): the metrics are
+                            annualized.
         """
 
         portfolios, returns, dates = self._initialize(portfolios=portfolios)
@@ -681,6 +723,7 @@ class MultiPeriodPortfolio(BasePortfolio):
                          tag=tag,
                          fitness_metrics=fitness_metrics,
                          validate=False,
+                         annualized_factor=annualized_factor,
                          cvar_beta=cvar_beta,
                          cdar_beta=cdar_beta,
                          min_acceptable_return=min_acceptable_return)

@@ -272,32 +272,32 @@ def test_mean_semivariance():
 
     model = Optimization(assets=assets, solvers=['ECOS'], min_weights=0)
 
-    min_risk, w = model.mean_semivariance(objective_values=True)
+    min_risk, w = model.mean_semi_variance(objective_values=True)
 
     risk = min_risk * 3
-    ret, w = model.mean_semivariance(target_semivariance=risk, objective_values=True)
+    ret, w = model.mean_semi_variance(target_semivariance=risk, objective_values=True)
     p = Portfolio(assets=assets, weights=w)
-    assert is_close(risk, p.semivariance, precision)
+    assert is_close(risk, p.semi_variance, precision)
 
-    w = model.mean_semivariance(target_semivariance=risk, min_acceptable_returns=0)
+    w = model.mean_semi_variance(target_semivariance=risk, min_acceptable_returns=0)
     p = Portfolio(assets=assets, weights=w, min_acceptable_return=0)
-    assert is_close(risk, p.semivariance, precision)
+    assert is_close(risk, p.semi_variance, precision)
 
-    w = model.mean_semivariance(target_return=ret)
+    w = model.mean_semi_variance(target_return=ret)
     p = Portfolio(assets=assets, weights=w)
     assert is_close(ret, p.mean, precision)
 
-    w = model.mean_semivariance(target_semivariance=risk, l1_coef=0.1, l2_coef=0.1)
+    w = model.mean_semi_variance(target_semivariance=risk, l1_coef=0.1, l2_coef=0.1)
     assert np.all(w)
 
     risks = [risk, risk * 1.5]
-    o, w = model.mean_semivariance(target_semivariance=risks, objective_values=True)
+    o, w = model.mean_semi_variance(target_semivariance=risks, objective_values=True)
     assert o.shape == (2,)
     assert w.shape == (2, assets.asset_nb)
     p0 = Portfolio(assets=assets, weights=w[0])
     p1 = Portfolio(assets=assets, weights=w[1])
-    assert is_close(risks[0], p0.semivariance, precision)
-    assert is_close(risks[1], p1.semivariance, precision)
+    assert is_close(risks[0], p0.semi_variance, precision)
+    assert is_close(risks[1], p1.semi_variance, precision)
 
     o, w = model.mean_variance(population_size=5, objective_values=True)
     assert o.shape == (5,)
@@ -305,7 +305,7 @@ def test_mean_semivariance():
     p = Portfolio(assets=assets, weights=w[0])
     for i in range(1, 5):
         pi = Portfolio(assets=assets, weights=w[i])
-        assert pi.semivariance > p.semivariance
+        assert pi.semi_variance > p.semi_variance
         p = p1
 
 
@@ -491,7 +491,7 @@ def test_maximum_cdar_ratio():
     model = Optimization(assets=assets, solvers=['ECOS'], min_weights=0)
     r, w = model.maximum_cdar_ratio(objective_values=True)
     p = Portfolio(assets=assets, weights=w)
-    assert is_close(r * 255, p.cdar_ratio, precision)
+    assert is_close(r, p.cdar_ratio, precision)
 
     r, w = model.maximum_cdar_ratio(objective_values=True, cdar_beta=0.5)
     p = Portfolio(assets=assets, weights=w, cdar_beta=0.5)

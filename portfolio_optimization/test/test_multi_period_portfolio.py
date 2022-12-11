@@ -35,7 +35,7 @@ def test_mpp_metrics():
     assert abs(returns.mean() - mpp.mean) < 1e-10
     assert abs(returns.std(ddof=1) - mpp.std) < 1e-10
     assert abs(np.sqrt(np.sum(np.minimum(0, returns - returns.mean()) ** 2) / (len(returns) - 1))
-               - mpp.semistd) < 1e-10
+               - mpp.semi_std) < 1e-10
     assert abs(mpp.annualized_mean / mpp.annualized_std
                - mpp.sharpe_ratio) < 1e-10
     assert abs(mpp.annualized_mean / mpp.annualized_semistd
@@ -43,13 +43,13 @@ def test_mpp_metrics():
     assert max_drawdown_slow(mpp.cumulative_returns) == mpp.max_drawdown
     assert np.array_equal(mpp.fitness,
                           np.array([mpp.mean, -mpp.std]))
-    mpp.fitness_metrics= [Metrics.MEAN, Metrics.SEMISTD]
+    mpp.fitness_metrics= [Metrics.MEAN, Metrics.SEMI_STD]
     assert np.array_equal(mpp.fitness,
-                          np.array([mpp.mean, -mpp.semistd]))
-    mpp.fitness_metrics= [Metrics.MEAN, Metrics.SEMISTD, Metrics.MAX_DRAWDOWN]
+                          np.array([mpp.mean, -mpp.semi_std]))
+    mpp.fitness_metrics= [Metrics.MEAN, Metrics.SEMI_STD, Metrics.MAX_DRAWDOWN]
     assert np.array_equal(mpp.fitness,
                           np.array([mpp.mean,
-                                    -mpp.semistd,
+                                    -mpp.semi_std,
                                     -mpp.max_drawdown]))
     assert len(mpp.assets_index) == len(periods)
     assert len(mpp.assets_names) == len(periods)

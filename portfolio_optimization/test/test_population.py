@@ -21,7 +21,7 @@ def load_population() -> Population:
     for i in range(100):
         weights = rand_weights(n=assets.asset_nb, zeros=assets.asset_nb - 10)
         portfolio = Portfolio(weights=weights,
-                              fitness_metrics=[Metrics.MEAN, Metrics.SEMISTD, Metrics.MAX_DRAWDOWN],
+                              fitness_metrics=[Metrics.MEAN, Metrics.SEMI_STD, Metrics.MAX_DRAWDOWN],
                               assets=assets,
                               name=str(i))
         population.append(portfolio)
@@ -38,7 +38,7 @@ def load_multi_period_portfolio() -> MultiPeriodPortfolio:
                (dt.date(2017, 5, 1), dt.date(2017, 8, 1))]
 
     mpp = MultiPeriodPortfolio(name='mmp',
-                               fitness_metrics=[Metrics.MEAN, Metrics.SEMISTD, Metrics.MAX_DRAWDOWN],
+                               fitness_metrics=[Metrics.MEAN, Metrics.SEMI_STD, Metrics.MAX_DRAWDOWN],
                                )
     for i, period in enumerate(periods):
         assets = Assets(prices=prices,
@@ -108,7 +108,7 @@ def test_magic_methods():
     assert population[10] == new_ptf
     ptf = copy(new_ptf)
     ptf.name = 'different_fitness'
-    ptf.fitness_metrics = [Metrics.MEAN, Metrics.SEMISTD, Metrics.SORTINO_RATIO]
+    ptf.fitness_metrics = [Metrics.MEAN, Metrics.SEMI_STD, Metrics.SORTINO_RATIO]
     try:
         population.append(ptf)
         raise

@@ -30,7 +30,7 @@ if __name__ == '__main__':
                                     tag='mean_variance'))
 
     # Efficient Frontier -- Mean Semivariance
-    portfolios_weights = model.mean_semivariance(population_size=30)
+    portfolios_weights = model.mean_semi_variance(population_size=30)
     for i, weights in enumerate(portfolios_weights):
         population.append(Portfolio(weights=weights,
                                     assets=assets,
