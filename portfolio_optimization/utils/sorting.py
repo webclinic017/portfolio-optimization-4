@@ -32,7 +32,7 @@ def non_denominated_sort(n: int, fitnesses: np.ndarray, first_front_only: bool) 
     if n == 0:
         return fronts
 
-        # final rank that will be returned
+    # final rank that will be returned
     n_ranked = 0
     ranked = np.array([0 for _ in range(n)])
 

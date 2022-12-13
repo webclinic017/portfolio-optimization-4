@@ -24,7 +24,7 @@ def get_assets() -> Assets:
 def test_mean_risk_optimization():
     precision = {
         RiskMeasure.VARIANCE: 1e-7,
-        RiskMeasure.SEMIVARIANCE: 1e-7,
+        RiskMeasure.SEMI_VARIANCE: 1e-7,
         RiskMeasure.CVAR: 1e-5,
         RiskMeasure.CDAR: 1e-5,
         RiskMeasure.MAD: 1e-7
@@ -200,16 +200,30 @@ def test_mean_risk_optimization():
             p_utility = p.mean - gamma * getattr(p, risk_measure.value)
             assert is_close(p_utility, utility, precision[risk_measure])
 
+
+            # model.update(transaction_costs=0)
+            (mean, risk), w = model.mean_risk_optimization(risk_measure=risk_measure,
+                                                           objective_function=ObjectiveFunction.RATIO,
+                                                           objective_values=True)
+            p = Portfolio(assets=assets,
+                          weights=w,
+                          previous_weights=previous_weights,
+                          transaction_costs=transaction_costs)
+            assert is_close(mean, p.mean, 1e-4)
+            assert is_close(risk, getattr(p, risk_measure.value), precision[risk_measure]*1000)
+
+            # no costs
             # ratio
             if risk_measure in [RiskMeasure.CDAR]:
-                model.update(scale=10)
+                model.update(scale=100)
             else:
                 model.update(scale=1000)
             model.update(transaction_costs=0)
             (mean, risk), w = model.mean_risk_optimization(risk_measure=risk_measure,
                                                            objective_function=ObjectiveFunction.RATIO,
                                                            objective_values=True)
-            p = Portfolio(assets=assets, weights=w)
+            p = Portfolio(assets=assets,
+                          weights=w)
             assert is_close(mean, p.mean, precision[risk_measure])
             assert is_close(risk, getattr(p, risk_measure.value), precision[risk_measure])
 

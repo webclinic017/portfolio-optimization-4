@@ -84,7 +84,7 @@ def t():
             w = port.optimization(model=m, rm=rm, obj=obj, rf=rf, l=l, hist=hist)
             d = w.to_dict()['weights']
             w1 = np.array([d[c] for c in stocks])
-            w2 = model.optimize(risk_measure=RiskMeasure.SEMIVARIANCE,
+            w2 = model.optimize(risk_measure=RiskMeasure.SEMI_VARIANCE,
                                 objective_function=ObjectiveFunction.MAX_RETURN,
                                 max_semivariance=uppersdev ** 2,
                                 max_cdar=upperCDaR)

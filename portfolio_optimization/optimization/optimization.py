@@ -657,7 +657,7 @@ class Optimization:
             else:
                 weights.append(np.array(w.value / k.value, dtype=float))
                 mean = 1 / k.value
-                if risk_measure in [RiskMeasure.VARIANCE, RiskMeasure.SEMIVARIANCE]:
+                if risk_measure in [RiskMeasure.VARIANCE, RiskMeasure.SEMI_VARIANCE]:
                     risk = problem.value / k.value ** 2 / self.scale
                 else:
                     risk = problem.value / k.value / self.scale
@@ -792,19 +792,19 @@ class Optimization:
             raise TypeError('objective_function should be of type ObjectiveFunction')
 
         if objective_function == ObjectiveFunction.RATIO:
-            if not np.all(self.transaction_costs == 0):
-                raise ValueError('Ratios (sharpe ratio, sortino ratio, etc...) cannot be solved with non null costs '
-                                 'because the problem is not DCP. You can find an approximation by computing the '
-                                 'efficient frontier using the mean_risk function with population=30.')
-            if l1_coef is not None and l1_coef != 0:
-                raise ValueError('Ratios (sharpe ratio, sortino ratio, etc...) cannot be solved with non null l1_coef '
-                                 'because the problem is not DCP. You can find an approximation by computing the '
-                                 'efficient frontier using the mean_risk function with population=30.')
-            if l2_coef is not None and l2_coef != 0:
-                raise ValueError('Ratios (sharpe ratio, sortino ratio, etc...) cannot be solved with non null l2_coef '
-                                 'because the problem is not DCP. You can find an approximation by computing the '
-                                 'efficient frontier using the mean_risk function with population=30.')
-            self._default_scale = 1000
+            # if not np.all(self.transaction_costs == 0):
+            #     raise ValueError('Ratios (sharpe ratio, sortino ratio, etc...) cannot be solved with non null costs '
+            #                      'because the problem is not DCP. You can find an approximation by computing the '
+            #                      'efficient frontier using the mean_risk function with population=30.')
+            # if l1_coef is not None and l1_coef != 0:
+            #     raise ValueError('Ratios (sharpe ratio, sortino ratio, etc...) cannot be solved with non null l1_coef '
+            #                      'because the problem is not DCP. You can find an approximation by computing the '
+            #                      'efficient frontier using the mean_risk function with population=30.')
+            # if l2_coef is not None and l2_coef != 0:
+            #     raise ValueError('Ratios (sharpe ratio, sortino ratio, etc...) cannot be solved with non null l2_coef '
+            #                      'because the problem is not DCP. You can find an approximation by computing the '
+            #                      'efficient frontier using the mean_risk function with population=30.')
+            self._default_scale = 100
 
         else:
             self._default_scale = 1
@@ -887,7 +887,7 @@ class Optimization:
                 else:
                     # noinspection PyTypeChecker
                     constraints += [self._portfolio_expected_return(w=w, l1_coef=l1_coef, l2_coef=l2_coef)
-                                    - self.risk_free_rate * k == 1]
+                                    - self.risk_free_rate * k >= 1]
                     objective = cp.Minimize(risk * self.scale)
             case _:
                 raise ValueError(f'objective_function {objective_function} is not valid')
@@ -924,12 +924,11 @@ class Optimization:
         constraints = [(self.assets.returns - min_acceptable_returns).T @ w >= -v]
         return risk, constraints
 
-    def _kurtosis_risk(self, w: cp.Variable):
-        v = cp.Variable(nonneg=True)  # nonneg=True instead of constraint v>=0 is preferred for better DCP analysis
-        z = np.linalg.cholesky(self.assets.expected_cov)
-        risk = v ** 2
-        constraints = [cp.SOC(v, z.T @ w)]
-        return risk, constraints
+    def _kurtosis_risk(self, w: cp.Variable, k: cp.Variable | None):
+        raise NotImplementedError
+
+    def _semi_kurtosis_risk(self, w: cp.Variable, k: cp.Variable | None):
+        raise NotImplementedError
 
     def _cvar_risk(self, w: cp.Variable, cvar_beta: float):
         alpha = cp.Variable()
@@ -981,7 +980,7 @@ class Optimization:
             return res
 
         (ret, risk), weights = res
-        if risk_measure in [RiskMeasure.VARIANCE, RiskMeasure.SEMIVARIANCE]:
+        if risk_measure in [RiskMeasure.VARIANCE, RiskMeasure.SEMI_VARIANCE]:
             risk = np.sqrt(risk)
 
         return ret / risk, weights
@@ -1059,7 +1058,7 @@ class Optimization:
         If objective_values is True, the tuple (minimum semivariance, weights) of the optimal portfolio is returned,
         otherwise only the weights are returned.
         """
-        return self.__minimum_risk(risk_measure=RiskMeasure.SEMIVARIANCE, **clean_locals(locals()))
+        return self.__minimum_risk(risk_measure=RiskMeasure.SEMI_VARIANCE, **clean_locals(locals()))
 
     def minimum_cvar(self, cvar_beta: float = 0.95, objective_values: bool = False) -> Result:
         r"""
@@ -1215,7 +1214,7 @@ class Optimization:
         else:
             weights
         """
-        return self.__mean_risk(risk_measure=RiskMeasure.SEMIVARIANCE, **clean_locals(locals()))
+        return self.__mean_risk(risk_measure=RiskMeasure.SEMI_VARIANCE, **clean_locals(locals()))
 
     def mean_cvar(self,
                   target_cvar: Target = None,
@@ -1409,7 +1408,7 @@ class Optimization:
         else:
             weights
         """
-        return self.__maximum_ratio(risk_measure=RiskMeasure.SEMIVARIANCE, **clean_locals(locals()))
+        return self.__maximum_ratio(risk_measure=RiskMeasure.SEMI_VARIANCE, **clean_locals(locals()))
 
     def maximum_calmar_ratio(self, objective_values: bool = False) -> np.ndarray:
         r"""

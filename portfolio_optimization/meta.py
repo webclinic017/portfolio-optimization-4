@@ -19,7 +19,7 @@ class InvestmentType(Enum):
 
 class RiskMeasure(Enum):
     VARIANCE = 'variance'
-    SEMIVARIANCE = 'semivariance'
+    SEMI_VARIANCE = 'semi_variance'
     CVAR = 'cvar'
     CDAR = 'cdar'
     MAD = 'mad'
