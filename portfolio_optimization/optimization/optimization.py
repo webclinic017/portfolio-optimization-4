@@ -885,9 +885,17 @@ class Optimization:
                     # noinspection PyTypeChecker
                     objective = cp.Maximize(ret * self.scale)
                 else:
-                    # noinspection PyTypeChecker
-                    constraints += [self._portfolio_expected_return(w=w, l1_coef=l1_coef, l2_coef=l2_coef)
-                                    - self.risk_free_rate * k >= 1]
+                    concave_ret = ((not np.all(self.transaction_costs == 0))
+                                   or (l1_coef is not None and l1_coef != 0)
+                                   or (l2_coef is not None and l2_coef != 0))
+                    if concave_ret:
+                        # Assuming that rf ≥ −1, the constraint ret-rf.k = 1 may be relaxed by ret-rf.k ≥ 1,
+                        # since the relaxed constraint will always be tight at an optimal solution.
+                        # noinspection PyTypeChecker
+                        constraints += [ret - self.risk_free_rate * k >= 1]
+                    else:
+                        # noinspection PyTypeChecker
+                        constraints += [ret - self.risk_free_rate * k == 1]
                     objective = cp.Minimize(risk * self.scale)
             case _:
                 raise ValueError(f'objective_function {objective_function} is not valid')
