@@ -5,7 +5,8 @@ import plotly.express as px
 from functools import cache, cached_property
 import numbers
 import plotly.graph_objects as go
-from portfolio_optimization.meta import Metrics, AVG_TRADING_DAYS_PER_YEAR, ZERO_THRESHOLD, RiskMeasure
+from portfolio_optimization.meta import (Metrics, AVG_TRADING_DAYS_PER_YEAR, ZERO_THRESHOLD, RiskMeasure,
+                                         RiskMeasureRatio)
 from portfolio_optimization.assets import Assets
 from portfolio_optimization.utils.sorting import dominate
 from portfolio_optimization.utils.metrics import *
@@ -16,22 +17,64 @@ __all__ = ['BasePortfolio',
            'MultiPeriodPortfolio']
 
 
+class RiskMeasureAttr:
+
+    def __set_name__(self, owner, name):
+        self.public_name = name
+        self.private_name = f'_{name}'
+
+    def __get__(self, obj, objtype=None):
+        return getattr(obj, self.private_name)
+
+    def __set__(self, obj, value):
+        # Clear the property cache of the associated risk measure
+        risk_measure = RiskMeasure('_'.join(self.public_name.split('_')[:-1]))
+        for attr in [risk_measure.name, RiskMeasureRatio[risk_measure].name]:
+            self.__dict__.pop(attr, None)
+        setattr(obj, self.private_name, value)
+
+
+class RessetAttr:
+
+    def __set_name__(self, owner, name):
+        self.private_name = f'_{name}'
+
+    def __get__(self, obj, objtype=None):
+        return getattr(obj, self.private_name)
+
+    def __set__(self, obj, value):
+        # Clear all the property cache
+        obj._reset()
+        setattr(obj, self.private_name, value)
+
+
 class BasePortfolio:
+    value_at_risk_beta = RiskMeasureAttr()
+    cvar_beta = RiskMeasureAttr()
+    cdar_beta = RiskMeasureAttr()
+    entropic_risk_measure_theta = RiskMeasureAttr()
+    entropic_risk_measure_beta = RiskMeasureAttr()
+    evar_beta = RiskMeasureAttr()
+    compounded = RessetAttr()
+    min_acceptable_return = RessetAttr()
+    annualized_factor = RessetAttr()
+
     def __init__(self,
                  returns: np.ndarray,
                  dates: np.ndarray,
                  name: str | None = None,
                  tag: str | None = None,
-                 fitness_metrics: list[Metrics] | None = None,
-                 validate: bool = True,
                  compounded: bool = False,
                  annualized_factor: float = 1,
+                 min_acceptable_return: float | None = None,
+                 fitness_metrics: list[Metrics] | None = None,
                  value_at_risk_beta: float = 0.95,
                  cvar_beta: float = 0.95,
                  cdar_beta: float = 0.95,
-                 entropic_risk_measure_theta:float=1,
-                 entropic_risk_measure_beta:float=0.95,
-                 min_acceptable_return: float | None = None):
+                 entropic_risk_measure_theta: float = 1,
+                 entropic_risk_measure_beta: float = 0.95,
+                 evar_beta: float = 0.95,
+                 validate: bool = True):
         r"""
         Base Portfolio
 
@@ -75,21 +118,24 @@ class BasePortfolio:
                                Minimum acceptable return, in the same periodicity as the returns to distinguish
                                 "downside" and "upside" returns for the computation of the semivariance and semistd.
         """
-
-        self._name = name if name is not None else str(id(self))
         self._frozen = False
+        self._name = name if name is not None else str(id(self))
         self._returns = returns
         self._dates = dates
+
         self.fitness_metrics = fitness_metrics if fitness_metrics is not None else [Metrics.MEAN, Metrics.STD]
         self.tag = tag if tag is not None else self._name
-        self._compounded = compounded
-        self._annualized_factor = annualized_factor
-        self._value_at_risk_beta = value_at_risk_beta
-        self._cvar_beta = cvar_beta
-        self._cdar_beta = cdar_beta
-        self._entropic_risk_measure_theta = entropic_risk_measure_theta
-        self._entropic_risk_measure_beta=entropic_risk_measure_beta
-        self._min_acceptable_return = min_acceptable_return
+
+        self.compounded = compounded
+        self.annualized_factor = annualized_factor
+        self.min_acceptable_return = min_acceptable_return
+
+        self.value_at_risk_beta = value_at_risk_beta
+        self.cvar_beta = cvar_beta
+        self.cdar_beta = cdar_beta
+        self.entropic_risk_measure_theta = entropic_risk_measure_theta
+        self.entropic_risk_measure_beta = entropic_risk_measure_beta
+        self.evar_beta = evar_beta
 
         if validate:
             self._validation()
@@ -157,74 +203,6 @@ class BasePortfolio:
             raise AttributeError(f"can't set attribute 'name' after the Portfolio has been frozen (Portfolios are "
                                  f"frozen when they are added to a Population)")
         self._name = value
-
-    @property
-    def value_at_risk_beta(self) -> float:
-        return self._value_at_risk_beta
-
-    @value_at_risk_beta.setter
-    def value_at_risk_beta(self, value: float) -> None:
-        for attr in ['value_at_risk', 'value_at_risk_ratio']:
-            self.__dict__.pop(attr, None)
-        self._value_at_risk_beta = value
-
-    @property
-    def cvar_beta(self) -> float:
-        return self._cvar_beta
-
-    @cvar_beta.setter
-    def cvar_beta(self, value: float) -> None:
-        for attr in ['cvar', 'cvar_ratio']:
-            self.__dict__.pop(attr, None)
-        self._cvar_beta = value
-
-    @property
-    def entropic_risk_measure_beta(self) -> float:
-        return self._entropic_risk_measure_beta
-
-    @cvar_beta.setter
-    def cvar_beta(self, value: float) -> None:
-        for attr in ['cvar', 'cvar_ratio']:
-            self.__dict__.pop(attr, None)
-        self._cvar_beta = value
-
-    @property
-    def cdar_beta(self) -> float:
-        return self._cdar_beta
-
-    @cdar_beta.setter
-    def cdar_beta(self, value: float) -> None:
-        for attr in ['cdar', 'cdar_ratio']:
-            self.__dict__.pop(attr, None)
-        self._cdar_beta = value
-
-    @property
-    def annualized_factor(self) -> float:
-        return self._annualized_factor
-
-    @annualized_factor.setter
-    def annualized_factor(self, value: float) -> None:
-        self._reset()
-        self._annualized_factor = value
-
-    @property
-    def compounded(self) -> bool:
-        return self._compounded
-
-    @compounded.setter
-    def compounded(self, value: bool) -> None:
-        self._reset()
-        self._compounded = value
-
-    @property
-    def min_acceptable_return(self) -> float | None:
-        return self._min_acceptable_return
-
-    @min_acceptable_return.setter
-    def min_acceptable_return(self, value: float | None) -> None:
-        for attr in ['semivariance', 'annualized_semivariance', 'semistd', 'annualized_semistd', 'sortino_ratio']:
-            self.__dict__.pop(attr, None)
-        self._min_acceptable_return = value
 
     @property
     def fitness_metrics(self) -> list[Metrics]:
@@ -348,7 +326,7 @@ class BasePortfolio:
 
     @cached_property
     def cvar(self) -> float:
-        """
+        r"""
         Historical Conditional Value at Risk (CVaR).
         The CVaR (or Tail VaR) represents the mean shortfall at a specified confidence level (cvar_beta, default 95%).
         """
@@ -356,7 +334,7 @@ class BasePortfolio:
 
     @cached_property
     def entropic_risk_measure(self) -> float:
-        """
+        r"""
         Entropic Risk Measure.
         The Entropic Risk Measure is a risk measure which depends on the risk aversion defined by the investor
         (entropic_risk_measure_theta, default 1) through the exponential utility function at a given confidence level
@@ -366,6 +344,15 @@ class BasePortfolio:
                                      theta=self.entropic_risk_measure_theta,
                                      beta=self.entropic_risk_measure_beta)
 
+    @cached_property
+    def evar(self) -> float:
+        r"""
+        Entropic Value at Risk (EVaR).
+        The EVaR is a coherent risk measure which is an upper bound for the VaR and the CVaR,
+        obtained from the Chernoff inequality. The EVaR can be represented by using the concept of relative entropy.
+        Its confidence level is defined by evar_beta (default 95%)
+        """
+        return evar(returns=self.returns, beta=self.evar_beta)[0]
 
     @cached_property
     def max_drawdown(self) -> float:
