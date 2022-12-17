@@ -90,8 +90,7 @@ def test_gini_mean_difference():
     assert is_close(gini_mean_difference(returns), 0.005579067291230119)
 
 
-    """
 import riskfolio as rp
 
 rp.MAD()
-"""
+

@@ -33,6 +33,7 @@ PopulationSize = int | None
 OptionalVariable = cp.Variable | None
 Scale = float | None
 Result = np.ndarray | tuple[float | tuple[float, float] | np.ndarray, np.ndarray]
+RiskResult = tuple[cp.Expression | cp.Variable, list[cp.Expression | cp.SOC]]
 
 
 class Optimization:
@@ -248,6 +249,7 @@ class Optimization:
         self._validation()
         self.loaded = True
         self._default_scale = 1
+        self._loaded_risk_models = {}
 
     @property
     def scale(self) -> float:
@@ -307,7 +309,7 @@ class Optimization:
         self._asset_groups = clean(value, dtype=str)
 
     def __setattr__(self, name, value):
-        if name != 'loaded' and self.__dict__.get('loaded') and name[:8] != '_default':
+        if name != 'loaded' and self.__dict__.get('loaded') and name not in ['_default_scale', '_loaded_risk_models']:
             logger.warning(f'Attributes should be updated with the update() method to allow validation')
         super().__setattr__(name, value)
 
@@ -743,6 +745,11 @@ class Optimization:
                                cvar_beta: float = 0.95,
                                max_cdar: Target = None,
                                cdar_beta: float = 0.95,
+                               max_lower_partial_moment: Target = None,
+                               max_worst_realisation: Target = None,
+                               max_max_drawdown: Target = None,
+                               max_avg_drawdown: Target = None,
+                               max_ulcer_index: Target = None,
                                objective_values: bool = False) -> Result:
 
         r"""
@@ -785,6 +792,8 @@ class Optimization:
         -------
 
         """
+        # Used to avoid adding multiple times similar constrains linked to identical risk models
+        self._loaded_risk_models = {}
 
         if not isinstance(risk_measure, RiskMeasure):
             raise TypeError('risk_measure should be of type RiskMeasure')
@@ -792,20 +801,7 @@ class Optimization:
             raise TypeError('objective_function should be of type ObjectiveFunction')
 
         if objective_function == ObjectiveFunction.RATIO:
-            # if not np.all(self.transaction_costs == 0):
-            #     raise ValueError('Ratios (sharpe ratio, sortino ratio, etc...) cannot be solved with non null costs '
-            #                      'because the problem is not DCP. You can find an approximation by computing the '
-            #                      'efficient frontier using the mean_risk function with population=30.')
-            # if l1_coef is not None and l1_coef != 0:
-            #     raise ValueError('Ratios (sharpe ratio, sortino ratio, etc...) cannot be solved with non null l1_coef '
-            #                      'because the problem is not DCP. You can find an approximation by computing the '
-            #                      'efficient frontier using the mean_risk function with population=30.')
-            # if l2_coef is not None and l2_coef != 0:
-            #     raise ValueError('Ratios (sharpe ratio, sortino ratio, etc...) cannot be solved with non null l2_coef '
-            #                      'because the problem is not DCP. You can find an approximation by computing the '
-            #                      'efficient frontier using the mean_risk function with population=30.')
             self._default_scale = 100
-
         else:
             self._default_scale = 1
 
@@ -911,14 +907,25 @@ class Optimization:
                                    parameters_values=parameters_values,
                                    objective_values=objective_values)
 
-    def _variance_risk(self, w: cp.Variable):
+    def _ptf_returns(self, w: cp.Variable) -> cp.Expression:
+        return self.assets.returns.T @ w - self._portfolio_cost(w=w)
+
+    def _mad_risk(self, w: cp.Variable):
+        mu = self.assets.expected_returns[:, np.newaxis]
+        v = cp.Variable(self.assets.date_nb, nonneg=True)
+        risk = 2 * cp.sum(v) / self.assets.date_nb
+        # noinspection PyTypeChecker
+        constraints = [(self.assets.returns - mu).T @ w >= -v]
+        return risk, constraints
+
+    def _variance_risk(self, w: cp.Variable) -> RiskResult:
         v = cp.Variable(nonneg=True)  # nonneg=True instead of constraint v>=0 is preferred for better DCP analysis
         z = np.linalg.cholesky(self.assets.expected_cov)
         risk = v ** 2
         constraints = [cp.SOC(v, z.T @ w)]
         return risk, constraints
 
-    def _semi_variance_risk(self, w: cp.Variable, min_acceptable_returns: Target = None):
+    def _semi_variance_risk(self, w: cp.Variable, min_acceptable_returns: Target = None) -> RiskResult:
         if min_acceptable_returns is None:
             min_acceptable_returns = self.assets.expected_returns
 
@@ -932,42 +939,77 @@ class Optimization:
         constraints = [(self.assets.returns - min_acceptable_returns).T @ w >= -v]
         return risk, constraints
 
-    def _kurtosis_risk(self, w: cp.Variable, k: cp.Variable | None):
+    def _kurtosis_risk(self, w: cp.Variable, k: OptionalVariable):
         raise NotImplementedError
 
-    def _semi_kurtosis_risk(self, w: cp.Variable, k: cp.Variable | None):
+    def _semi_kurtosis_risk(self, w: cp.Variable, k: OptionalVariable):
         raise NotImplementedError
 
-    def _cvar_risk(self, w: cp.Variable, cvar_beta: float):
+    def _cvar_risk(self, w: cp.Variable, cvar_beta: float) -> RiskResult:
         alpha = cp.Variable()
         v = cp.Variable(self.assets.date_nb, nonneg=True)
         risk = alpha + 1.0 / (self.assets.date_nb * (1 - cvar_beta)) * cp.sum(v)
         # noinspection PyTypeChecker
-
-        constraints = [self.assets.returns.T @ w - self._portfolio_cost(w=w) + alpha + v >= 0]
+        constraints = [self._ptf_returns(w=w) + alpha + v >= 0]
         return risk, constraints
 
-    def _cdar_risk(self, w: cp.Variable, cdar_beta: float):
+    def _worst_realisation_risk(self, w: cp.Variable) -> RiskResult:
+        v = cp.Variable()
+        risk = v
+        constraints = [-self._ptf_returns(w=w) <= v]
+        return risk, constraints
+
+    def _lower_partial_moment_risk(self, w: cp.Variable, k: cp.Variable | None) -> RiskResult:
+        v = cp.Variable(self.assets.date_nb, nonneg=True)
+        risk = cp.sum(v) / self.assets.date_nb
+        if k is None:
+            factor = 1
+        else:
+            factor = k
+        # noinspection PyTypeChecker
+        constraints = [self.risk_free_rate * factor - self._ptf_returns(w=w) <= v]
+        return risk, constraints
+
+    def _drawdown_model(self, w: cp.Variable) -> tuple[cp.Variable, cp.Variable, list[cp.Expression]]:
+        if 'drawdown' in self._loaded_risk_models:
+            v, u, constraints = self._loaded_risk_models['drawdown']
+            # the constaints have already been added to the problem so we don't need to add them again
+            constraints = []
+        else:
+            v = cp.Variable(self.assets.date_nb + 1)
+            u = cp.Variable()
+            # noinspection PyTypeChecker
+            constraints = [
+                v[1:] * self.scale >= v[:-1] * self.scale - self._ptf_returns(w=w) * self.scale,
+                v[1:] * self.scale >= 0,
+                v[0] * self.scale == 0]
+            self._loaded_risk_models['drawdown'] = v, u, constraints
+
+        return v, u, constraints
+
+    def _max_drawdown_risk(self, w: cp.Variable) -> RiskResult:
+        v, u, constraints = self._drawdown_model(w=w)
+        risk = u
+        constraints += [u >= v[1:]]
+        return risk, constraints
+
+    def _avg_drawdown_risk(self, w: cp.Variable) -> RiskResult:
+        v, _, constraints = self._drawdown_model(w=w)
+        risk = cp.sum(v[1:]) / self.assets.date_nb
+        return risk, constraints
+
+    def _cdar_risk(self, w: cp.Variable, cdar_beta: float) -> RiskResult:
+        v, u, constraints = self._drawdown_model(w=w)
         alpha = cp.Variable()
-        v = cp.Variable(self.assets.date_nb + 1)
-        z = cp.Variable(self.assets.date_nb)
+        z = cp.Variable(self.assets.date_nb, nonneg=True)
         risk = alpha + 1.0 / (self.assets.date_nb * (1 - cdar_beta)) * cp.sum(z)
         # noinspection PyTypeChecker
-        constraints = [z * self.scale >= v[1:] * self.scale - alpha * self.scale,
-                       z * self.scale >= 0,
-                       v[1:] * self.scale >= v[:-1] * self.scale - (
-                               self.assets.returns.T @ w - self._portfolio_cost(w=w))
-                       * self.scale,
-                       v[1:] * self.scale >= 0,
-                       v[0] * self.scale == 0]
+        constraints += [z * self.scale >= v[1:] * self.scale - alpha * self.scale]
         return risk, constraints
 
-    def _mad_risk(self, w: cp.Variable):
-        mu = self.assets.expected_returns[:, np.newaxis]
-        v = cp.Variable(self.assets.date_nb, nonneg=True)
-        risk = 2 * cp.sum(v) / self.assets.date_nb
-        # noinspection PyTypeChecker
-        constraints = [(self.assets.returns - mu).T @ w >= -v]
+    def _ulcer_index_risk(self, w: cp.Variable) -> RiskResult:
+        v, _, constraints = self._drawdown_model(w=w)
+        risk = cp.sum_squares(v[1:] * self.scale) / np.sqrt(self.assets.date_nb)
         return risk, constraints
 
     def __minimum_risk(self, risk_measure: RiskMeasure, **kwargs) -> Result:

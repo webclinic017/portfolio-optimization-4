@@ -24,9 +24,13 @@ class BasePortfolio:
                  tag: str | None = None,
                  fitness_metrics: list[Metrics] | None = None,
                  validate: bool = True,
+                 compounded: bool = False,
                  annualized_factor: float = 1,
+                 value_at_risk_beta: float = 0.95,
                  cvar_beta: float = 0.95,
                  cdar_beta: float = 0.95,
+                 entropic_risk_measure_theta:float=1,
+                 entropic_risk_measure_beta:float=0.95,
                  min_acceptable_return: float | None = None):
         r"""
         Base Portfolio
@@ -54,6 +58,9 @@ class BasePortfolio:
         validate: bool, default True
                   If True, the Class attributes are validated
 
+        compounded: bool, default False
+                    If True, we use compounded cumulative returns otherwise we use uncompounded cumulative returns
+
         annualized_factor: float, default 1
                            This factor is used to annualize the risk metrics.
                            Per default (annualized_factor=1), the risk metrics are expressed in the same periodicity
@@ -75,9 +82,13 @@ class BasePortfolio:
         self._dates = dates
         self.fitness_metrics = fitness_metrics if fitness_metrics is not None else [Metrics.MEAN, Metrics.STD]
         self.tag = tag if tag is not None else self._name
+        self._compounded = compounded
         self._annualized_factor = annualized_factor
+        self._value_at_risk_beta = value_at_risk_beta
         self._cvar_beta = cvar_beta
         self._cdar_beta = cdar_beta
+        self._entropic_risk_measure_theta = entropic_risk_measure_theta
+        self._entropic_risk_measure_beta=entropic_risk_measure_beta
         self._min_acceptable_return = min_acceptable_return
 
         if validate:
@@ -148,8 +159,28 @@ class BasePortfolio:
         self._name = value
 
     @property
+    def value_at_risk_beta(self) -> float:
+        return self._value_at_risk_beta
+
+    @value_at_risk_beta.setter
+    def value_at_risk_beta(self, value: float) -> None:
+        for attr in ['value_at_risk', 'value_at_risk_ratio']:
+            self.__dict__.pop(attr, None)
+        self._value_at_risk_beta = value
+
+    @property
     def cvar_beta(self) -> float:
         return self._cvar_beta
+
+    @cvar_beta.setter
+    def cvar_beta(self, value: float) -> None:
+        for attr in ['cvar', 'cvar_ratio']:
+            self.__dict__.pop(attr, None)
+        self._cvar_beta = value
+
+    @property
+    def entropic_risk_measure_beta(self) -> float:
+        return self._entropic_risk_measure_beta
 
     @cvar_beta.setter
     def cvar_beta(self, value: float) -> None:
@@ -175,6 +206,15 @@ class BasePortfolio:
     def annualized_factor(self, value: float) -> None:
         self._reset()
         self._annualized_factor = value
+
+    @property
+    def compounded(self) -> bool:
+        return self._compounded
+
+    @compounded.setter
+    def compounded(self, value: bool) -> None:
+        self._reset()
+        self._compounded = value
 
     @property
     def min_acceptable_return(self) -> float | None:
@@ -207,14 +247,11 @@ class BasePortfolio:
 
     @cached_property
     def cumulative_returns(self) -> np.ndarray:
-        cumulative_returns = (self.returns + 1).cumprod()
-        cumulative_returns = np.insert(cumulative_returns, 0, 1)
+        if self.compounded:
+            cumulative_returns = np.cumprod(np.insert(self.returns, 0, 0) + 1)
+        else:
+            cumulative_returns = np.cumsum(np.insert(self.returns, 0, 1))
         return cumulative_returns
-
-    @cached_property
-    def cumulative_returns_uncompounded(self) -> np.ndarray:
-        returns = np.insert(self.returns, 0, 1)
-        return np.cumsum(returns)
 
     @property
     def returns_df(self) -> pd.Series:
@@ -224,13 +261,7 @@ class BasePortfolio:
     def cumulative_returns_df(self) -> pd.Series:
         init_date = self.dates[0] - (self.dates[1] - self.dates[0])
         index = np.insert(self.dates, 0, init_date)
-        return pd.Series(index=index, data=self.cumulative_returns, name='prices_compounded')
-
-    @property
-    def cumulative_returns_uncompounded_df(self) -> pd.Series:
-        init_date = self.dates[0] - (self.dates[1] - self.dates[0])
-        index = np.insert(self.dates, 0, init_date)
-        return pd.Series(index=index, data=self.cumulative_returns_uncompounded, name='prices_uncompounded')
+        return pd.Series(index=index, data=self.cumulative_returns, name='cumulative_returns')
 
     # Mean
     @cached_property
@@ -239,30 +270,102 @@ class BasePortfolio:
 
     # Risk Measures
     @cached_property
+    def mad(self) -> float:
+        r"""
+        Mean Absolute Deviation (MAD).
+        """
+        return mad(returns=self.returns) * self.annualized_factor
+
+    @cached_property
+    def first_lower_partial_moment(self) -> float:
+        r"""
+        First Lower Partial Moment.
+        The First Lower Partial Moment is the mean of the returns below a minimum acceptable return
+        (min_acceptable_return, default mean)
+        """
+        return (first_lower_partial_moment(returns=self.returns, min_acceptable_return=self.min_acceptable_return)
+                * self.annualized_factor)
+
+    @cached_property
     def variance(self) -> float:
+        r"""
+        Variance
+        """
         return self.returns.var(ddof=1) * self.annualized_factor
 
     @property
     def std(self) -> float:
+        r""""
+        Standard Deviation (STD)
+        """
         return np.sqrt(self.variance)
 
     @cached_property
     def semi_variance(self) -> float:
+        r"""
+        Semi Variance (Second Lower Partial Moment).
+        The Semi Variance is the variance of the returns below a minimum acceptable return
+        (min_acceptable_return, default mean).
+        """
         return (semi_variance(returns=self.returns, min_acceptable_return=self.min_acceptable_return)
                 * self.annualized_factor)
 
     @property
     def semi_std(self) -> float:
+        r"""
+        Semi Standard Deviation (Square Root of the Second Lower Partial Moment).
+        The Semi Standard Deviation is the Standard Deviation of the returns below a minimum acceptable return.
+        """
         return np.sqrt(self.semi_variance)
 
     @cached_property
     def kurtosis(self) -> float:
+        r"""
+        Kurtosis (Fourth Central Moment).
+        The Kurtosis is a measure of the heaviness of the tail of the distribution.
+        Higher kurtosis corresponds to greater extremity of deviations (fat tails).
+        """
         return kurtosis(returns=self.returns) * self.annualized_factor
 
     @property
     def semi_kurtosis(self) -> float:
+        r"""
+        Semi Kurtosis (Fourth Lower Partial Moment).
+        The Semi Kurtosis is a measure of the heaviness of the downside tail of the returns below a minimum acceptable
+        return (min_acceptable_return, default mean)
+        Higher Semi Kurtosis corresponds to greater extremity of downside deviations (downside fat tail).
+        """
         return (semi_kurtosis(returns=self.returns, min_acceptable_return=self.min_acceptable_return)
                 * self.annualized_factor)
+
+    @property
+    def value_at_risk(self) -> float:
+        r"""
+        Historical Value at Risk (VaR).
+        The VaR is the maximum loss at a given confidence level (value_at_risk_beta, default 95%)
+        """
+        return value_at_risk(returns=self.returns, beta=self.value_at_risk_beta)
+
+    @cached_property
+    def cvar(self) -> float:
+        """
+        Historical Conditional Value at Risk (CVaR).
+        The CVaR (or Tail VaR) represents the mean shortfall at a specified confidence level (cvar_beta, default 95%).
+        """
+        return cvar(returns=self.returns, beta=self.cvar_beta)
+
+    @cached_property
+    def entropic_risk_measure(self) -> float:
+        """
+        Entropic Risk Measure.
+        The Entropic Risk Measure is a risk measure which depends on the risk aversion defined by the investor
+        (entropic_risk_measure_theta, default 1) through the exponential utility function at a given confidence level
+        (entropic_risk_measure_beta, default 95%).
+        """
+        return entropic_risk_measure(returns=self.returns,
+                                     theta=self.entropic_risk_measure_theta,
+                                     beta=self.entropic_risk_measure_beta)
+
 
     @cached_property
     def max_drawdown(self) -> float:
@@ -274,20 +377,6 @@ class BasePortfolio:
         Conditional Drawdown at Risk (CDaR) with a confidence level at self.cdar_beta (default 95%)
         """
         return cdar(returns=self.returns, beta=self.cdar_beta)
-
-    @cached_property
-    def cvar(self) -> float:
-        """
-        Conditional historical Value at Risk (CVaR) with a confidence level at self.cvar_beta (default 95%)
-        """
-        return cvar(returns=self.returns, beta=self.cvar_beta)
-
-    @cached_property
-    def mad(self) -> float:
-        """
-        Mean Absolute Deviation (MAD)
-        """
-        return mad(returns=self.returns) * self.annualized_factor
 
     @property
     def sharpe_ratio(self) -> float:

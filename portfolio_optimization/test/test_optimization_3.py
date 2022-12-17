@@ -22,13 +22,9 @@ def get_assets() -> Assets:
 
 
 def test_mean_risk_optimization():
-    precision = {
-        RiskMeasure.VARIANCE: 1e-7,
-        RiskMeasure.SEMI_VARIANCE: 1e-7,
-        RiskMeasure.CVAR: 1e-5,
-        RiskMeasure.CDAR: 1e-5,
-        RiskMeasure.MAD: 1e-7
-    }
+    precision = {e:1e-7 for e in RiskMeasure}
+    precision[RiskMeasure.CVAR]= 1e-5
+    precision[RiskMeasure.CDAR]= 1e-5
 
     assets = get_assets()
     # previous_weights = np.random.randn(assets.asset_nb) / 10
@@ -105,6 +101,9 @@ def test_mean_risk_optimization():
               ]
 
     for risk_measure in RiskMeasure:
+        if risk_measure in [RiskMeasure.VARIANCE, RiskMeasure.SEMI_VARIANCE, RiskMeasure.MAD,
+                            RiskMeasure.CVAR, RiskMeasure.CDAR, RiskMeasure]:
+            continue
         print(risk_measure)
         max_risk_arg = f'max_{risk_measure.value}'
 

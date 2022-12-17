@@ -137,7 +137,8 @@ def semi_kurtosis(returns: np.ndarray,
 
 def value_at_risk(returns: np.ndarray, beta: float = 0.95) -> float:
     r"""
-    Calculate the VaR (Value at Risk).
+    Calculate the historical VaR (Value at Risk).
+    The VaR is the maximum loss at a given confidence level (beta).
 
     Parameters
     ----------
@@ -162,6 +163,7 @@ def value_at_risk(returns: np.ndarray, beta: float = 0.95) -> float:
 def cvar(returns: np.ndarray, beta: float = 0.95) -> float:
     r"""
     Calculate the historical CVaR (Conditional Value at Risk).
+    The CVaR (or Tail VaR) represents the mean shortfall at a specified confidence level.
 
     Parameters
     ----------
@@ -188,8 +190,8 @@ def entropic_risk_measure(returns: np.ndarray,
                           beta: float = 0.95) -> float:
     r"""
     Calculate the Entropic Risk Measure.
-    The Entropic Risk Measure is a risk measure which depends on the risk aversion of the user through
-    the exponential utility function.
+    The Entropic Risk Measure is a risk measure which depends on the risk aversion defined by the onvestor (theat)
+     througt the exponential utility function at a given confidence level (beta).
 
     Parameters
     ----------
@@ -430,6 +432,10 @@ def _owa_gmd_weights(t: int) -> np.ndarray:
 def gini_mean_difference(returns: np.ndarray) -> float:
     r"""
     Calculate the Gini Mean Difference (GMD).
+    The Gini Mean Difference is the expected absolute difference between two realisations.
+    The GMD is a superior measure of variability  for non-normal distribution than the variance.
+    It can be used to form necessary conditions for second-degree stochastic dominance, while the
+    variance cannot.
 
     Parameters
     ----------

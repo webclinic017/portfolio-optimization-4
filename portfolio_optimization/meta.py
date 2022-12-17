@@ -5,7 +5,8 @@ __all__ = ['AVG_TRADING_DAYS_PER_YEAR',
            'Metrics',
            'InvestmentType',
            'RiskMeasure',
-           'ObjectiveFunction']
+           'ObjectiveFunction',
+           'Ratios']
 
 AVG_TRADING_DAYS_PER_YEAR = 255
 ZERO_THRESHOLD = 1e-4
@@ -18,34 +19,35 @@ class InvestmentType(Enum):
 
 
 class RiskMeasure(Enum):
+    MAD = 'mad'
     VARIANCE = 'variance'
     SEMI_VARIANCE = 'semi_variance'
     CVAR = 'cvar'
-    CDAR = 'cdar'
-    MAD = 'mad'
-
-
-class Metrics(Enum):
-    MEAN = 'mean'
-    STD = 'std'
-    VARIANCE = 'variance'
-    SEMI_STD = 'semi_std'
-    SEMI_VARIANCE = 'semi_variance'
-    KURTOSIS = 'kurtosis'
-    SEMI_KURTOSIS = 'semi_kurtosis'
+    WORST_REALISATION = 'worst_realisation'
+    LOWER_PARTIAL_MOMENT = 'lower_partial_moment'
     MAX_DRAWDOWN = 'max_drawdown'
+    AVG_DRAWDOWN = 'avg_drawdown'
     CDAR = 'cdar'
-    CVAR = 'cvar'
-    MAD = 'mad'
+    ULCER_INDEX = 'ulcer_index'
+
+
+class Ratios(Enum):
     SHARPE_RATIO = 'sharpe_ratio'
     SORTINO_RATIO = 'sortino_ratio'
     CALMAR_RATIO = 'calmar_ratio'
     CDAR_RATIO = 'cdar_ratio'
     CVAR_RATIO = 'cvar_ratio'
 
-    @property
-    def is_ration(self) -> bool:
-        return self.value[-5:] == 'ratio'
+
+_metrics = {'MEAN': 'mean'}
+_metrics.update({e.name: e.value for e in RiskMeasure})
+_metrics.update({e.name: e.value for e in Ratios})
+_metrics.update({'STD': 'std',
+                 'SEMI_STD': 'semi_std',
+                 'KURTOSIS': 'kurtosis',
+                 'SEMI_KURTOSIS': 'semi_kurtosis'})
+
+Metrics = Enum('Metrics', _metrics)
 
 
 class ObjectiveFunction(Enum):
