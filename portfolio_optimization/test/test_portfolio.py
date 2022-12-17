@@ -131,3 +131,18 @@ def test_portfolio_dominate():
         # Doesn't dominate itself (same front)
         assert portfolio_1.dominates(portfolio_1) is False
         assert dominate_slow(portfolio_1.fitness, portfolio_2.fitness) == portfolio_1.dominates(portfolio_2)
+
+
+def test_portfolio_risk_contribution():
+    prices = load_prices(file=TEST_PRICES_PATH)
+    start_date = dt.date(2017, 1, 1)
+    assets = Assets(prices=prices,
+                    start_date=start_date,
+                    verbose=False)
+    weights = rand_weights(n=assets.asset_nb)
+    portfolio = Portfolio(weights=weights, assets=assets)
+    rc = portfolio.risk_contribution(risk_measure=RiskMeasure.CVAR)
+    res = np.array([0.00082983, 0.00177162, 0.00102906, 0.00095738, 0.00391156,
+                    0.00316365, 0.00267085, 0.00381241, 0.00151671, 0.00172625,
+                    0.00217162])
+    np.testing.assert_array_almost_equal(rc, res, decimal=8)

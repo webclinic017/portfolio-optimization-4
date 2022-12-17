@@ -5,10 +5,11 @@ import plotly.express as px
 from functools import cache, cached_property
 import numbers
 import plotly.graph_objects as go
-from portfolio_optimization.meta import Metrics, AVG_TRADING_DAYS_PER_YEAR, ZERO_THRESHOLD
+from portfolio_optimization.meta import Metrics, AVG_TRADING_DAYS_PER_YEAR, ZERO_THRESHOLD, RiskMeasure
 from portfolio_optimization.assets import Assets
 from portfolio_optimization.utils.sorting import dominate
 from portfolio_optimization.utils.metrics import *
+from portfolio_optimization.utils.tools import args_names
 
 __all__ = ['BasePortfolio',
            'Portfolio',
@@ -324,7 +325,6 @@ class BasePortfolio:
         res = []
         for metric in self.fitness_metrics:
             if metric in [Metrics.MEAN,
-                          Metrics.ANNUALIZED_MEAN,
                           Metrics.SHARPE_RATIO,
                           Metrics.SORTINO_RATIO,
                           Metrics.CALMAR_RATIO,
@@ -653,6 +653,36 @@ class Portfolio(BasePortfolio):
         df.rename(columns={'weight': self.name}, inplace=True)
         df.set_index('asset', inplace=True)
         return df
+
+    def risk_contribution(self, risk_measure: RiskMeasure, spacing: float = 1e-7) -> np.ndarray:
+        r"""
+        Calculate the risk contribution of each asset for a risk measure.
+
+        Parameters
+        ----------
+        risk_measure: RiskMeasure
+                      The risk measure used for the risk contribution computation
+
+        spacing: float, default 1e-7
+                The spacing "h" of the finite difference: rc(wi) = (risk(wi-h) - risk(wi+h)) / 2h
+
+        Returns
+        -------
+        value: 1d array
+               The risk contribution of each asset
+        """
+        args = {arg: getattr(self, arg) for arg in args_names(self.__init__)}
+
+        def get_risk(i: int, h: float) -> float:
+            a = args.copy()
+            w = a['weights'].copy()
+            w[i] += h
+            a['weights'] = w
+            return getattr(Portfolio(**a), risk_measure.value)
+
+        rc = [(get_risk(i, h=spacing) - get_risk(i, h=-spacing)) / (2 * spacing) * self.weights[i]
+              for i in range(len(self.weights))]
+        return np.array(rc)
 
     def _reset(self) -> None:
         super()._reset()
