@@ -21,7 +21,7 @@ def load_population() -> Population:
     for i in range(100):
         weights = rand_weights(n=assets.asset_nb, zeros=assets.asset_nb - 10)
         portfolio = Portfolio(weights=weights,
-                              fitness_metrics=[Metrics.MEAN, Metrics.SEMI_STD, Metrics.MAX_DRAWDOWN],
+                              fitness_metrics=[Metric.MEAN, Metric.SEMI_STD, Metric.MAX_DRAWDOWN],
                               assets=assets,
                               name=str(i))
         population.append(portfolio)
@@ -38,7 +38,7 @@ def load_multi_period_portfolio() -> MultiPeriodPortfolio:
                (dt.date(2017, 5, 1), dt.date(2017, 8, 1))]
 
     mpp = MultiPeriodPortfolio(name='mmp',
-                               fitness_metrics=[Metrics.MEAN, Metrics.SEMI_STD, Metrics.MAX_DRAWDOWN],
+                               fitness_metrics=[Metric.MEAN, Metric.SEMI_STD, Metric.MAX_DRAWDOWN],
                                )
     for i, period in enumerate(periods):
         assets = Assets(prices=prices,
@@ -108,7 +108,7 @@ def test_magic_methods():
     assert population[10] == new_ptf
     ptf = copy(new_ptf)
     ptf.name = 'different_fitness'
-    ptf.fitness_metrics = [Metrics.MEAN, Metrics.SEMI_STD, Metrics.SORTINO_RATIO]
+    ptf.fitness_metrics = [Metric.MEAN, Metric.SEMI_STD, Metric.SORTINO_RATIO]
     try:
         population.append(ptf)
         raise
@@ -136,9 +136,9 @@ def test_non_dominated_sorting():
 def test_plot():
     population = load_population()
 
-    assert population.plot_metrics(x=Metrics.ANNUALIZED_SEMISTD,
-                                   y=Metrics.ANNUALIZED_MEAN,
-                                   z=Metrics.MAX_DRAWDOWN,
+    assert population.plot_metrics(x=Metric.ANNUALIZED_SEMISTD,
+                                   y=Metric.ANNUALIZED_MEAN,
+                                   z=Metric.MAX_DRAWDOWN,
                                    fronts=True,
                                    show=False)
 
@@ -151,20 +151,20 @@ def test_multi_period_portfolio():
     assert population.fronts
     assert len(population) == 101
 
-    assert population.plot_metrics(x=Metrics.ANNUALIZED_STD,
-                                   y=Metrics.ANNUALIZED_MEAN,
+    assert population.plot_metrics(x=Metric.ANNUALIZED_STD,
+                                   y=Metric.ANNUALIZED_MEAN,
                                    fronts=True,
                                    show=False)
 
-    assert population.plot_metrics(x=Metrics.ANNUALIZED_STD,
-                                   y=Metrics.ANNUALIZED_MEAN,
-                                   hover_metrics=[Metrics.SHARPE_RATIO],
+    assert population.plot_metrics(x=Metric.ANNUALIZED_STD,
+                                   y=Metric.ANNUALIZED_MEAN,
+                                   hover_metrics=[Metric.SHARPE_RATIO],
                                    tags='random',
                                    title='Portfolios -- with sharpe ration',
                                    show=False)
 
-    assert (population.min(metric=Metrics.ANNUALIZED_MEAN).annualized_mean
-            <= population.max(metric=Metrics.ANNUALIZED_MEAN).annualized_mean)
+    assert (population.min(metric=Metric.ANNUALIZED_MEAN).annualized_mean
+            <= population.max(metric=Metric.ANNUALIZED_MEAN).annualized_mean)
 
     # composition
     assert isinstance(population.composition(), pd.DataFrame)

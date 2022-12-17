@@ -112,7 +112,7 @@ def t():
     e = time.time()
     print((e - s) * 1000)
 
-    population.plot_metrics(x=Metrics.ANNUALIZED_STD, y=Metrics.CDAR, z=Metrics.ANNUALIZED_MEAN, to_surface=True)
+    population.plot_metrics(x=Metric.ANNUALIZED_STD, y=Metric.CDAR, z=Metric.ANNUALIZED_MEAN, to_surface=True)
 
     self = model
 

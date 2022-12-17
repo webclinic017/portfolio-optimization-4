@@ -436,7 +436,7 @@ def test_maximum_sharpe():
         population.append(Portfolio(weights=weights,
                                     assets=assets))
 
-    max_sharpe_ptf = population.max(metric=Metrics.SHARPE_RATIO)
+    max_sharpe_ptf = population.max(metric=Metric.SHARPE_RATIO)
 
     assert abs(sum(portfolio.weights) - 1) < 1e-5
     assert abs(sum(max_sharpe_ptf.weights) - 1) < 1e-5

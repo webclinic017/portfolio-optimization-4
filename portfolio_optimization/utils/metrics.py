@@ -1,5 +1,3 @@
-import time
-
 import numpy as np
 from scipy.optimize import minimize, Bounds
 
@@ -9,7 +7,7 @@ __all__ = ['semi_variance',
            'cvar',
            'mad',
            'value_at_risk',
-           'worst_return',
+           'worst_realization',
            'first_lower_partial_moment',
            'entropic_risk_measure',
            'evar',
@@ -243,9 +241,9 @@ def evar(returns: np.ndarray, beta: float = 0.95) -> tuple[float, float]:
     return result.fun, result.x[0]
 
 
-def worst_return(returns: np.ndarray) -> float:
+def worst_realization(returns: np.ndarray) -> float:
     r"""
-    Calculate the Worst Return (Worst Realization).
+    Calculate the Worst Realization (Worst Return).
 
     Parameters
     ----------
@@ -274,24 +272,25 @@ def dar(returns: np.ndarray,
         beta: float = 0.95,
         compounded: bool = False) -> float:
     r"""
-   Calculate the Drawdown at Risk (DaR).
+    Calculate the Drawdown at Risk (DaR).
+    The DaR is the maximum drawdown at a given confidence level (beta)
 
-   Parameters
-   ----------
-   returns : 1d-array
-             The returns array
+    Parameters
+    ----------
+    returns : 1d-array
+         The returns array
 
-   beta: float, default = 0.95
-         The drawdown confidence level (expected drawdown on the worst (1-beta)% observations)
+    beta: float, default = 0.95
+     The drawdown confidence level (expected drawdown on the worst (1-beta)% observations)
 
-   compounded: bool, default False
-               If True, we use compounded cumulative returns otherwise we use uncompounded cumulative returns
+    compounded: bool, default False
+           If True, we use compounded cumulative returns otherwise we use uncompounded cumulative returns
 
-   Returns
-   -------
-   value : float
-           The DaR
-   """
+    Returns
+    -------
+    value : float
+       The DaR
+    """
     drawdowns = _drawdowns(returns=returns, compounded=compounded)
     return value_at_risk(returns=drawdowns, beta=beta)
 
@@ -449,43 +448,3 @@ def gini_mean_difference(returns: np.ndarray) -> float:
     """
     w = _owa_gmd_weights(len(returns))
     return w @ np.sort(returns, axis=0)
-
-
-
-def TG(X, alpha=0.05, a_sim=100):
-    r"""
-    Calculate the Tail Gini of a returns series.
-
-    Parameters
-    ----------
-    X : 1d-array
-        Returns series, must have Tx1 size.
-    alpha : float, optional
-        Significance level of Tail Gini. The default is 0.05.
-    a_sim : float, optional
-        Number of CVaRs used to approximate Tail Gini. The default is 100.
-
-    Raises
-    ------
-    ValueError
-        When the value cannot be calculated.
-
-    Returns
-    -------
-    value : float
-        Ulcer Index of a cumpounded cumulative returns.
-
-    """
-
-    a = np.array(X, ndmin=2)
-    if a.shape[0] == 1 and a.shape[1] > 1:
-        a = a.T
-    if a.shape[0] > 1 and a.shape[1] > 1:
-        raise ValueError("returns must have Tx1 size")
-
-    T = a.shape[0]
-    w_ = owa.owa_tg(T, alpha, a_sim)
-    value = (w_.T @ np.sort(a, axis=0)).item()
-
-    return value
-

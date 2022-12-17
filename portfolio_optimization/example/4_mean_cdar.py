@@ -1,6 +1,6 @@
 import datetime as dt
 
-from portfolio_optimization import (EXAMPLE_PRICES_PATH, InvestmentType, Metrics, Portfolio,
+from portfolio_optimization import (EXAMPLE_PRICES_PATH, InvestmentType, Metric, Portfolio,
                                     Population, Optimization, load_assets, load_prices)
 
 if __name__ == '__main__':
@@ -36,28 +36,28 @@ if __name__ == '__main__':
                                     tag='mean_cdar'))
 
     # Plot
-    population.plot_metrics(x=Metrics.ANNUALIZED_STD,
-                            y=Metrics.ANNUALIZED_MEAN,
-                            color_scale=Metrics.SHARPE_RATIO,
-                            hover_metrics=[Metrics.SHARPE_RATIO])
-    population.plot_metrics(x=Metrics.ANNUALIZED_SEMISTD,
-                            y=Metrics.ANNUALIZED_MEAN,
-                            color_scale=Metrics.SORTINO_RATIO,
-                            hover_metrics=[Metrics.SHARPE_RATIO])
-    population.plot_metrics(x=Metrics.MAX_DRAWDOWN,
-                            y=Metrics.ANNUALIZED_MEAN,
-                            color_scale=Metrics.CALMAR_RATIO,
-                            hover_metrics=[Metrics.SHARPE_RATIO])
-    population.plot_metrics(x=Metrics.CDAR,
-                            y=Metrics.ANNUALIZED_MEAN,
-                            color_scale=Metrics.CDAR_RATIO,
-                            hover_metrics=[Metrics.SHARPE_RATIO])
+    population.plot_metrics(x=Metric.ANNUALIZED_STD,
+                            y=Metric.ANNUALIZED_MEAN,
+                            color_scale=Metric.SHARPE_RATIO,
+                            hover_metrics=[Metric.SHARPE_RATIO])
+    population.plot_metrics(x=Metric.ANNUALIZED_SEMISTD,
+                            y=Metric.ANNUALIZED_MEAN,
+                            color_scale=Metric.SORTINO_RATIO,
+                            hover_metrics=[Metric.SHARPE_RATIO])
+    population.plot_metrics(x=Metric.MAX_DRAWDOWN,
+                            y=Metric.ANNUALIZED_MEAN,
+                            color_scale=Metric.CALMAR_RATIO,
+                            hover_metrics=[Metric.SHARPE_RATIO])
+    population.plot_metrics(x=Metric.CDAR,
+                            y=Metric.ANNUALIZED_MEAN,
+                            color_scale=Metric.CDAR_RATIO,
+                            hover_metrics=[Metric.SHARPE_RATIO])
 
     # Metrics
-    max_sharpe = population.max(metric=Metrics.SHARPE_RATIO)
+    max_sharpe = population.max(metric=Metric.SHARPE_RATIO)
     print(max_sharpe.sharpe_ratio)
 
-    max_cdar_95_ratio = population.max(metric=Metrics.CDAR_RATIO)
+    max_cdar_95_ratio = population.max(metric=Metric.CDAR_RATIO)
     print(max_cdar_95_ratio.cdar_ratio)
 
     # Composition
@@ -105,20 +105,20 @@ def mean_cdar_vs_mean_cvar():
                                     tag='mean_cvar'))
 
     # Plot
-    population.plot_metrics(x=Metrics.CDAR,
-                            y=Metrics.ANNUALIZED_MEAN,
-                            color_scale=Metrics.CDAR_RATIO,
-                            hover_metrics=[Metrics.SHARPE_RATIO])
-    population.plot_metrics(x=Metrics.CVAR,
-                            y=Metrics.ANNUALIZED_MEAN,
-                            color_scale=Metrics.CVAR_RATIO,
-                            hover_metrics=[Metrics.SHARPE_RATIO])
+    population.plot_metrics(x=Metric.CDAR,
+                            y=Metric.ANNUALIZED_MEAN,
+                            color_scale=Metric.CDAR_RATIO,
+                            hover_metrics=[Metric.SHARPE_RATIO])
+    population.plot_metrics(x=Metric.CVAR,
+                            y=Metric.ANNUALIZED_MEAN,
+                            color_scale=Metric.CVAR_RATIO,
+                            hover_metrics=[Metric.SHARPE_RATIO])
 
     # Metrics
-    max_cdar_95_ratio = population.max(metric=Metrics.CDAR_RATIO)
+    max_cdar_95_ratio = population.max(metric=Metric.CDAR_RATIO)
     print(max_cdar_95_ratio.cdar_ratio)
 
-    max_cvar_95_ratio = population.max(metric=Metrics.CVAR_RATIO)
+    max_cvar_95_ratio = population.max(metric=Metric.CVAR_RATIO)
     print(max_cvar_95_ratio.cvar_ratio)
 
     # Composition

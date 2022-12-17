@@ -36,17 +36,17 @@ if __name__ == '__main__':
                                     tag=f'test_{assets_test.name}'))
 
     # Plot
-    population.plot_metrics(x=Metrics.ANNUALIZED_STD,
-                            y=Metrics.ANNUALIZED_MEAN,
-                            color_scale=Metrics.SHARPE_RATIO)
-    population.plot_metrics(x=Metrics.ANNUALIZED_STD,
-                            y=Metrics.ANNUALIZED_MEAN,
+    population.plot_metrics(x=Metric.ANNUALIZED_STD,
+                            y=Metric.ANNUALIZED_MEAN,
+                            color_scale=Metric.SHARPE_RATIO)
+    population.plot_metrics(x=Metric.ANNUALIZED_STD,
+                            y=Metric.ANNUALIZED_MEAN,
                             color_scale='tag',
                             names=[f'{x}_{assets_test.name}_{i}' for i in range(10) for x in ['train', 'test']]+
                                   [f'train_{assets_train.name}_{i}' for i in range(10) ])
     population.plot_composition(tags=[f'train_{assets_train.name}', f'train_{assets_test.name}'])
 
     # Metrics
-    max_sortino = population.max(metric=Metrics.SORTINO_RATIO)
+    max_sortino = population.max(metric=Metric.SORTINO_RATIO)
     print(max_sortino.sortino_ratio)
 

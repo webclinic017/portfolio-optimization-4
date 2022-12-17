@@ -38,21 +38,21 @@ if __name__ == '__main__':
                                     tag='mean_semivariance'))
 
     # Plot
-    population.plot_metrics(x=Metrics.ANNUALIZED_STD,
-                            y=Metrics.ANNUALIZED_MEAN,
-                            color_scale=Metrics.SHARPE_RATIO,
-                            hover_metrics=[Metrics.SORTINO_RATIO])
-    population.plot_metrics(x=Metrics.ANNUALIZED_SEMISTD,
-                            y=Metrics.ANNUALIZED_MEAN,
-                            color_scale=Metrics.SORTINO_RATIO,
-                            hover_metrics=[Metrics.SHARPE_RATIO])
+    population.plot_metrics(x=Metric.ANNUALIZED_STD,
+                            y=Metric.ANNUALIZED_MEAN,
+                            color_scale=Metric.SHARPE_RATIO,
+                            hover_metrics=[Metric.SORTINO_RATIO])
+    population.plot_metrics(x=Metric.ANNUALIZED_SEMISTD,
+                            y=Metric.ANNUALIZED_MEAN,
+                            color_scale=Metric.SORTINO_RATIO,
+                            hover_metrics=[Metric.SHARPE_RATIO])
 
     # Metrics
-    max_sharpe_ptf = population.max(metric=Metrics.SHARPE_RATIO)
+    max_sharpe_ptf = population.max(metric=Metric.SHARPE_RATIO)
     print(max_sharpe_ptf.sharpe_ratio)
     print(max_sharpe_ptf.summary())
 
-    max_sortino_ptf = population.max(metric=Metrics.SORTINO_RATIO)
+    max_sortino_ptf = population.max(metric=Metric.SORTINO_RATIO)
     print(max_sortino_ptf.sortino_ratio)
     print(max_sharpe_ptf.summary())
 

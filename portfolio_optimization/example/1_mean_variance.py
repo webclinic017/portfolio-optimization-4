@@ -1,7 +1,7 @@
 import datetime as dt
 import numpy as np
 
-from portfolio_optimization import (EXAMPLE_PRICES_PATH, InvestmentType, Metrics, Portfolio,
+from portfolio_optimization import (EXAMPLE_PRICES_PATH, InvestmentType, Metric, Portfolio,
                                     Population, Optimization, load_assets, load_prices)
 
 if __name__ == '__main__':
@@ -62,18 +62,18 @@ if __name__ == '__main__':
                                     tag='mean_variance'))
 
     # Plot
-    population.plot_metrics(x=Metrics.ANNUALIZED_STD,
-                            y=Metrics.ANNUALIZED_MEAN,
-                            color_scale=Metrics.SHARPE_RATIO,
-                            hover_metrics=[Metrics.MAX_DRAWDOWN, Metrics.SORTINO_RATIO])
+    population.plot_metrics(x=Metric.ANNUALIZED_STD,
+                            y=Metric.ANNUALIZED_MEAN,
+                            color_scale=Metric.SHARPE_RATIO,
+                            hover_metrics=[Metric.MAX_DRAWDOWN, Metric.SORTINO_RATIO])
 
     # Find the portfolio with maximum Sharpe Ratio
-    max_sharpe_ptf = population.max(metric=Metrics.SHARPE_RATIO)
+    max_sharpe_ptf = population.max(metric=Metric.SHARPE_RATIO)
     print(max_sharpe_ptf.sharpe_ratio)
     print(max_sharpe_ptf.summary())
 
     # Find the portfolio with maximum CDaR 95% Ratio
-    max_cdar_95_ptf = population.max(metric=Metrics.CDAR_RATIO)
+    max_cdar_95_ptf = population.max(metric=Metric.CDAR_RATIO)
     print(max_cdar_95_ptf.cdar_ratio)
     print(max_cdar_95_ptf.summary())
 

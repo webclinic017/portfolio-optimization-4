@@ -5,8 +5,7 @@ import plotly.express as px
 from functools import cache, cached_property
 import numbers
 import plotly.graph_objects as go
-from portfolio_optimization.meta import (Metrics, AVG_TRADING_DAYS_PER_YEAR, ZERO_THRESHOLD, RiskMeasure,
-                                         RiskMeasureRatio)
+from portfolio_optimization.meta import Metric, AVG_TRADING_DAYS_PER_YEAR, ZERO_THRESHOLD, RiskMeasure, Ratio
 from portfolio_optimization.assets import Assets
 from portfolio_optimization.utils.sorting import dominate
 from portfolio_optimization.utils.metrics import *
@@ -18,7 +17,6 @@ __all__ = ['BasePortfolio',
 
 
 class RiskMeasureAttr:
-
     def __set_name__(self, owner, name):
         self.public_name = name
         self.private_name = f'_{name}'
@@ -29,13 +27,12 @@ class RiskMeasureAttr:
     def __set__(self, obj, value):
         # Clear the property cache of the associated risk measure
         risk_measure = RiskMeasure('_'.join(self.public_name.split('_')[:-1]))
-        for attr in [risk_measure.name, RiskMeasureRatio[risk_measure].name]:
+        for attr in [risk_measure.value, risk_measure.ratio().value]:
             self.__dict__.pop(attr, None)
         setattr(obj, self.private_name, value)
 
 
 class RessetAttr:
-
     def __set_name__(self, owner, name):
         self.private_name = f'_{name}'
 
@@ -67,7 +64,7 @@ class BasePortfolio:
                  compounded: bool = False,
                  annualized_factor: float = 1,
                  min_acceptable_return: float | None = None,
-                 fitness_metrics: list[Metrics] | None = None,
+                 fitness_metrics: list[Metric] | None = None,
                  value_at_risk_beta: float = 0.95,
                  cvar_beta: float = 0.95,
                  cdar_beta: float = 0.95,
@@ -123,7 +120,7 @@ class BasePortfolio:
         self._returns = returns
         self._dates = dates
 
-        self.fitness_metrics = fitness_metrics if fitness_metrics is not None else [Metrics.MEAN, Metrics.STD]
+        self.fitness_metrics = fitness_metrics if fitness_metrics is not None else [Metric.MEAN, Metric.STD]
         self.tag = tag if tag is not None else self._name
 
         self.compounded = compounded
@@ -173,6 +170,14 @@ class BasePortfolio:
         result._unfreeze()
         return result
 
+    def __getattribute__(self, item):
+        try:
+            ratio = Ratio(item)
+            return self.ratio(ratio=ratio)
+        except ValueError:
+            pass
+        return object.__getattribute__(self, item)
+
     def _freeze(self):
         self._frozen = True
 
@@ -205,14 +210,14 @@ class BasePortfolio:
         self._name = value
 
     @property
-    def fitness_metrics(self) -> list[Metrics]:
+    def fitness_metrics(self) -> list[Metric]:
         return self._fitness_metrics
 
     @fitness_metrics.setter
-    def fitness_metrics(self, value: list[Metrics]) -> None:
+    def fitness_metrics(self, value: list[Metric]) -> None:
         if not isinstance(value, list) or len(value) == 0:
             raise TypeError(f'fitness_metrics should be a non-empty list of Metrics')
-        self._fitness_metrics = [Metrics(v) for v in value]
+        self._fitness_metrics = [Metric(v) for v in value]
         self.__dict__.pop('fitness', None)
 
     @property
@@ -320,7 +325,7 @@ class BasePortfolio:
     def value_at_risk(self) -> float:
         r"""
         Historical Value at Risk (VaR).
-        The VaR is the maximum loss at a given confidence level (value_at_risk_beta, default 95%)
+        The VaR is the maximum loss at a given confidence level (value_at_risk_beta, default 0.95)
         """
         return value_at_risk(returns=self.returns, beta=self.value_at_risk_beta)
 
@@ -328,7 +333,7 @@ class BasePortfolio:
     def cvar(self) -> float:
         r"""
         Historical Conditional Value at Risk (CVaR).
-        The CVaR (or Tail VaR) represents the mean shortfall at a specified confidence level (cvar_beta, default 95%).
+        The CVaR (or Tail VaR) represents the mean shortfall at a specified confidence level (cvar_beta, default 0.95).
         """
         return cvar(returns=self.returns, beta=self.cvar_beta)
 
@@ -338,7 +343,7 @@ class BasePortfolio:
         Entropic Risk Measure.
         The Entropic Risk Measure is a risk measure which depends on the risk aversion defined by the investor
         (entropic_risk_measure_theta, default 1) through the exponential utility function at a given confidence level
-        (entropic_risk_measure_beta, default 95%).
+        (entropic_risk_measure_beta, default 0.95).
         """
         return entropic_risk_measure(returns=self.returns,
                                      theta=self.entropic_risk_measure_theta,
@@ -350,44 +355,92 @@ class BasePortfolio:
         Entropic Value at Risk (EVaR).
         The EVaR is a coherent risk measure which is an upper bound for the VaR and the CVaR,
         obtained from the Chernoff inequality. The EVaR can be represented by using the concept of relative entropy.
-        Its confidence level is defined by evar_beta (default 95%)
+        Its confidence level is defined by evar_beta (default 0.95).
         """
         return evar(returns=self.returns, beta=self.evar_beta)[0]
 
     @cached_property
-    def max_drawdown(self) -> float:
-        return max_drawdown(prices=self.cumulative_returns)
+    def worst_realization(self) -> float:
+        r"""
+        Worst Realization (Worst Return)
+        """
+        return worst_realization(returns=self.returns)
+
+    @cached_property
+    def dar(self) -> float:
+        r"""
+        Drawdown at Risk (DaR).
+        The DaR is the maximum drawdown at a given confidence level (dar_beta, default 0.95).
+        """
+        return dar(returns=self.returns, beta=self.dar_beta, compounded=self.compounded)
 
     @cached_property
     def cdar(self) -> float:
         """
-        Conditional Drawdown at Risk (CDaR) with a confidence level at self.cdar_beta (default 95%)
+        Conditional Drawdown at Risk (CDaR) at a given confidence level (cdar, default 0.95).
         """
         return cdar(returns=self.returns, beta=self.cdar_beta)
 
-    @property
-    def sharpe_ratio(self) -> float:
-        return self.mean / self.std
+    @cached_property
+    def max_drawdown(self) -> float:
+        r"""
+        Maximum Drawdown.
+        """
+        return max_drawdown(returns=self.returns, compounded=self.compounded)
 
-    @property
-    def sortino_ratio(self) -> float:
-        return self.mean / self.semi_std
+    @cached_property
+    def avg_drawdown(self) -> float:
+        r"""
+        Average Drawdown.
+        """
+        return avg_drawdown(returns=self.returns, compounded=self.compounded)
 
-    @property
-    def calmar_ratio(self) -> float:
-        return self.mean / self.max_drawdown
+    @cached_property
+    def edar(self) -> float:
+        r"""
+        Entropic Drawdown at Risk (EDaR).
+        The EDaR is a coherent risk measure which is an upper bound for the DaR and the CDaR,
+        obtained from the Chernoff inequality. The EDaR can be represented by using the concept of relative entropy.
+        Its confidence level is defined by edar_beta (default 0.95).
+        """
+        return edar(returns=self.returns, beta=self.edar_beta, compounded=self.compounded)[0]
 
-    @property
-    def cdar_ratio(self) -> float:
-        return self.mean / self.cdar
+    @cached_property
+    def ulcer_index(self) -> float:
+        r"""
+        Ulcer Index
+        """
+        return ulcer_index(returns=self.returns, compounded=self.compounded)
 
-    @property
-    def cvar_ratio(self) -> float:
-        return self.mean / self.cvar
+    @cached_property
+    def gini_mean_difference(self) -> float:
+        r"""
+        Gini Mean Difference (GMD).
+        The Gini Mean Difference is the expected absolute difference between two realisations.
+        The GMD is a superior measure of variability  for non-normal distribution than the variance.
+        It can be used to form necessary conditions for second-degree stochastic dominance, while the
+        variance cannot.
+        """
+        return gini_mean_difference(returns=self.returns)
 
-    @property
-    def mad_ratio(self) -> float:
-        return self.mean / self.mad
+    def ratio(self, ratio: Ratio) -> float:
+        r"""
+        Compute the mean/risk ratio
+
+        Parameters
+        ----------
+        ratio: Ratio
+               The mean/risk ratio
+        Returns
+        -------
+        value: float
+               mean/risk ratio
+        """
+        risk_measure = ratio.risk_measure()
+        risk = getattr(self, risk_measure.value)
+        if risk_measure in [RiskMeasure.VARIANCE, RiskMeasure.SEMI_VARIANCE]:
+            risk = np.sqrt(risk)
+        return self.mean / risk
 
     @property
     def composition(self) -> pd.DataFrame:
@@ -400,12 +453,12 @@ class BasePortfolio:
         """
         res = []
         for metric in self.fitness_metrics:
-            if metric in [Metrics.MEAN,
-                          Metrics.SHARPE_RATIO,
-                          Metrics.SORTINO_RATIO,
-                          Metrics.CALMAR_RATIO,
-                          Metrics.CDAR_RATIO,
-                          Metrics.CVAR_RATIO]:
+            if metric in [Metric.MEAN,
+                          Metric.SHARPE_RATIO,
+                          Metric.SORTINO_RATIO,
+                          Metric.CALMAR_RATIO,
+                          Metric.CDAR_RATIO,
+                          Metric.CVAR_RATIO]:
                 sign = 1
             else:
                 sign = -1
@@ -429,7 +482,7 @@ class BasePortfolio:
         return dominate(self.fitness[obj], other.fitness[obj])
 
     def metrics(self) -> pd.DataFrame:
-        idx = [e.value for e in Metrics]
+        idx = [e.value for e in Metric]
         res = [self.__getattribute__(attr) for attr in idx]
         return pd.DataFrame(res, index=idx, columns=['metrics'])
 
@@ -437,20 +490,7 @@ class BasePortfolio:
                                 idx: int | slice = slice(None),
                                 show: bool = True) -> go.Figure | None:
         fig = self.cumulative_returns_df.iloc[idx].plot()
-        fig.update_layout(title='Prices Compounded',
-                          xaxis_title='Dates',
-                          yaxis_title='Prices',
-                          showlegend=False)
-        if show:
-            fig.show()
-        else:
-            return fig
-
-    def plot_cumulative_returns_uncompounded(self,
-                                             idx: int | slice = slice(None),
-                                             show: bool = True) -> go.Figure | None:
-        fig = self.cumulative_returns_uncompounded_df.iloc[idx].plot()
-        fig.update_layout(title='Prices Uncompounded',
+        fig.update_layout(title='Cumulative Returns',
                           xaxis_title='Dates',
                           yaxis_title='Prices',
                           showlegend=False)
@@ -538,7 +578,7 @@ class Portfolio(BasePortfolio):
                  transaction_costs: float | np.ndarray = 0,
                  name: str | None = None,
                  tag: str | None = None,
-                 fitness_metrics: list[Metrics] | None = None,
+                 fitness_metrics: list[Metric] | None = None,
                  annualized_factor: float = 1,
                  cvar_beta: float = 0.95,
                  cdar_beta: float = 0.95,
@@ -784,7 +824,7 @@ class MultiPeriodPortfolio(BasePortfolio):
                  portfolios: list[Portfolio] | None = None,
                  name: str | None = None,
                  tag: str | None = None,
-                 fitness_metrics: list[Metrics] | None = None,
+                 fitness_metrics: list[Metric] | None = None,
                  annualized_factor: float = 1,
                  cvar_beta: float = 0.95,
                  cdar_beta: float = 0.95,

@@ -141,34 +141,34 @@ class Population:
             return [portfolio for portfolio in self if portfolio.tag in tags]
 
     def sort(self,
-             metric: Metrics,
+             metric: Metric,
              reverse: bool = False,
              names: str | list[str] | None = None,
              tags: str | list[str] | None = None) -> list[Portfolio | MultiPeriodPortfolio]:
         portfolios = self.get_portfolios(names=names, tags=tags)
         return sorted(portfolios, key=lambda x: x.__getattribute__(metric.value), reverse=reverse)
 
-    def k_min(self, metric: Metrics,
+    def k_min(self, metric: Metric,
               k: int,
               names: str | list[str] | None = None,
               tags: str | list[str] | None = None) -> list[Portfolio | MultiPeriodPortfolio]:
         return self.sort(metric=metric, reverse=False, names=names, tags=tags)[:k]
 
     def k_max(self,
-              metric: Metrics,
+              metric: Metric,
               k: int,
               names: str | list[str] | None = None,
               tags: str | list[str] | None = None) -> list[Portfolio | MultiPeriodPortfolio]:
         return self.sort(metric=metric, reverse=True, names=names, tags=tags)[:k]
 
     def min(self,
-            metric: Metrics,
+            metric: Metric,
             names: str | list[str] | None = None,
             tags: str | list[str] | None = None) -> Portfolio | MultiPeriodPortfolio:
         return self.sort(metric=metric, reverse=False, names=names, tags=tags)[0]
 
     def max(self,
-            metric: Metrics,
+            metric: Metric,
             names: str | list[str] | None = None,
             tags: str | list[str] | None = None) -> Portfolio | MultiPeriodPortfolio:
         return self.sort(metric=metric, reverse=True, names=names, tags=tags)[0]
@@ -227,13 +227,13 @@ class Population:
             return fig
 
     def plot_metrics(self,
-                     x: Metrics,
-                     y: Metrics,
-                     z: Metrics = None,
+                     x: Metric,
+                     y: Metric,
+                     z: Metric = None,
                      to_surface: bool = False,
-                     hover_metrics: list[Metrics] = None,
+                     hover_metrics: list[Metric] = None,
                      fronts: bool = False,
-                     color_scale: Metrics | str | None = None,
+                     color_scale: Metric | str | None = None,
                      names: str | list[str] | None = None,
                      tags: str | list[str] | None = None,
                      title='Portfolios',
@@ -253,7 +253,7 @@ class Population:
 
         columns = list(hover_data.keys())
         columns.append('name')
-        if isinstance(color_scale, Metrics):
+        if isinstance(color_scale, Metric):
             color_scale = color_scale.value
             hover_data[color_scale] = num_fmt
 

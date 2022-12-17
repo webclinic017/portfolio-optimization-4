@@ -35,7 +35,7 @@ def test_value_at_risk():
 
 
 def test_worst_return():
-    assert is_close(worst_return(returns), 0.049687264)
+    assert is_close(worst_realization(returns), 0.049687264)
 
 
 def test_first_lower_partial_moment():

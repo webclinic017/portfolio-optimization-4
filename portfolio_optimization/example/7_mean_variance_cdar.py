@@ -1,6 +1,6 @@
 import datetime as dt
 import numpy as np
-from portfolio_optimization.meta import InvestmentType, Metrics
+from portfolio_optimization.meta import InvestmentType, Metric
 from portfolio_optimization.paths import EXAMPLE_PRICES_PATH
 from portfolio_optimization.portfolio import Portfolio
 from portfolio_optimization.population import Population
@@ -60,20 +60,20 @@ def mean_variance_cdar():
                                         tag='mean_variance_cdar'))
 
     # Plot
-    population.plot_metrics(x=Metrics.ANNUALIZED_STD,
-                            y=Metrics.ANNUALIZED_MEAN,
-                            color_scale=Metrics.SHARPE_RATIO,
-                            hover_metrics=[Metrics.SHARPE_RATIO])
-    population.plot_metrics(x=Metrics.CDAR,
-                            y=Metrics.ANNUALIZED_MEAN,
-                            color_scale=Metrics.CDAR_RATIO,
-                            hover_metrics=[Metrics.SHARPE_RATIO])
+    population.plot_metrics(x=Metric.ANNUALIZED_STD,
+                            y=Metric.ANNUALIZED_MEAN,
+                            color_scale=Metric.SHARPE_RATIO,
+                            hover_metrics=[Metric.SHARPE_RATIO])
+    population.plot_metrics(x=Metric.CDAR,
+                            y=Metric.ANNUALIZED_MEAN,
+                            color_scale=Metric.CDAR_RATIO,
+                            hover_metrics=[Metric.SHARPE_RATIO])
 
-    population.plot_metrics(x=Metrics.ANNUALIZED_STD,
-                            y=Metrics.CDAR,
-                            z=Metrics.ANNUALIZED_MEAN,
-                            color_scale=Metrics.CDAR_RATIO,
-                            hover_metrics=[Metrics.SHARPE_RATIO])
+    population.plot_metrics(x=Metric.ANNUALIZED_STD,
+                            y=Metric.CDAR,
+                            z=Metric.ANNUALIZED_MEAN,
+                            color_scale=Metric.CDAR_RATIO,
+                            hover_metrics=[Metric.SHARPE_RATIO])
 
 
     ptf1 = population.get_portfolios(tags='mean_variance')[0]
@@ -81,10 +81,10 @@ def mean_variance_cdar():
     ptf3 = population.get_portfolios(tags='mean_variance_cdar')[0]
 
     # Metrics
-    max_sharpe = population.max(metric=Metrics.SHARPE_RATIO)
+    max_sharpe = population.max(metric=Metric.SHARPE_RATIO)
     print(max_sharpe.sharpe_ratio)
 
-    max_cdar_95_ratio = population.max(metric=Metrics.CDAR_RATIO)
+    max_cdar_95_ratio = population.max(metric=Metric.CDAR_RATIO)
     print(max_cdar_95_ratio.cdar_ratio)
 
     # Composition
@@ -132,20 +132,20 @@ def mean_cdar_vs_mean_cvar():
                                     tag='mean_cvar'))
 
     # Plot
-    population.plot_metrics(x=Metrics.CDAR,
-                            y=Metrics.ANNUALIZED_MEAN,
-                            color_scale=Metrics.CDAR_RATIO,
-                            hover_metrics=[Metrics.SHARPE_RATIO])
-    population.plot_metrics(x=Metrics.CVAR,
-                            y=Metrics.ANNUALIZED_MEAN,
-                            color_scale=Metrics.CVAR_RATIO,
-                            hover_metrics=[Metrics.SHARPE_RATIO])
+    population.plot_metrics(x=Metric.CDAR,
+                            y=Metric.ANNUALIZED_MEAN,
+                            color_scale=Metric.CDAR_RATIO,
+                            hover_metrics=[Metric.SHARPE_RATIO])
+    population.plot_metrics(x=Metric.CVAR,
+                            y=Metric.ANNUALIZED_MEAN,
+                            color_scale=Metric.CVAR_RATIO,
+                            hover_metrics=[Metric.SHARPE_RATIO])
 
     # Metrics
-    max_cdar_95_ratio = population.max(metric=Metrics.CDAR_RATIO)
+    max_cdar_95_ratio = population.max(metric=Metric.CDAR_RATIO)
     print(max_cdar_95_ratio.cdar_ratio)
 
-    max_cvar_95_ratio = population.max(metric=Metrics.CVAR_RATIO)
+    max_cvar_95_ratio = population.max(metric=Metric.CVAR_RATIO)
     print(max_cvar_95_ratio.cvar_ratio)
 
     # Composition

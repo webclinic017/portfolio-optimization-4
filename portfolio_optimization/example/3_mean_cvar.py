@@ -43,19 +43,19 @@ if __name__ == '__main__':
                                     tag='mean_cvar'))
 
     # Plot
-    population.plot_metrics(x=Metrics.ANNUALIZED_STD,
-                            y=Metrics.ANNUALIZED_MEAN,
-                            color_scale=Metrics.SHARPE_RATIO)
-    population.plot_metrics(x=Metrics.CDAR,
-                            y=Metrics.ANNUALIZED_MEAN,
-                            color_scale=Metrics.CVAR_RATIO)
+    population.plot_metrics(x=Metric.ANNUALIZED_STD,
+                            y=Metric.ANNUALIZED_MEAN,
+                            color_scale=Metric.SHARPE_RATIO)
+    population.plot_metrics(x=Metric.CDAR,
+                            y=Metric.ANNUALIZED_MEAN,
+                            color_scale=Metric.CVAR_RATIO)
 
     # Metrics
-    max_sharpe_ptf = population.max(metric=Metrics.SHARPE_RATIO)
+    max_sharpe_ptf = population.max(metric=Metric.SHARPE_RATIO)
     print(max_sharpe_ptf.sharpe_ratio)
     print(max_sharpe_ptf.summary())
 
-    max_cvar_ratio_ptf = population.max(metric=Metrics.CVAR_RATIO)
+    max_cvar_ratio_ptf = population.max(metric=Metric.CVAR_RATIO)
     print(max_cvar_ratio_ptf.cvar_ratio)
 
     portfolio_names = [max_sharpe_ptf.name, max_cvar_ratio_ptf.name]

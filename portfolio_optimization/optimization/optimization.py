@@ -953,7 +953,7 @@ class Optimization:
         constraints = [self._ptf_returns(w=w) + alpha + v >= 0]
         return risk, constraints
 
-    def _worst_realisation_risk(self, w: cp.Variable) -> RiskResult:
+    def _worst_realization_risk(self, w: cp.Variable) -> RiskResult:
         v = cp.Variable()
         risk = v
         constraints = [-self._ptf_returns(w=w) <= v]
