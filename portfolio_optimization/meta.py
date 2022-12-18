@@ -2,12 +2,14 @@ from enum import Enum, auto
 
 __all__ = ['AVG_TRADING_DAYS_PER_YEAR',
            'ZERO_THRESHOLD',
-           'Metric',
+           'Perf',
            'RiskMeasure',
            'ObjectiveFunction',
            'Ratio',
            'RiskMeasureRatio',
-           'RatioRiskMeasure']
+           'RatioRiskMeasure',
+           'Metrics',
+           'MetricsValues']
 
 AVG_TRADING_DAYS_PER_YEAR = 255
 ZERO_THRESHOLD = 1e-4
@@ -18,12 +20,22 @@ class AutoEnum(Enum):
     def _generate_next_value_(name, start, count, last_values):
         return name.lower()
 
+    @classmethod
+    def has(cls, value):
+        return value in cls._value2member_map_
+
+
+class Perf(AutoEnum):
+    MEAN = auto()
+
 
 class RiskMeasure(AutoEnum):
     MAD = auto()
     FIRST_LOWER_PARTIAL_MOMENT = auto()
     VARIANCE = auto()
+    STD = auto()
     SEMI_VARIANCE = auto()
+    SEMI_STD= auto()
     # KURTOSIS = auto()
     # SEMI_KURTOSIS = auto()
     VALUE_AT_RISK = auto()
@@ -40,7 +52,10 @@ class RiskMeasure(AutoEnum):
     GINI_MEAN_DIFFERENCE = auto()
 
     def ratio(self):
-        return RatioRiskMeasure.get(self, Ratio(f'{self.value}_ratio'))
+        try:
+            return RiskMeasureRatio[self]
+        except KeyError:
+            return Ratio(f'{self.value}_ratio')
 
 
 class Ratio(AutoEnum):
@@ -64,26 +79,24 @@ class Ratio(AutoEnum):
     GINI_MEAN_DIFFERENCE_RATIO = auto()
 
     def risk_measure(self):
-        return RatioRiskMeasure.get(self, RiskMeasure(self.value.replace('_ratio', '')))
+        try:
+            return RatioRiskMeasure[self]
+        except KeyError:
+            return RiskMeasure(self.value.replace('_ratio', ''))
 
+
+Metrics = {e for enu in [Perf, RiskMeasure, Ratio] for e in enu}
+MetricsValues = {e.value: e.name for e in Metrics}
 
 RiskMeasureRatio = {
     RiskMeasure.VARIANCE: Ratio.SHARPE_RATIO,
+    RiskMeasure.STD: Ratio.SHARPE_RATIO,
     RiskMeasure.SEMI_VARIANCE: Ratio.SORTINO_RATIO,
+    RiskMeasure.SEMI_STD: Ratio.SORTINO_RATIO,
     RiskMeasure.MAX_DRAWDOWN: Ratio.CALMAR_RATIO,
 }
 
 RatioRiskMeasure = {v: k for k, v in RiskMeasureRatio.items()}
-
-_metrics = {'MEAN': 'mean'}
-_metrics.update({e.name: e.value for e in RiskMeasure})
-_metrics.update({e.name: e.value for e in Ratio})
-_metrics.update({'STD': 'std',
-                 'SEMI_STD': 'semi_std',
-                 'KURTOSIS': 'kurtosis',
-                 'SEMI_KURTOSIS': 'semi_kurtosis'})
-
-Metric = Enum('Metric', _metrics)
 
 
 class ObjectiveFunction(Enum):

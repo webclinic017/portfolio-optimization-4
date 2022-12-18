@@ -17,6 +17,8 @@ __all__ = ['Population']
 
 logger = logging.getLogger('portfolio_optimization.population')
 
+Metric = Perf | RiskMeasure | Ratio
+
 
 class Population:
     def __init__(self, portfolios: list[Portfolio | MultiPeriodPortfolio] | None = None):

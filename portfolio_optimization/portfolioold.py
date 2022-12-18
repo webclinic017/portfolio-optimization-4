@@ -5,72 +5,73 @@ import plotly.express as px
 from functools import cache, cached_property
 import numbers
 import plotly.graph_objects as go
-from portfolio_optimization.meta import (AVG_TRADING_DAYS_PER_YEAR, ZERO_THRESHOLD, Perf, RiskMeasure, Ratio, Metrics,
-                                         MetricsValues)
+from portfolio_optimization.meta import Metric, AVG_TRADING_DAYS_PER_YEAR, ZERO_THRESHOLD, RiskMeasure, Ratio
 from portfolio_optimization.assets import Assets
 from portfolio_optimization.utils.sorting import dominate
-import portfolio_optimization.utils.metrics as mt
+from portfolio_optimization.utils.metrics import *
 from portfolio_optimization.utils.tools import args_names
 
 __all__ = ['BasePortfolio',
            'Portfolio',
            'MultiPeriodPortfolio']
 
-Metric = Perf | RiskMeasure | Ratio
-FitnessMetric = list[Metric]
 
-GLOBAL_ARGS = {
-    'annualized_factor',
-    'min_acceptable_return',
-    'compounded'
-}
+class RiskMeasureAttr:
+    def __set_name__(self, owner, name):
+        self.public_name = name
+        self.private_name = f'_{name}'
 
-LOCAL_ARGS = {
-    'value_at_risk_beta',
-    'cvar_beta',
-    'cdar_beta',
-    'entropic_risk_measure_theta',
-    'entropic_risk_measure_beta',
-    'evar_beta'
-}
+    def __get__(self, obj, objtype=None):
+        return getattr(obj, self.private_name)
 
-FROZEN_ATTRS = {
-    'returns',
-    'dates',
-    'name',
-    'fitness_metrics',
-    'tag',
-}
+    def __set__(self, obj, value):
+        # Clear the property cache of the associated risk measure
+        risk_measure = RiskMeasure('_'.join(self.public_name.split('_')[:-1]))
+        for attr in [risk_measure.value, risk_measure.ratio().value]:
+            self.__dict__.pop(attr, None)
+        setattr(obj, self.private_name, value)
 
-SLOTS = set(MetricsValues.keys())
-SLOTS.update(GLOBAL_ARGS)
-SLOTS.update(LOCAL_ARGS)
-SLOTS.update(FROZEN_ATTRS)
-SLOTS.update({
-    'validate',
-    '_loaded',
-    '_frozen'
-})
+
+class RessetAttr:
+    def __set_name__(self, owner, name):
+        self.private_name = f'_{name}'
+
+    def __get__(self, obj, objtype=None):
+        return getattr(obj, self.private_name)
+
+    def __set__(self, obj, value):
+        # Clear all the property cache
+        obj._reset()
+        setattr(obj, self.private_name, value)
+
 
 class BasePortfolio:
-    __slots__ = tuple(SLOTS)
+    value_at_risk_beta = RiskMeasureAttr()
+    cvar_beta = RiskMeasureAttr()
+    cdar_beta = RiskMeasureAttr()
+    entropic_risk_measure_theta = RiskMeasureAttr()
+    entropic_risk_measure_beta = RiskMeasureAttr()
+    evar_beta = RiskMeasureAttr()
+    compounded = RessetAttr()
+    min_acceptable_return = RessetAttr()
+    annualized_factor = RessetAttr()
 
     def __init__(self,
                  returns: np.ndarray,
                  dates: np.ndarray,
                  name: str | None = None,
                  tag: str | None = None,
-                 validate: bool = True,
                  compounded: bool = False,
                  annualized_factor: float = 1,
                  min_acceptable_return: float | None = None,
-                 fitness_metrics: FitnessMetric | None = None,
+                 fitness_metrics: list[Metric] | None = None,
                  value_at_risk_beta: float = 0.95,
                  cvar_beta: float = 0.95,
                  cdar_beta: float = 0.95,
                  entropic_risk_measure_theta: float = 1,
                  entropic_risk_measure_beta: float = 0.95,
-                 evar_beta: float = 0.95):
+                 evar_beta: float = 0.95,
+                 validate: bool = True):
         r"""
         Base Portfolio
 
@@ -114,25 +115,27 @@ class BasePortfolio:
                                Minimum acceptable return, in the same periodicity as the returns to distinguish
                                 "downside" and "upside" returns for the computation of the semivariance and semistd.
         """
-        self._loaded = False
         self._frozen = False
-        self.name = name if name is not None else str(id(self))
-        self.returns = returns
-        self.dates = dates
-        self.fitness_metrics = fitness_metrics if fitness_metrics is not None else [Perf.MEAN, RiskMeasure.VARIANCE]
+        self._name = name if name is not None else str(id(self))
+        self._returns = returns
+        self._dates = dates
+
+        self.fitness_metrics = fitness_metrics if fitness_metrics is not None else [Metric.MEAN, Metric.STD]
         self.tag = tag if tag is not None else self._name
+
         self.compounded = compounded
         self.annualized_factor = annualized_factor
         self.min_acceptable_return = min_acceptable_return
+
         self.value_at_risk_beta = value_at_risk_beta
         self.cvar_beta = cvar_beta
         self.cdar_beta = cdar_beta
         self.entropic_risk_measure_theta = entropic_risk_measure_theta
         self.entropic_risk_measure_beta = entropic_risk_measure_beta
         self.evar_beta = evar_beta
-        self._loaded = True
+
         if validate:
-                self._validation()
+            self._validation()
 
     def __len__(self):
         raise NotImplementedError
@@ -167,46 +170,13 @@ class BasePortfolio:
         result._unfreeze()
         return result
 
-    def __getattribute__(self, name):
+    def __getattribute__(self, item):
         try:
-            return object.__getattribute__(self, name)
-        except AttributeError as e:
-            # TODO: remove print
-            if name != 'shape':
-                print(f'__getattribut__({name})')
-            if name not in self.__slots__:
-                raise AttributeError(e)
-            if name not in MetricsValues:
-                raise AttributeError(f'{name} not in Metrics')
-            # Attributes in __slots__ that are not yet assigned are either risk_measure or ratio attributes.
-            # We compute there values the first time there are called (caching using slots and __getattribute__)
-            metric = MetricsValues[name]
-            if isinstance(metric, (Perf, RiskMeasure)):
-                func = getattr(mt, metric.value)
-                args = {arg: getattr(self, arg) if arg in GLOBAL_ARGS else getattr(self, f'{name}_{arg}')
-                        for arg in args_names(func)}
-                value = func(**args)
-            else:
-                value = self.ratio(ratio=metric)
-            setattr(self, name, value)
-            return value
-
-    def __setattr__(self, name, value):
-        print('   __setattr__({}, {}) called'.format(name, value))
-        if name != '_loaded' and self._loaded:
-            if name in FROZEN_ATTRS:
-                if self._frozen:
-                    raise AttributeError(f"can't set attribute '{name}' after the Portfolio has been frozen "
-                                         f"(Portfolios are frozen when they are added to a Population)")
-                else:
-                    self.reset()
-            elif name in GLOBAL_ARGS:
-                self.reset()
-            elif name in LOCAL_ARGS:
-                risk_measure = RiskMeasure('_'.join(self.public_name.split('_')[:-1]))
-                for attr in [risk_measure.value, risk_measure.ratio().value]:
-                    delattr(self, attr)
-        object.__setattr__(self, name, value)
+            ratio = Ratio(item)
+            return self.ratio(ratio=ratio)
+        except ValueError:
+            pass
+        return object.__getattribute__(self, item)
 
     def _freeze(self):
         self._frozen = True
@@ -222,19 +192,43 @@ class BasePortfolio:
         if np.any(np.isnan(self.returns)):
             raise TypeError('returns should not contain nan')
 
-    def reset(self) -> None:
-        try:
-            delattr(self, 'fitness')
-        except AttributeError:
-            pass
-        for attr in MetricsValues.keys():
-            try:
-                delattr(self, attr)
-            except AttributeError:
-                pass
-
+    def _reset(self) -> None:
+        attrs = list(self.__dict__.keys())
+        for attr in attrs:
+            if attr[0] != '_' and attr not in ['tag', 'validate']:
+                self.__dict__.pop(attr, None)
 
     @property
+    def name(self):
+        return self._name
+
+    @name.setter
+    def name(self, value: str) -> None:
+        if self._frozen:
+            raise AttributeError(f"can't set attribute 'name' after the Portfolio has been frozen (Portfolios are "
+                                 f"frozen when they are added to a Population)")
+        self._name = value
+
+    @property
+    def fitness_metrics(self) -> list[Metric]:
+        return self._fitness_metrics
+
+    @fitness_metrics.setter
+    def fitness_metrics(self, value: list[Metric]) -> None:
+        if not isinstance(value, list) or len(value) == 0:
+            raise TypeError(f'fitness_metrics should be a non-empty list of Metrics')
+        self._fitness_metrics = [Metric(v) for v in value]
+        self.__dict__.pop('fitness', None)
+
+    @property
+    def returns(self):
+        return self._returns
+
+    @property
+    def dates(self):
+        return self._dates
+
+    @cached_property
     def cumulative_returns(self) -> np.ndarray:
         if self.compounded:
             cumulative_returns = np.cumprod(np.insert(self.returns, 0, 0) + 1)
@@ -252,6 +246,182 @@ class BasePortfolio:
         index = np.insert(self.dates, 0, init_date)
         return pd.Series(index=index, data=self.cumulative_returns, name='cumulative_returns')
 
+    # Mean
+    @cached_property
+    def mean(self) -> float:
+        return self.returns.mean() * self.annualized_factor
+
+    # Risk Measures
+    @cached_property
+    def mad(self) -> float:
+        r"""
+        Mean Absolute Deviation (MAD).
+        """
+        return mad(returns=self.returns) * self.annualized_factor
+
+    @cached_property
+    def first_lower_partial_moment(self) -> float:
+        r"""
+        First Lower Partial Moment.
+        The First Lower Partial Moment is the mean of the returns below a minimum acceptable return
+        (min_acceptable_return, default mean)
+        """
+        return (first_lower_partial_moment(returns=self.returns, min_acceptable_return=self.min_acceptable_return)
+                * self.annualized_factor)
+
+    @cached_property
+    def variance(self) -> float:
+        r"""
+        Variance
+        """
+        return self.returns.var(ddof=1) * self.annualized_factor
+
+    @property
+    def std(self) -> float:
+        r""""
+        Standard Deviation (STD)
+        """
+        return np.sqrt(self.variance)
+
+    @cached_property
+    def semi_variance(self) -> float:
+        r"""
+        Semi Variance (Second Lower Partial Moment).
+        The Semi Variance is the variance of the returns below a minimum acceptable return
+        (min_acceptable_return, default mean).
+        """
+        return (semi_variance(returns=self.returns, min_acceptable_return=self.min_acceptable_return)
+                * self.annualized_factor)
+
+    @property
+    def semi_std(self) -> float:
+        r"""
+        Semi Standard Deviation (Square Root of the Second Lower Partial Moment).
+        The Semi Standard Deviation is the Standard Deviation of the returns below a minimum acceptable return.
+        """
+        return np.sqrt(self.semi_variance)
+
+    @cached_property
+    def kurtosis(self) -> float:
+        r"""
+        Kurtosis (Fourth Central Moment).
+        The Kurtosis is a measure of the heaviness of the tail of the distribution.
+        Higher kurtosis corresponds to greater extremity of deviations (fat tails).
+        """
+        return kurtosis(returns=self.returns) * self.annualized_factor
+
+    @cached_property
+    def semi_kurtosis(self) -> float:
+        r"""
+        Semi Kurtosis (Fourth Lower Partial Moment).
+        The Semi Kurtosis is a measure of the heaviness of the downside tail of the returns below a minimum acceptable
+        return (min_acceptable_return, default mean)
+        Higher Semi Kurtosis corresponds to greater extremity of downside deviations (downside fat tail).
+        """
+        return (semi_kurtosis(returns=self.returns, min_acceptable_return=self.min_acceptable_return)
+                * self.annualized_factor)
+
+    @cached_property
+    def value_at_risk(self) -> float:
+        r"""
+        Historical Value at Risk (VaR).
+        The VaR is the maximum loss at a given confidence level (value_at_risk_beta, default 0.95)
+        """
+        return value_at_risk(returns=self.returns, beta=self.value_at_risk_beta)
+
+    @cached_property
+    def cvar(self) -> float:
+        r"""
+        Historical Conditional Value at Risk (CVaR).
+        The CVaR (or Tail VaR) represents the mean shortfall at a specified confidence level (cvar_beta, default 0.95).
+        """
+        return cvar(returns=self.returns, beta=self.cvar_beta)
+
+    @cached_property
+    def entropic_risk_measure(self) -> float:
+        r"""
+        Entropic Risk Measure.
+        The Entropic Risk Measure is a risk measure which depends on the risk aversion defined by the investor
+        (entropic_risk_measure_theta, default 1) through the exponential utility function at a given confidence level
+        (entropic_risk_measure_beta, default 0.95).
+        """
+        return entropic_risk_measure(returns=self.returns,
+                                     theta=self.entropic_risk_measure_theta,
+                                     beta=self.entropic_risk_measure_beta)
+
+    @cached_property
+    def evar(self) -> float:
+        r"""
+        Entropic Value at Risk (EVaR).
+        The EVaR is a coherent risk measure which is an upper bound for the VaR and the CVaR,
+        obtained from the Chernoff inequality. The EVaR can be represented by using the concept of relative entropy.
+        Its confidence level is defined by evar_beta (default 0.95).
+        """
+        return evar(returns=self.returns, beta=self.evar_beta)[0]
+
+    @cached_property
+    def worst_realization(self) -> float:
+        r"""
+        Worst Realization (Worst Return)
+        """
+        return worst_realization(returns=self.returns)
+
+    @cached_property
+    def dar(self) -> float:
+        r"""
+        Drawdown at Risk (DaR).
+        The DaR is the maximum drawdown at a given confidence level (dar_beta, default 0.95).
+        """
+        return dar(returns=self.returns, beta=self.dar_beta, compounded=self.compounded)
+
+    @cached_property
+    def cdar(self) -> float:
+        """
+        Conditional Drawdown at Risk (CDaR) at a given confidence level (cdar, default 0.95).
+        """
+        return cdar(returns=self.returns, beta=self.cdar_beta)
+
+    @cached_property
+    def max_drawdown(self) -> float:
+        r"""
+        Maximum Drawdown.
+        """
+        return max_drawdown(returns=self.returns, compounded=self.compounded)
+
+    @cached_property
+    def avg_drawdown(self) -> float:
+        r"""
+        Average Drawdown.
+        """
+        return avg_drawdown(returns=self.returns, compounded=self.compounded)
+
+    @cached_property
+    def edar(self) -> float:
+        r"""
+        Entropic Drawdown at Risk (EDaR).
+        The EDaR is a coherent risk measure which is an upper bound for the DaR and the CDaR,
+        obtained from the Chernoff inequality. The EDaR can be represented by using the concept of relative entropy.
+        Its confidence level is defined by edar_beta (default 0.95).
+        """
+        return edar(returns=self.returns, beta=self.edar_beta, compounded=self.compounded)[0]
+
+    @cached_property
+    def ulcer_index(self) -> float:
+        r"""
+        Ulcer Index
+        """
+        return ulcer_index(returns=self.returns, compounded=self.compounded)
+
+    @cached_property
+    def gini_mean_difference(self) -> float:
+        r"""
+        Gini Mean Difference (GMD).
+        The Gini Mean Difference is the expected absolute difference between two realisations.
+        The GMD is a superior measure of variability  for non-normal distribution than the variance.
+        It can be used to form necessary conditions for second-degree stochastic dominance, while the
+        variance cannot.
+        """
+        return gini_mean_difference(returns=self.returns)
 
     def ratio(self, ratio: Ratio) -> float:
         r"""
@@ -283,7 +453,12 @@ class BasePortfolio:
         """
         res = []
         for metric in self.fitness_metrics:
-            if isinstance(metric, (Perf, Ratio)):
+            if metric in [Metric.MEAN,
+                          Metric.SHARPE_RATIO,
+                          Metric.SORTINO_RATIO,
+                          Metric.CALMAR_RATIO,
+                          Metric.CDAR_RATIO,
+                          Metric.CVAR_RATIO]:
                 sign = 1
             else:
                 sign = -1
@@ -307,7 +482,7 @@ class BasePortfolio:
         return dominate(self.fitness[obj], other.fitness[obj])
 
     def metrics(self) -> pd.DataFrame:
-        idx = [e.value for enu in [Perf, RiskMeasure, Ratio] for e in enu]
+        idx = [e.value for e in Metric]
         res = [self.__getattribute__(attr) for attr in idx]
         return pd.DataFrame(res, index=idx, columns=['metrics'])
 
@@ -404,7 +579,7 @@ class Portfolio(BasePortfolio):
                  transaction_costs: float | np.ndarray = 0,
                  name: str | None = None,
                  tag: str | None = None,
-                 fitness_metrics: FitnessMetric | None = None,
+                 fitness_metrics: list[Metric] | None = None,
                  annualized_factor: float = 1,
                  cvar_beta: float = 0.95,
                  cdar_beta: float = 0.95,
@@ -650,7 +825,7 @@ class MultiPeriodPortfolio(BasePortfolio):
                  portfolios: list[Portfolio] | None = None,
                  name: str | None = None,
                  tag: str | None = None,
-                 fitness_metrics: FitnessMetric | None = None,
+                 fitness_metrics: list[Metric] | None = None,
                  annualized_factor: float = 1,
                  cvar_beta: float = 0.95,
                  cdar_beta: float = 0.95,

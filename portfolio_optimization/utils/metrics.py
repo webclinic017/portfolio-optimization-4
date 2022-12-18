@@ -1,7 +1,11 @@
 import numpy as np
 from scipy.optimize import minimize, Bounds
 
-__all__ = ['semi_variance',
+__all__ = ['mean',
+           'variance',
+           'semi_variance',
+           'std',
+           'semi_std',
            'kurtosis',
            'semi_kurtosis',
            'cvar',
@@ -20,7 +24,11 @@ __all__ = ['semi_variance',
            'gini_mean_difference']
 
 
-def mad(returns: np.ndarray) -> float:
+def mean(returns: np.ndarray, annualized_factor: float = 1) -> float:
+    return returns.mean() * annualized_factor
+
+
+def mad(returns: np.ndarray, annualized_factor: float = 1) -> float:
     r"""
     Calculate the MAD (Mean Absolute Deviation).
 
@@ -34,11 +42,12 @@ def mad(returns: np.ndarray) -> float:
    value : float
            The MAD
     """
-    return float(np.mean(np.abs(returns - np.mean(returns, axis=0)), axis=0))
+    return float(np.mean(np.abs(returns - np.mean(returns, axis=0)), axis=0)) * annualized_factor
 
 
 def first_lower_partial_moment(returns: np.ndarray,
-                               min_acceptable_return: float | None = None) -> float:
+                               min_acceptable_return: float | None = None,
+                               annualized_factor: float = 1) -> float:
     r"""
     Calculate the First Lower Partial Moment.
     The First Lower Partial Moment is the mean of the returns below a minimum acceptable return.
@@ -59,11 +68,17 @@ def first_lower_partial_moment(returns: np.ndarray,
     """
     if min_acceptable_return is None:
         min_acceptable_return = np.mean(returns, axis=0)
-    return -np.sum(np.minimum(0, returns - min_acceptable_return)) / len(returns)
+    return -np.sum(np.minimum(0, returns - min_acceptable_return)) / len(returns) * annualized_factor
+
+
+def variance(returns: np.ndarray,
+             annualized_factor: float = 1) -> float:
+    return returns.var(ddof=1) * annualized_factor
 
 
 def semi_variance(returns: np.ndarray,
-                  min_acceptable_return: float | None = None) -> float:
+                  min_acceptable_return: float | None = None,
+                  annualized_factor: float = 1) -> float:
     r"""
     Calculate the Semi Variance (Second Lower Partial Moment).
     The Semi Variance is the variance of the returns below a minimum acceptable return.
@@ -85,6 +100,19 @@ def semi_variance(returns: np.ndarray,
     if min_acceptable_return is None:
         min_acceptable_return = np.mean(returns, axis=0)
     return np.sum(np.power(np.minimum(0, returns - min_acceptable_return), 2)) / (len(returns) - 1)
+
+
+def std(returns: np.ndarray,
+        annualized_factor: float = 1) -> float:
+    return np.sqrt(variance(returns=returns, annualized_factor=annualized_factor))
+
+
+def semi_std(returns: np.ndarray,
+             min_acceptable_return: float | None = None,
+             annualized_factor: float = 1) -> float:
+    return np.sqrt(semi_variance(returns=returns,
+                                 min_acceptable_return=min_acceptable_return,
+                                 annualized_factor=annualized_factor))
 
 
 def kurtosis(returns: np.ndarray) -> float:
