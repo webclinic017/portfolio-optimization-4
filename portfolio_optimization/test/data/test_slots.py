@@ -22,18 +22,16 @@ class MyDescriptor:
 
 
 class MyClass:
-
-    __slots__ = {'returns',
+    __slots__ = ('returns',
                  'min_acceptable_return',
                  '_b',
                  'c',
-                 'semi_variance'}
+                 'semi_variance')
 
     def __init__(self):
         self._b = 3
         self.returns = np.array([1, 2, 3, 4])
         self.min_acceptable_return = None
-        self.c = 3
 
     @property
     def b(self):
@@ -61,6 +59,14 @@ class MyClass:
         delattr(self, 'semi_variance')
 
 
+class MyClass2(MyClass):
+    __slots__ = ('x', 'y')
+
+    def __init__(self):
+        self.x = 10
+        super().__init__()
+
+
 def test_slots():
     cl = MyClass()
     print(cl.returns)
@@ -72,5 +78,6 @@ def test_slots():
     print(cl.__slots__)
     print(cl.b)
     cl.c = 5
-    cl.b=3
+    cl.b = 3
     hasattr(cl, 'semi_variance')
+    print(cl.)

@@ -26,6 +26,8 @@ def test_portfolio_metrics():
                           assets=assets,
                           name='portfolio_1')
 
+    r=portfolio.cdar_ratio
+
     returns = portfolio_returns(assets.returns, weights)
     assert len(portfolio) == 10
     assert np.all((returns - portfolio.returns) < 1e-10)

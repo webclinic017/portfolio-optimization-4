@@ -86,7 +86,7 @@ class Ratio(AutoEnum):
 
 
 Metrics = {e for enu in [Perf, RiskMeasure, Ratio] for e in enu}
-MetricsValues = {e.value: e.name for e in Metrics}
+MetricsValues = {e.value: e for e in Metrics}
 
 RiskMeasureRatio = {
     RiskMeasure.VARIANCE: Ratio.SHARPE_RATIO,

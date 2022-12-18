@@ -20,6 +20,7 @@ Metric = Perf | RiskMeasure | Ratio
 FitnessMetric = list[Metric]
 
 GLOBAL_ARGS = {
+    'returns',
     'annualized_factor',
     'min_acceptable_return',
     'compounded'
@@ -37,23 +38,77 @@ LOCAL_ARGS = {
 FROZEN_ATTRS = {
     'returns',
     'dates',
+    'assets',
+    'weights',
     'name',
     'fitness_metrics',
     'tag',
 }
 
-SLOTS = set(MetricsValues.keys())
-SLOTS.update(GLOBAL_ARGS)
-SLOTS.update(LOCAL_ARGS)
-SLOTS.update(FROZEN_ATTRS)
-SLOTS.update({
-    'validate',
-    '_loaded',
-    '_frozen'
-})
+METRICS = set(MetricsValues.keys())
+
 
 class BasePortfolio:
-    __slots__ = tuple(SLOTS)
+    __slots__ = {
+        'validate',
+        '_loaded',
+        '_frozen',
+        # frozen attrs
+        'returns',
+        'dates',
+        'name',
+        'fitness_metrics',
+        'tag',
+        # Global args
+        'annualized_factor',
+        'min_acceptable_return',
+        'compounded',
+        # Local args
+        'value_at_risk_beta',
+        'cvar_beta',
+        'cdar_beta',
+        'entropic_risk_measure_theta',
+        'entropic_risk_measure_beta',
+        'evar_beta',
+        # Metrics
+        'cdar_ratio',
+        'evar',
+        'semi_kurtosis_ratio',
+        'worst_realization',
+        'kurtosis_ratio',
+        'ulcer_index',
+        'first_lower_partial_moment',
+        'semi_variance',
+        'mean',
+        'sharpe_ratio',
+        'value_at_risk',
+        'mad_ratio',
+        'value_at_risk_ratio',
+        'avg_drawdown',
+        'cvar_ratio',
+        'dar',
+        'dar_ratio',
+        'entropic_risk_measure_ratio',
+        'gini_mean_difference_ratio',
+        'mad',
+        'semi_std',
+        'std',
+        'calmar_ratio',
+        'edar',
+        'ulcer_index_ratio',
+        'gini_mean_difference',
+        'max_drawdown',
+        'entropic_risk_measure',
+        'cdar',
+        'avg_drawdown_ratio',
+        'first_lower_partial_moment_ratio',
+        'cvar',
+        'evar_ratio',
+        'variance',
+        'worst_realization_ratio',
+        'sortino_ratio',
+        'edar_ratio'
+    }
 
     def __init__(self,
                  returns: np.ndarray,
@@ -120,7 +175,7 @@ class BasePortfolio:
         self.returns = returns
         self.dates = dates
         self.fitness_metrics = fitness_metrics if fitness_metrics is not None else [Perf.MEAN, RiskMeasure.VARIANCE]
-        self.tag = tag if tag is not None else self._name
+        self.tag = tag if tag is not None else self.name
         self.compounded = compounded
         self.annualized_factor = annualized_factor
         self.min_acceptable_return = min_acceptable_return
@@ -132,7 +187,7 @@ class BasePortfolio:
         self.evar_beta = evar_beta
         self._loaded = True
         if validate:
-                self._validation()
+            self._validation()
 
     def __len__(self):
         raise NotImplementedError
@@ -174,8 +229,6 @@ class BasePortfolio:
             # TODO: remove print
             if name != 'shape':
                 print(f'__getattribut__({name})')
-            if name not in self.__slots__:
-                raise AttributeError(e)
             if name not in MetricsValues:
                 raise AttributeError(f'{name} not in Metrics')
             # Attributes in __slots__ that are not yet assigned are either risk_measure or ratio attributes.
@@ -233,7 +286,6 @@ class BasePortfolio:
             except AttributeError:
                 pass
 
-
     @property
     def cumulative_returns(self) -> np.ndarray:
         if self.compounded:
@@ -251,7 +303,6 @@ class BasePortfolio:
         init_date = self.dates[0] - (self.dates[1] - self.dates[0])
         index = np.insert(self.dates, 0, init_date)
         return pd.Series(index=index, data=self.cumulative_returns, name='cumulative_returns')
-
 
     def ratio(self, ratio: Ratio) -> float:
         r"""
@@ -396,10 +447,16 @@ class BasePortfolio:
 
 
 class Portfolio(BasePortfolio):
+    __slots__ = {
+        'assets',
+        'weights',
+        'previous_weights',
+        'transaction_costs'
+    }
+
     def __init__(self,
                  assets: Assets,
                  weights: np.ndarray,
-
                  previous_weights: np.ndarray | None = None,
                  transaction_costs: float | np.ndarray = 0,
                  name: str | None = None,
@@ -456,22 +513,16 @@ class Portfolio(BasePortfolio):
                             annualized.
 
         """
-        self._assets = assets
-        self._weights = weights
-        if previous_weights is None:
-            self._previous_weights = np.zeros(self.assets.asset_nb)
-        else:
-            self._previous_weights = previous_weights
-        self._transaction_costs = transaction_costs
-        self._validation()
 
-        portfolio_returns = self.weights @ self.assets.returns
-        if np.isscalar(self.transaction_costs) and self.transaction_costs == 0:
+        if previous_weights is None:
+            previous_weights = np.zeros(assets.asset_nb)
+        portfolio_returns = weights @ assets.returns
+        if np.isscalar(transaction_costs) and transaction_costs == 0:
             costs = 0
         else:
-            costs = (self.transaction_costs * abs(self.previous_weights - self.weights)).sum()
-
-        super().__init__(returns=portfolio_returns - costs / len(portfolio_returns),
+            costs = (transaction_costs * abs(previous_weights - weights)).sum()
+        returns = portfolio_returns - costs / len(portfolio_returns)
+        super().__init__(returns=returns,
                          dates=assets.dates[1:],
                          name=name,
                          tag=tag,
@@ -482,7 +533,14 @@ class Portfolio(BasePortfolio):
                          cdar_beta=cdar_beta,
                          min_acceptable_return=min_acceptable_return)
 
-    @cache
+        self.assets = assets
+        self.weights = weights
+        self.transaction_costs = transaction_costs
+        self.previous_weights=previous_weights
+        self._validation()
+
+    # TODO : self.__len__.cache_clear() at reset()
+    # TODO : cache  __len__
     def __len__(self) -> int:
         return np.count_nonzero(abs(self.weights) > ZERO_THRESHOLD)
 
@@ -555,22 +613,6 @@ class Portfolio(BasePortfolio):
                 raise ValueError(f'transaction_costs should be of size {self.assets.asset_nb}')
 
     @property
-    def assets(self) -> Assets:
-        return self._assets
-
-    @property
-    def weights(self) -> np.ndarray:
-        return self._weights
-
-    @property
-    def previous_weights(self) -> np.ndarray:
-        return self._previous_weights
-
-    @property
-    def transaction_costs(self) -> float | np.ndarray:
-        return self._transaction_costs
-
-    @property
     def sric(self) -> float:
         r"""
         Sharpe Ratio Information Criterion (SRIC) is an unbiased estimator of the sharpe ratio adjusting for both
@@ -579,11 +621,11 @@ class Portfolio(BasePortfolio):
         """
         return self.sharpe_ratio - self.assets.asset_nb / (self.assets.date_nb * self.sharpe_ratio)
 
-    @cached_property
+    @property
     def assets_index(self) -> np.ndarray:
         return np.flatnonzero(abs(self.weights) > ZERO_THRESHOLD)
 
-    @cached_property
+    @property
     def assets_names(self) -> np.ndarray:
         return self.assets.names[self.assets_index]
 
@@ -625,10 +667,6 @@ class Portfolio(BasePortfolio):
         rc = [(get_risk(i, h=spacing) - get_risk(i, h=-spacing)) / (2 * spacing) * self.weights[i]
               for i in range(len(self.weights))]
         return np.array(rc)
-
-    def _reset(self) -> None:
-        super()._reset()
-        self.__len__.cache_clear()
 
     def summary(self, formatted: bool = True) -> pd.Series:
         df = super().summary(formatted=formatted)
