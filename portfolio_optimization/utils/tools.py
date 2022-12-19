@@ -11,7 +11,8 @@ __all__ = ['prices_rebased',
            'load_prices',
            'args_names',
            'clean',
-           'clean_locals']
+           'clean_locals',
+           'cached_property_slots']
 
 
 def clean(x: float | list | np.ndarray | None,
@@ -120,6 +121,28 @@ def load_prices(file: Path | str) -> pd.DataFrame:
     df = pd.read_csv(file, sep=',', index_col=0)
     df.index = pd.to_datetime(df.index, format='%Y-%m-%d')
     return df
+
+
+class cached_property_slots:
+    def __init__(self, func):
+        self.func = func
+        self.private_name = None
+        self.__doc__ = func.__doc__
+
+    def __set_name__(self, owner, name):
+        self.private_name = f'_{name}'
+
+    def __get__(self, instance, owner=None):
+        if instance is None:
+            return self
+        if self.private_name is None:
+            raise TypeError('Cannot use cached_property instance without calling __set_name__ on it.')
+        try:
+            value = getattr(instance, self.private_name)
+        except AttributeError:
+            value = self.func(instance)
+            setattr(instance, self.private_name, value)
+        return value
 
 
 def args_names(func: object) -> list[str]:

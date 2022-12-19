@@ -2,11 +2,42 @@ import numpy as np
 import portfolio_optimization.utils.metrics as mt
 from portfolio_optimization.utils.tools import args_names, clean_locals
 from portfolio_optimization.meta import Ratio, RiskMeasure
+from functools import wraps
 
 GLOBAL_ARGS_NAMES = {'returns',
                      'min_acceptable_return',
                      'compounded'}
 
+
+def cached_property2(method):
+    @wraps(method)
+    def wrapped(self, *args, **kwargs):
+        # method_output = method(self, *args, **kwargs)
+        return method
+
+    return wrapped
+
+
+class cached_property:
+    def __init__(self, func):
+        self.func = func
+        self.private_name = None
+        self.__doc__ = func.__doc__
+
+    def __set_name__(self, owner, name):
+        self.private_name = f'_{name}'
+
+    def __get__(self, instance, owner=None):
+        if instance is None:
+            return self
+        if self.private_name is None:
+            raise TypeError('Cannot use cached_property instance without calling __set_name__ on it.')
+        try:
+            value = getattr(instance, self.private_name)
+        except AttributeError:
+            value = self.func(instance)
+            setattr(instance, self.private_name, value)
+        return value
 
 class MyDescriptor:
     def __set_name__(self, owner, name):
@@ -25,17 +56,19 @@ class MyClass:
     __slots__ = ('returns',
                  'min_acceptable_return',
                  '_b',
+                 '_z',
                  'c',
                  'semi_variance')
 
     def __init__(self):
-        self._b = 3
+        #self._b = 3
         self.returns = np.array([1, 2, 3, 4])
         self.min_acceptable_return = None
 
-    @property
+    @cached_property
     def b(self):
-        return self._b
+        x=3*5
+        return x
 
     def __setattr__(self, name, value):
         print('   __setattr__({}, {}) called'.format(name, value))
@@ -44,16 +77,19 @@ class MyClass:
     def __getattribute__(self, name):
         try:
             return object.__getattribute__(self, name)
-        except AttributeError:
+        except AttributeError as e:
             if name != 'shape':
                 print(f'compute function {name}')
-            metric = RiskMeasure(name)
-            func = getattr(mt, metric.value)
-            args = {arg_name: getattr(self, arg_name) if arg_name not in GLOBAL_ARGS_NAMES else getattr(self, arg_name)
-                    for arg_name in args_names(func)}
-            value = func(**args)
-            setattr(self, name, value)
-            return value
+            try:
+                metric = RiskMeasure(name)
+                func = getattr(mt, metric.value)
+                args = {arg_name: getattr(self, arg_name) if arg_name not in GLOBAL_ARGS_NAMES else getattr(self, arg_name)
+                        for arg_name in args_names(func)}
+                value = func(**args)
+                setattr(self, name, value)
+                return value
+            except ValueError:
+                raise AttributeError(e)
 
     def reset(self):
         delattr(self, 'semi_variance')
@@ -69,6 +105,9 @@ class MyClass2(MyClass):
 
 def test_slots():
     cl = MyClass()
+    cl.b=3
+    cl._z=2
+
     print(cl.returns)
     cl.min_acceptable_return = 0
     print(cl.semi_variance)
@@ -80,4 +119,3 @@ def test_slots():
     cl.c = 5
     cl.b = 3
     hasattr(cl, 'semi_variance')
-    print(cl.)

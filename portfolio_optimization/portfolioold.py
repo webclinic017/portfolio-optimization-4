@@ -5,7 +5,7 @@ import plotly.express as px
 from functools import cache, cached_property
 import numbers
 import plotly.graph_objects as go
-from portfolio_optimization.meta import Metric, AVG_TRADING_DAYS_PER_YEAR, ZERO_THRESHOLD, RiskMeasure, Ratio
+from portfolio_optimization.meta import AVG_TRADING_DAYS_PER_YEAR, ZERO_THRESHOLD, RiskMeasure, Ratio, Perf
 from portfolio_optimization.assets import Assets
 from portfolio_optimization.utils.sorting import dominate
 from portfolio_optimization.utils.metrics import *
@@ -15,6 +15,8 @@ __all__ = ['BasePortfolio',
            'Portfolio',
            'MultiPeriodPortfolio']
 
+Metrics=RiskMeasure
+Metric = RiskMeasure
 
 class RiskMeasureAttr:
     def __set_name__(self, owner, name):
@@ -120,7 +122,7 @@ class BasePortfolio:
         self._returns = returns
         self._dates = dates
 
-        self.fitness_metrics = fitness_metrics if fitness_metrics is not None else [Metric.MEAN, Metric.STD]
+        self.fitness_metrics = fitness_metrics if fitness_metrics is not None else [Perf.MEAN, RiskMeasure.STD]
         self.tag = tag if tag is not None else self._name
 
         self.compounded = compounded
@@ -215,9 +217,7 @@ class BasePortfolio:
 
     @fitness_metrics.setter
     def fitness_metrics(self, value: list[Metric]) -> None:
-        if not isinstance(value, list) or len(value) == 0:
-            raise TypeError(f'fitness_metrics should be a non-empty list of Metrics')
-        self._fitness_metrics = [Metric(v) for v in value]
+        self._fitness_metrics = value
         self.__dict__.pop('fitness', None)
 
     @property

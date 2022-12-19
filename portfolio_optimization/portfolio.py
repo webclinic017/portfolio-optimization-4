@@ -2,30 +2,52 @@ from collections.abc import Iterator
 import numpy as np
 import pandas as pd
 import plotly.express as px
-from functools import cache, cached_property
+from itertools import chain
 import numbers
 import plotly.graph_objects as go
-from portfolio_optimization.meta import (AVG_TRADING_DAYS_PER_YEAR, ZERO_THRESHOLD, Perf, RiskMeasure, Ratio, Metrics,
+from portfolio_optimization.meta import (AVG_TRADING_DAYS_PER_YEAR,
+                                         ZERO_THRESHOLD,
+                                         Perf,
+                                         RiskMeasure,
+                                         Ratio,
                                          MetricsValues)
 from portfolio_optimization.assets import Assets
 from portfolio_optimization.utils.sorting import dominate
 import portfolio_optimization.utils.metrics as mt
-from portfolio_optimization.utils.tools import args_names
+from portfolio_optimization.utils.tools import args_names, cached_property_slots
 
 __all__ = ['BasePortfolio',
            'Portfolio',
            'MultiPeriodPortfolio']
 
+# Typing
 Metric = Perf | RiskMeasure | Ratio
 FitnessMetric = list[Metric]
 
-GLOBAL_ARGS = {
+# Read-only attributes
+READ_ONLY_ATTRS = {
     'returns',
-    'annualized_factor',
-    'min_acceptable_return',
-    'compounded'
+    'dates',
+    'assets',
+    'weights',
 }
 
+# Frozen attributes
+FROZEN_ATTRS = {
+    'name'
+}
+
+# Arguments globally used in metrics computation
+GLOBAL_ARGS = {
+    'returns',
+    'cumulative_returns',
+    'drawdowns',
+    'annualized_factor',
+    'min_acceptable_return',
+    'compounded',
+}
+
+# Arguments locally used in metrics computation
 LOCAL_ARGS = {
     'value_at_risk_beta',
     'cvar_beta',
@@ -35,79 +57,87 @@ LOCAL_ARGS = {
     'evar_beta'
 }
 
-FROZEN_ATTRS = {
-    'returns',
-    'dates',
-    'assets',
-    'weights',
-    'name',
-    'fitness_metrics',
-    'tag',
-}
-
+# Metric names
 METRICS = set(MetricsValues.keys())
 
 
 class BasePortfolio:
+    # We call the metric functions and there arguments dynamically.
+    # The metric functions are called from the metrics module
+    # The function arguments are retrieved from the class attributes following the below rules:
+    # Global metrics function arguments (defined in GLOBAL_ARGS) need to be defined in the class attributes
+    # with identical name and local metrics function arguments need to be defined in the class attributes
+    # with the argument name preceded by the metric name and separated by _.
     __slots__ = {
+        # public
         'validate',
+        'tag',
+        # private
         '_loaded',
         '_frozen',
-        # frozen attrs
+        # read-only
         'returns',
         'dates',
+        # frozen
         'name',
-        'fitness_metrics',
-        'tag',
-        # Global args
+        # custom getter and setter
+        '_fitness_metrics',
+        # custom getter (read-only and cached)
+        '_fitness',
+        '_cumulative_returns',
+        '_drawdowns',
+        # global args
         'annualized_factor',
         'min_acceptable_return',
         'compounded',
-        # Local args
+        # local args
         'value_at_risk_beta',
         'cvar_beta',
         'cdar_beta',
         'entropic_risk_measure_theta',
         'entropic_risk_measure_beta',
         'evar_beta',
-        # Metrics
-        'cdar_ratio',
-        'evar',
-        'semi_kurtosis_ratio',
-        'worst_realization',
-        'kurtosis_ratio',
-        'ulcer_index',
-        'first_lower_partial_moment',
-        'semi_variance',
+        # metrics
+        # perf
         'mean',
-        'sharpe_ratio',
-        'value_at_risk',
-        'mad_ratio',
-        'value_at_risk_ratio',
-        'avg_drawdown',
-        'cvar_ratio',
-        'dar',
-        'dar_ratio',
-        'entropic_risk_measure_ratio',
-        'gini_mean_difference_ratio',
+        # risk measure
         'mad',
-        'semi_std',
-        'std',
-        'calmar_ratio',
-        'edar',
-        'ulcer_index_ratio',
-        'gini_mean_difference',
-        'max_drawdown',
-        'entropic_risk_measure',
-        'cdar',
-        'avg_drawdown_ratio',
-        'first_lower_partial_moment_ratio',
-        'cvar',
-        'evar_ratio',
+        'first_lower_partial_moment',
         'variance',
-        'worst_realization_ratio',
+        'std',
+        'semi_variance',
+        'semi_std',
+        'value_at_risk',
+        'cvar',
+        'entropic_risk_measure',
+        'evar',
+        'worst_realization',
+        'dar',
+        'cdar',
+        'max_drawdown',
+        'avg_drawdown',
+        'edar',
+        'ulcer_index',
+        'gini_mean_difference',
+        # ratio
+        'mad_ratio',
+        'first_lower_partial_moment_ratio',
+        'sharpe_ratio',
         'sortino_ratio',
-        'edar_ratio'
+        'kurtosis_ratio',
+        'semi_kurtosis_ratio',
+        'value_at_risk_ratio',
+        'cvar_ratio',
+        'entropic_risk_measure_ratio',
+        'evar_ratio',
+        'worst_realization_ratio',
+        'dar_ratio',
+        'cdar_ratio',
+        'calmar_ratio',
+        'avg_drawdown_ratio',
+        'edar_ratio',
+        'ulcer_index_ratio',
+        'gini_mean_difference_ratio'
     }
 
     def __init__(self,
@@ -174,7 +204,7 @@ class BasePortfolio:
         self.name = name if name is not None else str(id(self))
         self.returns = returns
         self.dates = dates
-        self.fitness_metrics = fitness_metrics if fitness_metrics is not None else [Perf.MEAN, RiskMeasure.VARIANCE]
+        self._fitness_metrics = fitness_metrics if fitness_metrics is not None else [Perf.MEAN, RiskMeasure.VARIANCE]
         self.tag = tag if tag is not None else self.name
         self.compounded = compounded
         self.annualized_factor = annualized_factor
@@ -189,6 +219,7 @@ class BasePortfolio:
         if validate:
             self._validation()
 
+    # Magic methods
     def __len__(self):
         raise NotImplementedError
 
@@ -218,10 +249,16 @@ class BasePortfolio:
     def __copy__(self):
         cls = self.__class__
         result = cls.__new__(cls)
-        result.__dict__.update(self.__dict__)
+        slots = chain.from_iterable(getattr(s, '__slots__', []) for s in self.__class__.__mro__)
+        result._loaded = False
         result._unfreeze()
+        for attr in slots:
+            if attr not in METRICS and attr not in {'_frozen', '_loaded'}:
+                setattr(result, attr, getattr(self, attr))
+        result._loaded = True
         return result
 
+    # Custom __getattribute__ and __setattr__
     def __getattribute__(self, name):
         try:
             return object.__getattribute__(self, name)
@@ -229,38 +266,100 @@ class BasePortfolio:
             # TODO: remove print
             if name != 'shape':
                 print(f'__getattribut__({name})')
+                pass
             if name not in MetricsValues:
-                raise AttributeError(f'{name} not in Metrics')
-            # Attributes in __slots__ that are not yet assigned are either risk_measure or ratio attributes.
-            # We compute there values the first time there are called (caching using slots and __getattribute__)
+                raise AttributeError(e)
+            # Attributes in __slots__ that are not yet assigned are either Perf, RiskMeasure or Ratio attributes.
+            # We assign there values dynamically the first time they are called to allow caching and avoid repeating
+            # metrics codes.
             metric = MetricsValues[name]
-            if isinstance(metric, (Perf, RiskMeasure)):
-                func = getattr(mt, metric.value)
-                args = {arg: getattr(self, arg) if arg in GLOBAL_ARGS else getattr(self, f'{name}_{arg}')
-                        for arg in args_names(func)}
-                value = func(**args)
-            else:
-                value = self.ratio(ratio=metric)
+            value = self.get_metric(metric=metric)
             setattr(self, name, value)
             return value
 
     def __setattr__(self, name, value):
         print('   __setattr__({}, {}) called'.format(name, value))
         if name != '_loaded' and self._loaded:
+            if name in READ_ONLY_ATTRS:
+                raise AttributeError(f"can't set attribute'{name}' because it is read-only")
             if name in FROZEN_ATTRS:
                 if self._frozen:
                     raise AttributeError(f"can't set attribute '{name}' after the Portfolio has been frozen "
                                          f"(Portfolios are frozen when they are added to a Population)")
-                else:
-                    self.reset()
-            elif name in GLOBAL_ARGS:
+            if name in GLOBAL_ARGS:
+                # When an attribute in GLOBAL_ARGS is set, we reset all the metrics because global args have
+                # a global impact
                 self.reset()
             elif name in LOCAL_ARGS:
+                # When an attribute in LOCAL_ARGS is set, we reset only the metrics linked to than attribute
                 risk_measure = RiskMeasure('_'.join(self.public_name.split('_')[:-1]))
                 for attr in [risk_measure.value, risk_measure.ratio().value]:
                     delattr(self, attr)
         object.__setattr__(self, name, value)
 
+    # Custom attribute setter and getter
+    @property
+    def fitness_metrics(self) -> FitnessMetric:
+        return self._fitness_metrics
+
+    @fitness_metrics.setter
+    def fitness_metrics(self, value: FitnessMetric) -> None:
+        if not isinstance(value, list) or len(value) == 0:
+            raise TypeError(f'fitness_metrics should be a non-empty')
+        if not isinstance(value, (Perf, RiskMeasure, Ratio)):
+            raise TypeError(f'fitness_metrics should be a list of Perf, RiskMeasure or Ratio')
+        self._fitness_metrics = value
+        delattr(self, '_fitness')
+
+    # Custom attribute getter (read-only and cached)
+    @cached_property_slots
+    def fitness(self) -> np.ndarray:
+        r"""
+        Fitness of the portfolio that contains the objectives to maximise and/or minimize .
+        """
+        res = []
+        for metric in self.fitness_metrics:
+            if isinstance(metric, (Perf, Ratio)):
+                sign = 1
+            else:
+                sign = -1
+            res.append(sign * getattr(self, metric.value))
+        return np.array(res)
+
+    @cached_property_slots
+    def cumulative_returns(self) -> np.ndarray:
+        return mt.get_cumulative_returns(returns=self.returns, compounded=self.compounded)
+
+    @cached_property_slots
+    def drawdowns(self) -> np.ndarray:
+        return mt.get_drawdowns(returns=self.returns, compounded=self.compounded)
+
+    # Classic property
+    @property
+    def returns_df(self) -> pd.Series:
+        return pd.Series(index=self.dates, data=self.returns, name='returns')
+
+    @property
+    def cumulative_returns_df(self) -> pd.Series:
+        init_date = self.dates[0] - (self.dates[1] - self.dates[0])
+        index = np.insert(self.dates, 0, init_date)
+        return pd.Series(index=index, data=self.cumulative_returns, name='cumulative_returns')
+
+    @property
+    def metrics_df(self) -> pd.DataFrame:
+        idx = [e.value for enu in [Perf, RiskMeasure, Ratio] for e in enu]
+        res = [getattr(self, attr) for attr in idx]
+        return pd.DataFrame(res, index=idx, columns=['metrics'])
+
+    @property
+    def composition(self) -> pd.DataFrame:
+        raise NotImplementedError
+
+    @property
+    def assets_index(self) -> np.ndarray:
+        raise NotImplementedError
+
+    # Private methods
     def _freeze(self):
         self._frozen = True
 
@@ -275,75 +374,47 @@ class BasePortfolio:
         if np.any(np.isnan(self.returns)):
             raise TypeError('returns should not contain nan')
 
+    # Public methods
     def reset(self) -> None:
-        try:
-            delattr(self, 'fitness')
-        except AttributeError:
-            pass
-        for attr in MetricsValues.keys():
+        attrs = ['_fitness', '_cumulative_returns', '_drawdowns']
+        for attr in attrs + list(MetricsValues.keys()):
             try:
                 delattr(self, attr)
             except AttributeError:
                 pass
 
-    @property
-    def cumulative_returns(self) -> np.ndarray:
-        if self.compounded:
-            cumulative_returns = np.cumprod(np.insert(self.returns, 0, 0) + 1)
-        else:
-            cumulative_returns = np.cumsum(np.insert(self.returns, 0, 1))
-        return cumulative_returns
-
-    @property
-    def returns_df(self) -> pd.Series:
-        return pd.Series(index=self.dates, data=self.returns, name='returns')
-
-    @property
-    def cumulative_returns_df(self) -> pd.Series:
-        init_date = self.dates[0] - (self.dates[1] - self.dates[0])
-        index = np.insert(self.dates, 0, init_date)
-        return pd.Series(index=index, data=self.cumulative_returns, name='cumulative_returns')
-
-    def ratio(self, ratio: Ratio) -> float:
+    def get_metric(self, metric: Metric) -> float:
         r"""
-        Compute the mean/risk ratio
+        Calculate portfolio metric (Perf, RiskMeasure, Ratio)
 
         Parameters
         ----------
-        ratio: Ratio
-               The mean/risk ratio
+        metric: Perf | RiskMeasure | Ratio
+                The metric enum (Perf, RiskMeasure, Ratio) to comptue
         Returns
         -------
         value: float
-               mean/risk ratio
+               The metric value
         """
-        risk_measure = ratio.risk_measure()
-        risk = getattr(self, risk_measure.value)
-        if risk_measure in [RiskMeasure.VARIANCE, RiskMeasure.SEMI_VARIANCE]:
-            risk = np.sqrt(risk)
-        return self.mean / risk
+        if isinstance(metric, (Perf, RiskMeasure)):
+            # We call the metric functions and there arguments dynamically.
+            # The metric functions are called from the metrics module
+            # The function arguments are retrieved from the class attributes following the below rules:
+            # Global metrics function arguments (defined in GLOBAL_ARGS) need to be defined in the class attributes
+            # with identical name and local metrics function arguments need to be defined in the class attributes
+            # with the argument name preceded by the metric name and separated by _.
+            func = getattr(mt, metric.value)
+            args = {arg: getattr(self, arg) if arg in GLOBAL_ARGS else getattr(self, f'{metric.value}_{arg}')
+                    for arg in args_names(func)}
+            value = func(**args)
+        else:
+            risk_measure = metric.risk_measure()
+            risk = getattr(self, risk_measure.value)
+            if risk_measure in [RiskMeasure.VARIANCE, RiskMeasure.SEMI_VARIANCE]:
+                risk = np.sqrt(risk)
+            value = self.mean / risk
 
-    @property
-    def composition(self) -> pd.DataFrame:
-        raise NotImplementedError
-
-    @cached_property
-    def fitness(self) -> np.ndarray:
-        """
-        Fitness of the portfolio that contains the objectives to maximise and/or minimize .
-        """
-        res = []
-        for metric in self.fitness_metrics:
-            if isinstance(metric, (Perf, Ratio)):
-                sign = 1
-            else:
-                sign = -1
-            res.append(sign * getattr(self, metric.value))
-        return np.array(res)
-
-    @cached_property
-    def assets_index(self) -> np.ndarray:
-        raise NotImplementedError
+        return value
 
     def dominates(self, other, obj=slice(None)) -> bool:
         """
@@ -356,11 +427,6 @@ class BasePortfolio:
                     every objective.
         """
         return dominate(self.fitness[obj], other.fitness[obj])
-
-    def metrics(self) -> pd.DataFrame:
-        idx = [e.value for enu in [Perf, RiskMeasure, Ratio] for e in enu]
-        res = [self.__getattribute__(attr) for attr in idx]
-        return pd.DataFrame(res, index=idx, columns=['metrics'])
 
     def plot_cumulative_returns(self,
                                 idx: int | slice = slice(None),
@@ -448,10 +514,15 @@ class BasePortfolio:
 
 class Portfolio(BasePortfolio):
     __slots__ = {
+        # read-only
         'assets',
         'weights',
         'previous_weights',
-        'transaction_costs'
+        'transaction_costs',
+        # custom getter (read-only and cached)
+        '_assets_number',
+        '_assets_index',
+        '_assets_names'
     }
 
     def __init__(self,
@@ -532,17 +603,17 @@ class Portfolio(BasePortfolio):
                          cvar_beta=cvar_beta,
                          cdar_beta=cdar_beta,
                          min_acceptable_return=min_acceptable_return)
-
+        self._loaded = False
         self.assets = assets
         self.weights = weights
         self.transaction_costs = transaction_costs
-        self.previous_weights=previous_weights
+        self.previous_weights = previous_weights
+        self._loaded = True
         self._validation()
 
-    # TODO : self.__len__.cache_clear() at reset()
-    # TODO : cache  __len__
+    # Magic methods
     def __len__(self) -> int:
-        return np.count_nonzero(abs(self.weights) > ZERO_THRESHOLD)
+        return self.assets_number
 
     def __neg__(self):
         return Portfolio(weights=-self.weights, assets=self.assets)
@@ -621,11 +692,16 @@ class Portfolio(BasePortfolio):
         """
         return self.sharpe_ratio - self.assets.asset_nb / (self.assets.date_nb * self.sharpe_ratio)
 
-    @property
+    # Custom attribute getter (read-only and cached)
+    @cached_property_slots
+    def assets_number(self) -> np.ndarray:
+        return np.flatnonzero(abs(self.weights) > ZERO_THRESHOLD)
+
+    @cached_property_slots
     def assets_index(self) -> np.ndarray:
         return np.flatnonzero(abs(self.weights) > ZERO_THRESHOLD)
 
-    @property
+    @cached_property_slots
     def assets_names(self) -> np.ndarray:
         return self.assets.names[self.assets_index]
 
@@ -638,7 +714,9 @@ class Portfolio(BasePortfolio):
         df.set_index('asset', inplace=True)
         return df
 
-    def risk_contribution(self, risk_measure: RiskMeasure, spacing: float = 1e-7) -> np.ndarray:
+    def risk_contribution(self,
+                          risk_measure: RiskMeasure,
+                          spacing: float = 1e-7) -> np.ndarray:
         r"""
         Calculate the risk contribution of each asset for a risk measure.
 

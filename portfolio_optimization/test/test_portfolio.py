@@ -13,6 +13,7 @@ from portfolio_optimization.portfolio import *
 from portfolio_optimization.paths import *
 
 
+
 def test_portfolio_metrics():
     prices = load_prices(file=TEST_PRICES_PATH)
 
@@ -25,8 +26,6 @@ def test_portfolio_metrics():
     portfolio = Portfolio(weights=weights,
                           assets=assets,
                           name='portfolio_1')
-
-    r=portfolio.cdar_ratio
 
     returns = portfolio_returns(assets.returns, weights)
     assert len(portfolio) == 10

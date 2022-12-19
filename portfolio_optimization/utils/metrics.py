@@ -2,6 +2,8 @@ import numpy as np
 from scipy.optimize import minimize, Bounds
 
 __all__ = ['mean',
+           'get_cumulative_returns',
+           'get_drawdowns',
            'variance',
            'semi_variance',
            'std',
@@ -286,113 +288,104 @@ def worst_realization(returns: np.ndarray) -> float:
     return -min(returns)
 
 
-def _drawdowns(returns: np.ndarray, compounded: bool = False) -> np.ndarray:
+def get_cumulative_returns(returns: np.ndarray,
+                           compounded: bool = False) -> np.ndarray:
     if compounded:
-        prices = np.delete(np.cumprod(1 + np.insert(returns, 0, 0)), 0)
-        drawdowns = prices / np.maximum.accumulate(prices) - 1
+        cumulative_returns = np.delete(np.cumprod(1 + np.insert(returns, 0, 0)), 0)
     else:
-        prices = np.cumsum(returns)
-        drawdowns = prices - np.maximum.accumulate(prices)
+        cumulative_returns = np.cumsum(returns)
+    return cumulative_returns
+
+
+def get_drawdowns(returns: np.ndarray,
+                  compounded: bool = False) -> np.ndarray:
+    cumulative_returns = get_cumulative_returns(returns=returns, compounded=compounded)
+    if compounded:
+        drawdowns = cumulative_returns / np.maximum.accumulate(cumulative_returns) - 1
+    else:
+        drawdowns = cumulative_returns - np.maximum.accumulate(cumulative_returns)
     return drawdowns
 
 
-def dar(returns: np.ndarray,
-        beta: float = 0.95,
-        compounded: bool = False) -> float:
+def dar(drawdowns: np.ndarray,
+        beta: float = 0.95) -> float:
     r"""
     Calculate the Drawdown at Risk (DaR).
     The DaR is the maximum drawdown at a given confidence level (beta)
 
     Parameters
     ----------
-    returns : 1d-array
-         The returns array
+    drawdowns: array, optional
+               The drawdowns array
 
     beta: float, default = 0.95
      The drawdown confidence level (expected drawdown on the worst (1-beta)% observations)
-
-    compounded: bool, default False
-           If True, we use compounded cumulative returns otherwise we use uncompounded cumulative returns
 
     Returns
     -------
     value : float
        The DaR
     """
-    drawdowns = _drawdowns(returns=returns, compounded=compounded)
     return value_at_risk(returns=drawdowns, beta=beta)
 
 
-def cdar(returns: np.ndarray,
-         beta: float = 0.95,
-         compounded: bool = False) -> float:
+def cdar(drawdowns: np.ndarray,
+         beta: float = 0.95) -> float:
     r"""
    Calculate the historical CDaR (Conditional Drawdown at Risk).
 
    Parameters
    ----------
-   returns : 1d-array
-             The returns array
+   drawdowns : 1d-array
+             The drawdowns array
 
    beta: float, default = 0.95
          The drawdown confidence level (expected drawdown on the worst (1-beta)% observations)
-
-   compounded: bool, default False
-               If True, we use compounded cumulative returns otherwise we use uncompounded cumulative returns
 
    Returns
    -------
    value : float
            The CVaR
    """
-
-    drawdowns = _drawdowns(returns=returns, compounded=compounded)
     return cvar(returns=drawdowns, beta=beta)
 
 
-def max_drawdown(returns: np.ndarray, compounded: bool = False) -> float:
+def max_drawdown(drawdowns: np.ndarray) -> float:
     r"""
     Calculate the Maximum Drawdown.
 
     Parameters
     ----------
-    returns : 1d-array
-              The returns array
-
-    compounded: bool, default False
-               If True, we use compounded cumulative returns otherwise we use uncompounded cumulative returns
+    drawdowns : 1d-array
+                The drawdowns array
 
     Returns
     -------
     value : float
             The Maximum Drawdown
     """
-    return dar(returns=returns, beta=1, compounded=compounded)
+    return dar(drawdowns=drawdowns, beta=1)
 
 
-def avg_drawdown(returns: np.ndarray, compounded: bool = False) -> float:
+def avg_drawdown(drawdowns: np.ndarray) -> float:
     r"""
     Calculate the Average Drawdown.
 
     Parameters
     ----------
-    returns : 1d-array
-             The returns array
-
-    compounded: bool, default False
-               If True, we use compounded cumulative returns otherwise we use uncompounded cumulative returns
+    drawdowns : 1d-array
+             The drawdowns array
 
     Returns
     -------
     value : float
             The Average Drawdown
     """
-    return cdar(returns=returns, beta=0, compounded=compounded)
+    return cdar(drawdowns=drawdowns, beta=0)
 
 
-def edar(returns: np.ndarray,
-         beta: float = 0.95,
-         compounded: bool = False) -> tuple[float, float]:
+def edar(drawdowns: np.ndarray,
+         beta: float = 0.95) -> tuple[float, float]:
     r"""
     Calculate the EDaR (Entropic Drawdown at Risk) and its associated risk aversion.
     The EDaR is a coherent risk measure which is an upper bound for the DaR and the CDaR,
@@ -400,42 +393,33 @@ def edar(returns: np.ndarray,
 
     Parameters
     ----------
-    returns : 1d-array
-          The returns array
+    drawdowns : 1d-array
+                The drawdowns array
 
     beta: float, default 0.95
       The EDaR confidence level
-
-    compounded: bool, default False
-                If True, we use compounded cumulative returns otherwise we use uncompounded cumulative returns
 
     Returns
     -------
     value : tuple(float, float)
         The EDaR and its associated risk aversion
     """
-    drawdowns = _drawdowns(returns=returns, compounded=compounded)
     return evar(returns=drawdowns, beta=beta)
 
 
-def ulcer_index(returns: np.ndarray,
-                compounded: bool = False) -> float:
+def ulcer_index(drawdowns: np.ndarray) -> float:
     r"""
     Calculate the Ulcer Index.
 
     Parameters
     ----------
-    returns : 1d-array
-          The returns array
-
-    compounded: bool, default False
-                If True, we use compounded cumulative returns otherwise we use uncompounded cumulative returns
+    drawdowns : 1d-array
+                The drawdowns array
 
     Returns
     -------
         The Ulcer Index
     """
-    drawdowns = _drawdowns(returns=returns, compounded=compounded)
     return np.sqrt(np.sum(np.power(drawdowns, 2)) / len(drawdowns))
 
 
