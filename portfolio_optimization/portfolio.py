@@ -1,3 +1,4 @@
+import logging
 from collections.abc import Iterator
 import numpy as np
 import pandas as pd
@@ -19,6 +20,8 @@ from portfolio_optimization.utils.tools import args_names, cached_property_slots
 __all__ = ['BasePortfolio',
            'Portfolio',
            'MultiPeriodPortfolio']
+
+logger = logging.getLogger('portfolio_optimization.portfolio')
 
 # Typing
 Metric = Perf | RiskMeasure | Ratio
@@ -51,9 +54,12 @@ GLOBAL_ARGS = {
 LOCAL_ARGS = {
     'value_at_risk_beta',
     'cvar_beta',
-    'cdar_beta',
     'entropic_risk_measure_theta',
     'entropic_risk_measure_beta',
+    'evar_beta',
+    'dar_beta',
+    'cdar_beta',
+    'edar_beta',
     'evar_beta'
 }
 
@@ -93,9 +99,12 @@ class BasePortfolio:
         # local args
         'value_at_risk_beta',
         'cvar_beta',
-        'cdar_beta',
         'entropic_risk_measure_theta',
         'entropic_risk_measure_beta',
+        'evar_beta',
+        'dar_beta',
+        'cdar_beta',
+        'edar_beta',
         'evar_beta',
         # metrics
         # perf
@@ -107,6 +116,8 @@ class BasePortfolio:
         'std',
         'semi_variance',
         'semi_std',
+        'kurtosis',
+        'semi_kurtosis',
         'value_at_risk',
         'cvar',
         'entropic_risk_measure',
@@ -146,16 +157,8 @@ class BasePortfolio:
                  name: str | None = None,
                  tag: str | None = None,
                  validate: bool = True,
-                 compounded: bool = False,
-                 annualized_factor: float = 1,
-                 min_acceptable_return: float | None = None,
                  fitness_metrics: FitnessMetric | None = None,
-                 value_at_risk_beta: float = 0.95,
-                 cvar_beta: float = 0.95,
-                 cdar_beta: float = 0.95,
-                 entropic_risk_measure_theta: float = 1,
-                 entropic_risk_measure_beta: float = 0.95,
-                 evar_beta: float = 0.95):
+                 **kwargs):
         r"""
         Base Portfolio
 
@@ -206,15 +209,8 @@ class BasePortfolio:
         self.dates = dates
         self._fitness_metrics = fitness_metrics if fitness_metrics is not None else [Perf.MEAN, RiskMeasure.VARIANCE]
         self.tag = tag if tag is not None else self.name
-        self.compounded = compounded
-        self.annualized_factor = annualized_factor
-        self.min_acceptable_return = min_acceptable_return
-        self.value_at_risk_beta = value_at_risk_beta
-        self.cvar_beta = cvar_beta
-        self.cdar_beta = cdar_beta
-        self.entropic_risk_measure_theta = entropic_risk_measure_theta
-        self.entropic_risk_measure_beta = entropic_risk_measure_beta
-        self.evar_beta = evar_beta
+        for k, v in kwargs.items():
+            setattr(self, k, v)
         self._loaded = True
         if validate:
             self._validation()
@@ -265,7 +261,7 @@ class BasePortfolio:
         except AttributeError as e:
             # TODO: remove print
             if name != 'shape':
-                print(f'__getattribut__({name})')
+                # print(f'__getattribut__({name})')
                 pass
             if name not in MetricsValues:
                 raise AttributeError(e)
@@ -278,7 +274,7 @@ class BasePortfolio:
             return value
 
     def __setattr__(self, name, value):
-        print('   __setattr__({}, {}) called'.format(name, value))
+        # print('   __setattr__({}, {}) called'.format(name, value))
         if name != '_loaded' and self._loaded:
             if name in READ_ONLY_ATTRS:
                 raise AttributeError(f"can't set attribute'{name}' because it is read-only")
@@ -306,10 +302,14 @@ class BasePortfolio:
     def fitness_metrics(self, value: FitnessMetric) -> None:
         if not isinstance(value, list) or len(value) == 0:
             raise TypeError(f'fitness_metrics should be a non-empty')
-        if not isinstance(value, (Perf, RiskMeasure, Ratio)):
-            raise TypeError(f'fitness_metrics should be a list of Perf, RiskMeasure or Ratio')
+        for val in value:
+            if not isinstance(val, (Perf, RiskMeasure, Ratio)):
+                raise TypeError(f'fitness_metrics should be a list of Perf, RiskMeasure or Ratio')
         self._fitness_metrics = value
-        delattr(self, '_fitness')
+        try:
+            delattr(self, '_fitness')
+        except AttributeError:
+            pass
 
     # Custom attribute getter (read-only and cached)
     @cached_property_slots
@@ -341,9 +341,7 @@ class BasePortfolio:
 
     @property
     def cumulative_returns_df(self) -> pd.Series:
-        init_date = self.dates[0] - (self.dates[1] - self.dates[0])
-        index = np.insert(self.dates, 0, init_date)
-        return pd.Series(index=index, data=self.cumulative_returns, name='cumulative_returns')
+        return pd.Series(index=self.dates, data=self.cumulative_returns, name='cumulative_returns')
 
     @property
     def metrics_df(self) -> pd.DataFrame:
@@ -406,13 +404,22 @@ class BasePortfolio:
             func = getattr(mt, metric.value)
             args = {arg: getattr(self, arg) if arg in GLOBAL_ARGS else getattr(self, f'{metric.value}_{arg}')
                     for arg in args_names(func)}
-            value = func(**args)
+            try:
+                value = func(**args)
+            except Exception as e:
+                logger.warning(f"Unable to calculate the portfolio '{metric.value}' with error: {e}")
+                value = np.nan
         else:
             risk_measure = metric.risk_measure()
             risk = getattr(self, risk_measure.value)
-            if risk_measure in [RiskMeasure.VARIANCE, RiskMeasure.SEMI_VARIANCE]:
-                risk = np.sqrt(risk)
-            value = self.mean / risk
+            if np.isnan(risk):
+                value = np.nan
+            else:
+                if risk_measure in [RiskMeasure.VARIANCE, RiskMeasure.SEMI_VARIANCE]:
+                    risk = np.sqrt(risk)
+                if risk_measure in [RiskMeasure.EVAR, RiskMeasure.EDAR]:
+                    risk = risk[0]
+                value = self.mean / risk
 
         return value
 
@@ -520,23 +527,32 @@ class Portfolio(BasePortfolio):
         'previous_weights',
         'transaction_costs',
         # custom getter (read-only and cached)
-        '_assets_number',
         '_assets_index',
         '_assets_names'
     }
 
-    def __init__(self,
-                 assets: Assets,
-                 weights: np.ndarray,
-                 previous_weights: np.ndarray | None = None,
-                 transaction_costs: float | np.ndarray = 0,
-                 name: str | None = None,
-                 tag: str | None = None,
-                 fitness_metrics: FitnessMetric | None = None,
-                 annualized_factor: float = 1,
-                 cvar_beta: float = 0.95,
-                 cdar_beta: float = 0.95,
-                 min_acceptable_return: float | None = None):
+    def __init__(
+            self,
+            assets: Assets,
+            weights: np.ndarray,
+            previous_weights: np.ndarray | None = None,
+            transaction_costs: float | np.ndarray = 0,
+            name: str | None = None,
+            tag: str | None = None,
+            validate: bool = True,
+            fitness_metrics: FitnessMetric | None = None,
+            compounded: bool = False,
+            annualized_factor: float = 1,
+            min_acceptable_return: float | None = None,
+            value_at_risk_beta: float = 0.95,
+            entropic_risk_measure_theta: float = 1,
+            entropic_risk_measure_beta: float = 0.95,
+            cvar_beta: float = 0.95,
+            evar_beta: float = 0.95,
+            dar_beta: float = 0.95,
+            cdar_beta: float = 0.95,
+            edar_beta: float = 0.95
+    ):
         r"""
         Portfolio
 
@@ -599,21 +615,30 @@ class Portfolio(BasePortfolio):
                          tag=tag,
                          fitness_metrics=fitness_metrics,
                          validate=False,
+                         compounded=compounded,
                          annualized_factor=annualized_factor,
+                         min_acceptable_return=min_acceptable_return,
+                         value_at_risk_beta=value_at_risk_beta,
                          cvar_beta=cvar_beta,
+                         entropic_risk_measure_theta=entropic_risk_measure_theta,
+                         entropic_risk_measure_beta=entropic_risk_measure_beta,
+                         evar_beta=evar_beta,
+                         dar_beta=dar_beta,
                          cdar_beta=cdar_beta,
-                         min_acceptable_return=min_acceptable_return)
+                         edar_beta=edar_beta)
         self._loaded = False
         self.assets = assets
         self.weights = weights
         self.transaction_costs = transaction_costs
         self.previous_weights = previous_weights
         self._loaded = True
-        self._validation()
+        self.validate = validate
+        if validate:
+            self._validation()
 
     # Magic methods
     def __len__(self) -> int:
-        return self.assets_number
+        return len(self.assets_index)
 
     def __neg__(self):
         return Portfolio(weights=-self.weights, assets=self.assets)
@@ -661,6 +686,36 @@ class Portfolio(BasePortfolio):
             raise TypeError(f'Portfolio can only be divided by a number, but received a {type(other)}')
         return Portfolio(weights=self.weights / other, assets=self.assets)
 
+    # Custom attribute getter (read-only and cached)
+
+    @cached_property_slots
+    def assets_index(self) -> np.ndarray:
+        return np.flatnonzero(abs(self.weights) > ZERO_THRESHOLD)
+
+    @cached_property_slots
+    def assets_names(self) -> np.ndarray:
+        return self.assets.names[self.assets_index]
+
+    # Classic property
+    @property
+    def sric(self) -> float:
+        r"""
+        Sharpe Ratio Information Criterion (SRIC) is an unbiased estimator of the sharpe ratio adjusting for both
+        sources of bias which are noise fit and estimation error.
+        Ref: Noise Fit, Estimation Error and a Sharpe Information Criterion. Dirk Paulsen (2019)
+        """
+        return self.sharpe_ratio - self.assets.asset_nb / (self.assets.date_nb * self.sharpe_ratio)
+
+    @property
+    def composition(self) -> pd.DataFrame:
+        weights = self.weights[self.assets_index]
+        df = pd.DataFrame({'asset': self.assets_names, 'weight': weights})
+        df.sort_values(by='weight', ascending=False, inplace=True)
+        df.rename(columns={'weight': self.name}, inplace=True)
+        df.set_index('asset', inplace=True)
+        return df
+
+    # Private method
     def _validation(self) -> None:
         self.assets.validate_returns()
         if not isinstance(self.weights, np.ndarray):
@@ -683,37 +738,7 @@ class Portfolio(BasePortfolio):
             if self.assets.asset_nb != len(self.transaction_costs):
                 raise ValueError(f'transaction_costs should be of size {self.assets.asset_nb}')
 
-    @property
-    def sric(self) -> float:
-        r"""
-        Sharpe Ratio Information Criterion (SRIC) is an unbiased estimator of the sharpe ratio adjusting for both
-        sources of bias which are noise fit and estimation error.
-        Ref: Noise Fit, Estimation Error and a Sharpe Information Criterion. Dirk Paulsen (2019)
-        """
-        return self.sharpe_ratio - self.assets.asset_nb / (self.assets.date_nb * self.sharpe_ratio)
-
-    # Custom attribute getter (read-only and cached)
-    @cached_property_slots
-    def assets_number(self) -> np.ndarray:
-        return np.flatnonzero(abs(self.weights) > ZERO_THRESHOLD)
-
-    @cached_property_slots
-    def assets_index(self) -> np.ndarray:
-        return np.flatnonzero(abs(self.weights) > ZERO_THRESHOLD)
-
-    @cached_property_slots
-    def assets_names(self) -> np.ndarray:
-        return self.assets.names[self.assets_index]
-
-    @property
-    def composition(self) -> pd.DataFrame:
-        weights = self.weights[self.assets_index]
-        df = pd.DataFrame({'asset': self.assets_names, 'weight': weights})
-        df.sort_values(by='weight', ascending=False, inplace=True)
-        df.rename(columns={'weight': self.name}, inplace=True)
-        df.set_index('asset', inplace=True)
-        return df
-
+    # Public methods
     def risk_contribution(self,
                           risk_measure: RiskMeasure,
                           spacing: float = 1e-7) -> np.ndarray:

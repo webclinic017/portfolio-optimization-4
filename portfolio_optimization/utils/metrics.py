@@ -39,10 +39,14 @@ def mad(returns: np.ndarray, annualized_factor: float = 1) -> float:
     returns : 1d-array
              The returns array
 
+    annualized_factor: float, default 1
+                       This factor is used for annualization.
+                       A value of 1 means that the MAD is expressed in the same periodicity as the returns.
+
     Returns
    -------
    value : float
-           The MAD
+           MAD
     """
     return float(np.mean(np.abs(returns - np.mean(returns, axis=0)), axis=0)) * annualized_factor
 
@@ -63,10 +67,14 @@ def first_lower_partial_moment(returns: np.ndarray,
                            The minimum acceptable return which is the return target to distinguish "downside" and
                            "upside" returns. If not provided, the returns mean will be used.
 
+    annualized_factor: float, default 1
+                       This factor is used for annualization.
+                       A value of 1 means that the Semi Variance is expressed in the same periodicity as the returns.
+
     Returns
     -------
     value : float
-            The Semi Variance
+            Semi Variance
     """
     if min_acceptable_return is None:
         min_acceptable_return = np.mean(returns, axis=0)
@@ -75,6 +83,23 @@ def first_lower_partial_moment(returns: np.ndarray,
 
 def variance(returns: np.ndarray,
              annualized_factor: float = 1) -> float:
+    r"""
+    Calculate the Variance (Second Moment).
+
+    Parameters
+    ----------
+    returns: 1d-array
+             The returns array
+
+    annualized_factor: float, default 1
+                   This factor is used for annualization.
+                   A value of 1 means that the Variance is expressed in the same periodicity as the returns.
+
+    Returns
+    -------
+    value : float
+            Variance
+    """
     return returns.var(ddof=1) * annualized_factor
 
 
@@ -94,6 +119,10 @@ def semi_variance(returns: np.ndarray,
                            The minimum acceptable return which is the return target to distinguish "downside" and
                            "upside" returns. If not provided, the returns mean will be used.
 
+    annualized_factor: float, default 1
+                       This factor is used for annualization.
+                       A value of 1 means that the Semi Variance is expressed in the same periodicity as the returns.
+
     Returns
     -------
     value : float
@@ -101,17 +130,56 @@ def semi_variance(returns: np.ndarray,
     """
     if min_acceptable_return is None:
         min_acceptable_return = np.mean(returns, axis=0)
-    return np.sum(np.power(np.minimum(0, returns - min_acceptable_return), 2)) / (len(returns) - 1)
+    return np.sum(np.power(np.minimum(0, returns - min_acceptable_return), 2)) / (len(returns) - 1) * annualized_factor
 
 
 def std(returns: np.ndarray,
         annualized_factor: float = 1) -> float:
+    r"""
+    Calculate the Standard Deviation (Std) (Square Root of the Second Moment).
+
+    Parameters
+    ----------
+    returns: 1d-array
+             The returns array
+
+    annualized_factor: float, default 1
+                   This factor is used for annualization.
+                   A value of 1 means that the Standard Deviation is expressed in the same periodicity as the returns.
+
+    Returns
+    -------
+    value : float
+            Standard Deviation
+    """
     return np.sqrt(variance(returns=returns, annualized_factor=annualized_factor))
 
 
 def semi_std(returns: np.ndarray,
              min_acceptable_return: float | None = None,
              annualized_factor: float = 1) -> float:
+    r"""
+    Calculate the Semi Standard Deviation (Semi-Std) (Square Root of the Second Lower Partial Moment).
+
+    Parameters
+    ----------
+    returns: 1d-array
+             The returns array
+
+    min_acceptable_return: float, optional
+                           The minimum acceptable return which is the return target to distinguish "downside" and
+                           "upside" returns. If not provided, the returns mean will be used.
+
+    annualized_factor: float, default 1
+                   This factor is used for annualization.
+                   A value of 1 means that the Semi-Std is expressed in the same periodicity as the returns.
+
+
+    Returns
+    -------
+    value : float
+            Semi Standard Deviation
+    """
     return np.sqrt(semi_variance(returns=returns,
                                  min_acceptable_return=min_acceptable_return,
                                  annualized_factor=annualized_factor))

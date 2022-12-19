@@ -1,17 +1,13 @@
 import numpy as np
 import datetime as dt
 import pandas as pd
-import time
-import sys
 
 from portfolio_optimization.meta import *
-from portfolio_optimization.utils.metrics import *
 from portfolio_optimization.utils.tools import *
 from portfolio_optimization.utils.sorting import *
 from portfolio_optimization.assets import *
 from portfolio_optimization.portfolio import *
 from portfolio_optimization.paths import *
-
 
 
 def test_portfolio_metrics():
@@ -26,28 +22,25 @@ def test_portfolio_metrics():
     portfolio = Portfolio(weights=weights,
                           assets=assets,
                           name='portfolio_1')
-
     returns = portfolio_returns(assets.returns, weights)
     assert len(portfolio) == 10
-    assert np.all((returns - portfolio.returns) < 1e-10)
-    assert abs(returns.mean() - portfolio.mean) < 1e-10
-    assert abs(returns.std(ddof=1) - portfolio.std) < 1e-10
-    assert abs(np.sqrt(np.sum(np.minimum(0, returns - returns.mean()) ** 2) / (len(returns) - 1))
-               - portfolio.semi_std) < 1e-10
-    assert abs(portfolio.annualized_mean / portfolio.annualized_std - portfolio.sharpe_ratio) < 1e-10
-    assert abs(portfolio.annualized_mean / portfolio.annualized_semistd - portfolio.sortino_ratio) < 1e-10
-    assert max_drawdown_slow(portfolio.cumulative_returns) == portfolio.max_drawdown
-    assert np.array_equal(portfolio.fitness, np.array([portfolio.mean, -portfolio.std]))
-    portfolio.fitness_metrics = [Metric.MEAN, Metric.SEMI_STD]
-    assert np.array_equal(portfolio.fitness, np.array([portfolio.mean, -portfolio.semi_std]))
-    portfolio.fitness_metrics = [Metric.MEAN, Metric.SEMI_STD, Metric.MAX_DRAWDOWN]
-    assert np.array_equal(portfolio.fitness,
-                          np.array([portfolio.mean, -portfolio.semi_std, -portfolio.max_drawdown]))
+    assert_is_close(returns, portfolio.returns)
+    assert_is_close(returns.mean(), portfolio.mean)
+    assert_is_close(returns.std(ddof=1), portfolio.std)
+    assert_is_close(np.sqrt(np.sum(np.minimum(0, returns - returns.mean()) ** 2) / (len(returns) - 1)),
+                    portfolio.semi_std)
+    assert_is_close(portfolio.mean / portfolio.std, portfolio.sharpe_ratio)
+    assert_is_close(portfolio.mean / portfolio.semi_std, portfolio.sortino_ratio)
+    assert_is_close(portfolio.fitness, np.array([portfolio.mean, -portfolio.variance]))
+    portfolio.fitness_metrics = [Perf.MEAN, RiskMeasure.SEMI_STD]
+    assert_is_close(portfolio.fitness, np.array([portfolio.mean, -portfolio.semi_std]))
+    portfolio.fitness_metrics = [Perf.MEAN, RiskMeasure.SEMI_STD, RiskMeasure.MAX_DRAWDOWN]
+    assert_is_close(portfolio.fitness, np.array([portfolio.mean, -portfolio.semi_std, -portfolio.max_drawdown]))
     assert len(portfolio.assets_index) == n
     assert len(portfolio.assets_names) == n
     assert len(portfolio.composition) == n
     idx = np.nonzero(weights)[0]
-    assert np.array_equal(portfolio.assets_index, idx)
+    assert_is_close(portfolio.assets_index, idx)
     names_1 = np.array(assets.prices.columns[idx])
     assert np.array_equal(portfolio.assets_names, names_1)
     names_2 = portfolio.composition.index.to_numpy()
@@ -55,12 +48,9 @@ def test_portfolio_metrics():
     names_1.sort()
     assert np.array_equal(names_1, names_2)
     portfolio.summary()
-    portfolio._reset()
-    assert portfolio.__dict__.get('mean') is None
-    assert portfolio.__dict__.get('std') is None
+    portfolio.reset()
     assert portfolio.plot_returns(show=False)
     assert portfolio.plot_cumulative_returns(show=False)
-    assert portfolio.plot_cumulative_returns_uncompounded(show=False)
     assert portfolio.plot_rolling_sharpe(days=20, show=False)
     assert isinstance(portfolio.composition, pd.DataFrame)
     assert portfolio.plot_composition(show=False)
@@ -125,10 +115,10 @@ def test_portfolio_dominate():
         weights_1 = rand_weights(n=assets.asset_nb)
         weights_2 = rand_weights(n=assets.asset_nb)
         portfolio_1 = Portfolio(weights=weights_1,
-                                fitness_metrics=[Metric.MEAN, Metric.SEMI_STD, Metric.MAX_DRAWDOWN],
+                                fitness_metrics=[Perf.MEAN, RiskMeasure.SEMI_STD, RiskMeasure.MAX_DRAWDOWN],
                                 assets=assets)
         portfolio_2 = Portfolio(weights=weights_2,
-                                fitness_metrics=[Metric.MEAN, Metric.SEMI_STD, Metric.MAX_DRAWDOWN],
+                                fitness_metrics=[Perf.MEAN, RiskMeasure.SEMI_STD, RiskMeasure.MAX_DRAWDOWN],
                                 assets=assets)
 
         # Doesn't dominate itself (same front)
@@ -145,8 +135,20 @@ def test_portfolio_risk_contribution():
     weights = rand_weights(n=assets.asset_nb)
     portfolio = Portfolio(weights=weights, assets=assets)
     rc = portfolio.risk_contribution(risk_measure=RiskMeasure.CVAR)
-    res = np.array([0.00082983, 0.00177162, 0.00102906, 0.00095738, 0.00391156,
-                    0.00316365, 0.00267085, 0.00381241, 0.00151671, 0.00172625,
-                    0.00217162])
-    np.testing.assert_array_almost_equal(rc, res, decimal=8)
+    res = np.array([0.0035595, 0.00312922, 0.00060825, 0.00074254, 0.00340565,
+                    0.00156109, 0.00330621, 0.00133641, 0.00307977, 0.00197139,
+                    0.00174254])
+    assert_is_close(rc, res)
 
+
+def test_portfolio_metrics():
+    prices = load_prices(file=TEST_PRICES_PATH)
+    start_date = dt.date(2017, 1, 1)
+    assets = Assets(prices=prices,
+                    start_date=start_date,
+                    verbose=False)
+    weights = rand_weights(n=assets.asset_nb)
+    portfolio = Portfolio(weights=weights, assets=assets)
+    for enu in [Perf, RiskMeasure, Ratio]:
+        for e in enu:
+            assert getattr(portfolio, e.value)

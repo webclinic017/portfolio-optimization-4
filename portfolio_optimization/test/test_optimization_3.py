@@ -5,9 +5,6 @@ from portfolio_optimization import (Assets, load_prices, load_assets, Optimizati
 from portfolio_optimization.optimization.group_constraints import group_constraints_to_matrix
 
 
-def is_close(a: float, b: float, precision: float = 1e-7):
-    return abs(a - b) < precision
-
 
 def get_assets() -> Assets:
     prices = load_prices(file=EXAMPLE_PRICES_PATH)

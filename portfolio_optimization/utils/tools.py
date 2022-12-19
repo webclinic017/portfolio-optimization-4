@@ -12,7 +12,10 @@ __all__ = ['prices_rebased',
            'args_names',
            'clean',
            'clean_locals',
-           'cached_property_slots']
+           'cached_property_slots',
+           'assert_is_close']
+
+GenericAlias = type(list[int])
 
 
 def clean(x: float | list | np.ndarray | None,
@@ -126,10 +129,12 @@ def load_prices(file: Path | str) -> pd.DataFrame:
 class cached_property_slots:
     def __init__(self, func):
         self.func = func
+        self.public_name = None
         self.private_name = None
         self.__doc__ = func.__doc__
 
     def __set_name__(self, owner, name):
+        self.public_name = name
         self.private_name = f'_{name}'
 
     def __get__(self, instance, owner=None):
@@ -144,9 +149,22 @@ class cached_property_slots:
             setattr(instance, self.private_name, value)
         return value
 
+    def __set__(self, instance, owner=None):
+        raise AttributeError(f"'{type(instance).__name__}' object attribute '{self.public_name}' is read-only")
+
+    __class_getitem__ = classmethod(GenericAlias)
+
 
 def args_names(func: object) -> list[str]:
     r"""
     Returns the argument names of a function
     """
     return [v for v in func.__code__.co_varnames[:func.__code__.co_argcount] if v != 'self']
+
+
+def assert_is_close(a: float | np.ndarray, b: float | np.ndarray, precision: float = 1e-7):
+    if np.isscalar(a):
+        if abs(a - b) > precision:
+            raise AssertionError(f'Mismatched: {abs(a - b)}')
+    else:
+        np.testing.assert_array_almost_equal(a, b, decimal=-np.log10(precision))
